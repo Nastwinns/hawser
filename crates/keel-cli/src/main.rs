@@ -185,6 +185,11 @@ enum Command {
         #[arg(long)]
         from: PathBuf,
     },
+    /// Parallel collaborative merge: slice one big merge into reviewable units.
+    Merge {
+        #[command(subcommand)]
+        command: MergeCommand,
+    },
     /// Open the fleet dashboard (same as bare `keel`).
     #[command(alias = "tui")]
     Dash,
@@ -292,6 +297,54 @@ enum ChangeCommand {
     },
     /// List recorded changesets.
     List,
+}
+
+#[derive(Subcommand)]
+enum MergeCommand {
+    /// Start merging <source> into the current branch; slice the conflicts.
+    Plan {
+        /// Branch/tag/SHA to merge in.
+        source: String,
+        /// Repo to merge in (default: the only repo, else required).
+        #[arg(long)]
+        repo: Option<String>,
+        /// Integration branch name (default: keel/merge/<source>).
+        #[arg(long)]
+        into: Option<String>,
+    },
+    /// Resolve one slice of the in-progress merge.
+    Resolve {
+        slice: String,
+        #[arg(long)]
+        repo: Option<String>,
+        /// Auto-resolve the whole slice to `ours` or `theirs` (else stage as edited).
+        #[arg(long)]
+        take: Option<TakeSide>,
+    },
+    /// Show the planned slices and their resolution state.
+    Status {
+        #[arg(long)]
+        repo: Option<String>,
+    },
+    /// Seal the merge: commit it, fast-forward the target, drop temp branches.
+    Cleanup {
+        #[arg(long)]
+        repo: Option<String>,
+        /// Merge commit message (default: git's merge message).
+        #[arg(long, short = 'm')]
+        message: Option<String>,
+    },
+    /// Abort the planned merge and restore the target branch.
+    Abort {
+        #[arg(long)]
+        repo: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum TakeSide {
+    Ours,
+    Theirs,
 }
 
 #[derive(Subcommand)]
@@ -407,6 +460,19 @@ fn run() -> Result<ExitCode> {
         },
         Command::Evidence { out } => evidence(&out)?,
         Command::Import { from } => import_manifest(&from)?,
+        Command::Merge { command } => match command {
+            MergeCommand::Plan { source, repo, into } => {
+                merge_plan(&source, repo.as_deref(), into.as_deref())?
+            }
+            MergeCommand::Resolve { slice, repo, take } => {
+                merge_resolve(&slice, repo.as_deref(), take)?
+            }
+            MergeCommand::Status { repo } => merge_status(repo.as_deref())?,
+            MergeCommand::Cleanup { repo, message } => {
+                merge_cleanup(repo.as_deref(), message.as_deref())?
+            }
+            MergeCommand::Abort { repo } => merge_abort(repo.as_deref())?,
+        },
         Command::Dash => dash()?,
         Command::Plugin(args) => return plugin(&args),
     }
@@ -1064,6 +1130,146 @@ fn change_goto(id: &str, repo: Option<&str>) -> Result<()> {
         }
     };
     println!("{}", path_of(&name)?.display());
+    Ok(())
+}
+
+/// Resolve which repo the merge acts on and its absolute checkout path.
+/// Defaults to the sole repo when the manifest has exactly one.
+fn merge_repo(ws: &Workspace, repo: Option<&str>) -> Result<(String, PathBuf)> {
+    let name = match repo {
+        Some(name) => name.to_string(),
+        None => {
+            let mut names = ws.manifest.repos.keys();
+            match (names.next(), names.next()) {
+                (Some(only), None) => only.clone(),
+                _ => bail!(
+                    "pass --repo (manifest has {} repos)",
+                    ws.manifest.repos.len()
+                ),
+            }
+        }
+    };
+    let spec = ws
+        .manifest
+        .repos
+        .get(&name)
+        .with_context(|| format!("repo `{name}` is not in the manifest"))?;
+    let path = ws.root.join(spec.checkout_path(&name));
+    if !ShellGit.is_repo(&path) {
+        bail!(
+            "repo `{name}` is not cloned at {}; run `keel sync`",
+            path.display()
+        );
+    }
+    Ok((name, path))
+}
+
+fn merge_plan(source: &str, repo: Option<&str>, into: Option<&str>) -> Result<()> {
+    let ws = open_workspace()?;
+    let (name, path) = merge_repo(&ws, repo)?;
+    let plan = keel_merge::plan(
+        &keel_merge::git::GitMerge,
+        &path,
+        &ws.state_dir(),
+        &name,
+        source,
+        into,
+    )?;
+    record(&ws, "merge.plan", Some(&name), None, Some(source));
+    println!(
+        "planned merge of `{}` into `{}` on `{}` ({} slice(s)):",
+        plan.source,
+        plan.target,
+        plan.integration,
+        plan.slices.len()
+    );
+    for slice in &plan.slices {
+        println!("  {:<16} {} file(s)", slice.name, slice.paths.len());
+    }
+    println!("next: keel merge resolve <slice> [--take ours|theirs], then keel merge cleanup");
+    Ok(())
+}
+
+fn merge_resolve(slice: &str, repo: Option<&str>, take: Option<TakeSide>) -> Result<()> {
+    let ws = open_workspace()?;
+    let (name, path) = merge_repo(&ws, repo)?;
+    let side = take.map(|t| match t {
+        TakeSide::Ours => keel_merge::Side::Ours,
+        TakeSide::Theirs => keel_merge::Side::Theirs,
+    });
+    let plan = keel_merge::resolve(
+        &keel_merge::git::GitMerge,
+        &path,
+        &ws.state_dir(),
+        &name,
+        slice,
+        side,
+    )?;
+    record(&ws, "merge.resolve", Some(&name), None, Some(slice));
+    let remaining = plan.unresolved();
+    println!("resolved slice `{slice}`");
+    if remaining.is_empty() {
+        println!("all slices resolved — run `keel merge cleanup`");
+    } else {
+        println!("remaining: {}", remaining.join(", "));
+    }
+    Ok(())
+}
+
+fn merge_status(repo: Option<&str>) -> Result<()> {
+    let ws = open_workspace()?;
+    let (name, _) = merge_repo(&ws, repo)?;
+    let Some(plan) = keel_merge::load_plan(&ws.state_dir(), &name)? else {
+        println!("no merge planned for `{name}` — start one with `keel merge plan <source>`");
+        return Ok(());
+    };
+    println!(
+        "merge `{}` -> `{}` on `{}`",
+        plan.source, plan.target, plan.integration
+    );
+    for slice in &plan.slices {
+        let mark = if slice.resolved { "✓" } else { "·" };
+        println!("  {mark} {:<16} {} file(s)", slice.name, slice.paths.len());
+    }
+    Ok(())
+}
+
+fn merge_cleanup(repo: Option<&str>, message: Option<&str>) -> Result<()> {
+    let ws = open_workspace()?;
+    let (name, path) = merge_repo(&ws, repo)?;
+    let report = keel_merge::cleanup(
+        &keel_merge::git::GitMerge,
+        &path,
+        &ws.state_dir(),
+        &name,
+        message,
+    )?;
+    record(
+        &ws,
+        "merge.cleanup",
+        Some(&name),
+        None,
+        Some(&report.merge_sha),
+    );
+    println!(
+        "merged {} slice(s) into `{}` ({}); dropped `{}`",
+        report.slices,
+        report.target,
+        &report.merge_sha[..8.min(report.merge_sha.len())],
+        report.integration
+    );
+    Ok(())
+}
+
+fn merge_abort(repo: Option<&str>) -> Result<()> {
+    let ws = open_workspace()?;
+    let (name, path) = merge_repo(&ws, repo)?;
+    let plan = keel_merge::abort(&keel_merge::git::GitMerge, &path, &ws.state_dir(), &name)?;
+    record(&ws, "merge.abort", Some(&name), None, Some(&plan.source));
+    println!(
+        "aborted merge of `{}`; back on `{}`",
+        plan.source, plan.target
+    );
     Ok(())
 }
 

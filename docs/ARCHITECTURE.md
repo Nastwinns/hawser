@@ -139,7 +139,7 @@ Two design decisions shape this plan:
 
 Each phase still ends with a usable binary. Ship early, narrow, correct.
 
-> **Status (2026-07-15): Phases 0–5 are implemented** (Phase 6 stays demand-driven).
+> **Status (2026-07-15): Phases 0–6 are implemented.**
 > Per-phase deltas vs the original plan are recorded in §9's decision records.
 
 ### Phase 0 — Skeleton (week 1) — ✅ shipped
@@ -208,9 +208,14 @@ rather than completing one layer fully. Scope each item to the minimum that prov
 - Docs, an embedded/BSP example, an automotive-style pinned-manifest example.
 - **Deliverable:** low-friction adoption path for `repo`/`west` users.
 
-### Phase 6 (optional, later) — Collaborative merge
-- `keel merge plan | resolve | cleanup` (mergetopus-style slicing), reusing its proven
-  workflow. Only if user demand appears; it is orthogonal to the core value.
+### Phase 6 — Collaborative merge — ✅ shipped (see DR-15)
+- `keel merge plan | resolve | status | cleanup | abort` (mergetopus-style slicing).
+  A conflict-heavy merge runs on a dedicated integration branch; its conflicts are
+  partitioned by top-level path into disjoint **slices** that are resolved (and reviewed)
+  piecewise, then sealed as one clean merge commit that the target branch fast-forwards to.
+- **Deliverable:** a big risky merge becomes a set of small reviewable units without
+  reimplementing git's merge engine — the whole operation is abortable and never leaves
+  the target branch half-merged.
 
 ### Extensibility, auth & CI/CD (cross-phase)
 Keelson stays open at the edges: it orchestrates git, forges, and build tools without
@@ -308,3 +313,11 @@ trait or a file format version.
   `KEEL_FORGE_TOKEN`) then a logged-in `gh` CLI. `keel auth login` + OS keychain
   (EXTENDING §2.2) needs a keyring dependency and interactive UX — postponed until the
   CLI's audience demands it; air-gapped and CI environments are already covered.
+- **DR-15 — Collaborative merge is single-worktree and incremental.** The Phase 6
+  `keel-merge` crate is self-contained (its own `MergeBackend` trait + shell-out impl,
+  mirroring how `keel-forge` owns its API clients) rather than extending `GitBackend`. The
+  merge is one real `git merge` on an integration branch, resolved slice by slice in place;
+  slices partition the conflicting paths by top-level component, so they are disjoint and
+  need no recombination. State lives in `.keel/merge/<repo>.toml`. Per-slice `git worktree`
+  parallelism is a future enhancement, not required by the model. The target branch only
+  fast-forwards onto the integration branch at `cleanup`, keeping the operation abortable.

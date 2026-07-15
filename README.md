@@ -250,10 +250,12 @@ keel                             Open the TUI cockpit (no subcommand)
 │   ├── snapshot save|restore    Save/restore the multi-repo state of a changeset
 │   └── land                     Merge PR/MRs in dependency order
 │
-├── merge                        (optional) parallel collaborative merge (mergetopus-style)
-│   ├── plan <source>            Split a big merge into integration + slice branches
-│   ├── resolve <slice>          Resolve one slice with your merge tool
-│   └── cleanup                  Promote and remove temporary branches
+├── merge                        Parallel collaborative merge (mergetopus-style)
+│   ├── plan <source>            Slice a big merge into per-directory conflict units
+│   ├── resolve <slice>          Resolve one slice (--take ours|theirs, or by hand)
+│   ├── status                   Show slices and their resolution state
+│   ├── cleanup                  Seal the merge; fast-forward target; drop temp branches
+│   └── abort                    Undo the planned merge, restore the target branch
 │
 ├── import --from <west.yml|default.xml>   Convert a west/repo manifest to keel.toml
 └── dash                         Open the fleet dashboard (same as bare `keel`)
@@ -387,7 +389,7 @@ app-mqtt  change/FEAT-42   yes    yes    4d5e6f7a  —
 ## Testing
 
 ```bash
-cargo test --workspace        # unit + integration; 43 tests, all green
+cargo test --workspace        # unit + integration; 50 tests, all green
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -402,12 +404,13 @@ precedence, lockfile read/write, changeset start/status. Planned (see roadmap):
 
 ## Status
 
-Phases 0-5 of [the plan](docs/ARCHITECTURE.md#6-implementation-plan-phased) are
+All phases 0-6 of [the plan](docs/ARCHITECTURE.md#6-implementation-plan-phased) are
 implemented: composition (`sync`/`lock`/`pin`/`switch`, overlays, `--shared`), the full
 changeset lifecycle (`start`/`request`/`land`/`goto`, snapshots) on GitHub **and** GitLab,
 the interactive TUI cockpit, `import` from west/repo manifests, CI gates (`verify`,
-`--locked`, `--format json`), lifecycle hooks, plugins, and packaging. Phase 6
-(collaborative merge) stays demand-driven.
+`--locked`, `--format json`), lifecycle hooks, plugins, packaging, and the Phase 6
+collaborative merge (`merge plan`/`resolve`/`cleanup`/`abort`) that slices one big
+conflict-heavy merge into reviewable units and seals it as a single clean merge commit.
 
 ## Documentation
 

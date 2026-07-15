@@ -17,6 +17,7 @@ clap.workspace = true
 keel-core.workspace = true
 keel-forge.workspace = true
 keel-git.workspace = true
+keel-merge.workspace = true
 keel-tui.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
