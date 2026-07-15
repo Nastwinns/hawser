@@ -1,0 +1,14 @@
+[package]
+name = "keel-site"
+description = "keelson.dev — the keel cockpit demo, rendered in the browser with Ratzilla"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+ratzilla = "0.3"
+
+# Standalone crate: built only for wasm32 by trunk, kept out of the native
+# workspace so `cargo test --workspace` never needs web-sys.
+[workspace]
