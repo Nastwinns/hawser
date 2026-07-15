@@ -79,6 +79,17 @@ pub struct Snapshot {
     pub paths: Vec<(String, PathBuf)>,
     /// Rendered `haw tree` output for the tree view.
     pub tree: String,
+    /// repo name -> its planned collaborative merge, if any (Phase 6).
+    pub merges: Vec<(String, MergeBadge)>,
+}
+
+/// A repo's in-progress `haw merge` (see `keel-merge`), just enough to
+/// render a badge — the TUI stays free of a `keel-merge` dependency.
+#[derive(Debug, Clone)]
+pub struct MergeBadge {
+    pub source: String,
+    pub resolved: usize,
+    pub total: usize,
 }
 
 /// Everything the cockpit can ask the application to do. Implementations run
@@ -96,6 +107,10 @@ pub trait Controller: Send {
     fn change_start(&mut self, id: &str) -> io::Result<String>;
     fn change_request(&mut self, id: &str, only: Option<Vec<String>>) -> io::Result<String>;
     fn change_land(&mut self, id: &str) -> io::Result<String>;
+    /// Seal a fully-resolved merge plan for `repo` (see `haw merge cleanup`).
+    fn merge_cleanup(&mut self, repo: &str) -> io::Result<String>;
+    /// Abort a planned merge for `repo` (see `haw merge abort`).
+    fn merge_abort(&mut self, repo: &str) -> io::Result<String>;
 }
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -133,6 +148,8 @@ enum ActionKind {
     ChangeStart(String),
     ChangeRequest(String, Option<Vec<String>>),
     ChangeLand(String),
+    MergeCleanup(String),
+    MergeAbort(String),
 }
 
 enum Outcome {
@@ -158,6 +175,15 @@ struct App {
     tick: u64,
     help: bool,
     goto: Option<PathBuf>,
+    /// Set when an action with real side effects (land, request) awaits y/n.
+    pending_confirm: Option<Confirm>,
+    /// Full multi-repo output from the last `r`/`:run`, shown as a dismissable overlay.
+    output: Option<String>,
+}
+
+/// A repo matches a filter if its name or any of its groups contains it.
+fn repo_matches(name: &str, groups: &[String], filter: &str) -> bool {
+    filter.is_empty() || name.contains(filter) || groups.iter().any(|g| g.contains(filter))
 }
 
 impl App {
@@ -170,7 +196,7 @@ impl App {
             .map(|(_, repos)| {
                 repos
                     .iter()
-                    .filter(|r| self.filter.is_empty() || r.name.contains(&self.filter))
+                    .filter(|r| repo_matches(&r.name, &r.groups, &self.filter))
                     .collect()
             })
             .unwrap_or_default()
@@ -236,6 +262,14 @@ impl App {
             .map(|(_, path)| path.clone())
     }
 
+    fn merge_badge(&self, repo: &str) -> Option<&MergeBadge> {
+        self.snapshot
+            .merges
+            .iter()
+            .find(|(name, _)| name == repo)
+            .map(|(_, badge)| badge)
+    }
+
     fn clamp_cursor(&mut self) {
         let last = self.rows_len().saturating_sub(1);
         self.cursor
@@ -293,6 +327,8 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                         ActionKind::ChangeStart(id) => controller.change_start(&id),
                         ActionKind::ChangeRequest(id, only) => controller.change_request(&id, only),
                         ActionKind::ChangeLand(id) => controller.change_land(&id),
+                        ActionKind::MergeCleanup(repo) => controller.merge_cleanup(&repo),
+                        ActionKind::MergeAbort(repo) => controller.merge_abort(&repo),
                     };
                     Outcome::Action(label, result)
                 }
@@ -320,11 +356,34 @@ fn request_refresh(app: &mut App, jobs: &Sender<Job>) {
     }
 }
 
+/// Navigate into a changeset's view and fetch its live PR/CI status.
+fn open_changeset(app: &mut App, jobs: &Sender<Job>, id: &str) {
+    app.changeset = Some(id.to_string());
+    app.selected_repos.clear();
+    app.goto_view(View::Changeset);
+    if app.busy.is_none() {
+        app.busy = Some("PR status");
+        let _ = jobs.send(Job::ChangesetPrs(id.to_string()));
+    }
+}
+
+/// A confirmation gate for actions with real side effects (opens/merges PRs).
+/// `Some` describes the pending action; `y`/`n` (or Enter/Esc) resolve it.
+#[derive(Debug, Clone)]
+enum Confirm {
+    Land(String),
+    Request(String, Option<Vec<String>>),
+    MergeCleanup(String),
+}
+
 fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
     let (verb, rest) = line
         .trim()
         .split_once(' ')
         .map_or((line.trim(), ""), |(v, r)| (v, r.trim()));
+    let (sub, arg) = rest
+        .split_once(' ')
+        .map_or((rest, ""), |(v, r)| (v, r.trim()));
     match (verb, rest) {
         ("sync", "") => {
             if let Some(stack) = app.stack.clone() {
@@ -340,15 +399,24 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
             app.message = format!("→ haw run '{cmd}'");
             dispatch(app, jobs, "run", ActionKind::Run(cmd.to_string()));
         }
-        ("change", id) if !id.is_empty() => {
-            app.message = format!("→ haw change start {id}");
+        ("change", "") => app.goto_view(View::Changesets),
+        ("change", "start") => app.input = InputMode::NewChangeset(String::new()),
+        ("change", _) if sub == "start" && !arg.is_empty() => {
+            app.message = format!("→ haw change start {arg}");
             dispatch(
                 app,
                 jobs,
                 "change start",
-                ActionKind::ChangeStart(id.to_string()),
+                ActionKind::ChangeStart(arg.to_string()),
             );
         }
+        ("change", _) if sub == "land" && !arg.is_empty() => {
+            app.pending_confirm = Some(Confirm::Land(arg.to_string()));
+        }
+        ("change", _) if sub == "request" && !arg.is_empty() => {
+            app.pending_confirm = Some(Confirm::Request(arg.to_string(), None));
+        }
+        ("change", id) => open_changeset(app, jobs, id),
         ("pin", "") => {
             app.message = "→ haw pin".to_string();
             dispatch(app, jobs, "pin", ActionKind::Pin);
@@ -358,6 +426,35 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
             dispatch(app, jobs, "lock", ActionKind::Lock);
         }
         ("tree", "") => app.goto_view(View::Tree),
+        ("merge", "") => {
+            app.message = match app.snapshot.merges.len() {
+                0 => "no merges in progress".to_string(),
+                n => format!(
+                    "{n} repo(s) mid-merge — see the fleet's MERGE column; \
+                     :merge cleanup <repo> · :merge abort <repo>"
+                ),
+            };
+        }
+        ("merge", _) if sub == "cleanup" && !arg.is_empty() => {
+            if app.merge_badge(arg).is_some() {
+                app.pending_confirm = Some(Confirm::MergeCleanup(arg.to_string()));
+            } else {
+                app.message = format!("no merge planned for `{arg}`");
+            }
+        }
+        ("merge", _) if sub == "abort" && !arg.is_empty() => {
+            if app.merge_badge(arg).is_some() {
+                app.message = format!("→ haw merge abort --repo {arg}");
+                dispatch(
+                    app,
+                    jobs,
+                    "merge abort",
+                    ActionKind::MergeAbort(arg.to_string()),
+                );
+            } else {
+                app.message = format!("no merge planned for `{arg}`");
+            }
+        }
         ("q" | "quit", _) => app.message = "use q outside the command bar".to_string(),
         _ => app.message = format!("unknown command `{line}`"),
     }
@@ -384,6 +481,8 @@ fn event_loop(
         tick: 0,
         help: false,
         goto: None,
+        pending_confirm: None,
+        output: None,
     };
     app.cursor.select(Some(0));
     request_refresh(&mut app, jobs);
@@ -430,6 +529,10 @@ fn event_loop(
                 Outcome::Action(label, result) => {
                     app.busy = None;
                     match result {
+                        Ok(message) if label == "run" => {
+                            app.message = "ran — press any key to dismiss the output".to_string();
+                            app.output = Some(message);
+                        }
                         Ok(message) => app.message = message,
                         Err(err) => app.message = format!("{label} failed: {err}"),
                     }
@@ -456,9 +559,52 @@ fn event_loop(
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Ok(app.goto);
         }
+        if key.code == KeyCode::F(5)
+            || (key.code == KeyCode::Char('r') && key.modifiers.contains(KeyModifiers::CONTROL))
+        {
+            app.message = "refreshing…".to_string();
+            request_refresh(&mut app, jobs);
+            continue;
+        }
 
         if app.help {
             app.help = false;
+            continue;
+        }
+
+        if app.output.is_some() {
+            app.output = None;
+            continue;
+        }
+
+        if let Some(confirm) = app.pending_confirm.take() {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Enter => match confirm {
+                    Confirm::Land(id) => {
+                        app.message = format!("→ haw change land {id}");
+                        dispatch(&mut app, jobs, "change land", ActionKind::ChangeLand(id));
+                    }
+                    Confirm::Request(id, only) => {
+                        app.message = format!("→ haw change request {id}");
+                        dispatch(
+                            &mut app,
+                            jobs,
+                            "change request",
+                            ActionKind::ChangeRequest(id, only),
+                        );
+                    }
+                    Confirm::MergeCleanup(repo) => {
+                        app.message = format!("→ haw merge cleanup --repo {repo}");
+                        dispatch(
+                            &mut app,
+                            jobs,
+                            "merge cleanup",
+                            ActionKind::MergeCleanup(repo),
+                        );
+                    }
+                },
+                _ => app.message = "cancelled".to_string(),
+            }
             continue;
         }
 
@@ -513,7 +659,7 @@ fn event_loop(
         match key.code {
             KeyCode::Char('q') => return Ok(app.goto),
             KeyCode::Char('?') => app.help = true,
-            KeyCode::Char('/') => app.input = InputMode::Filter(String::new()),
+            KeyCode::Char('/') => app.input = InputMode::Filter(app.filter.clone()),
             KeyCode::Char(':') => app.input = InputMode::Command(String::new()),
             KeyCode::Esc | KeyCode::Char('b') => {
                 if !app.filter.is_empty() {
@@ -549,13 +695,7 @@ fn event_loop(
                 }
                 View::Changesets => {
                     if let Some(id) = app.changeset_rows().get(selected).map(|c| c.id.clone()) {
-                        app.changeset = Some(id.clone());
-                        app.selected_repos.clear();
-                        app.goto_view(View::Changeset);
-                        if app.busy.is_none() {
-                            app.busy = Some("PR status");
-                            let _ = jobs.send(Job::ChangesetPrs(id));
-                        }
+                        open_changeset(&mut app, jobs, &id);
                     }
                 }
                 _ => {}
@@ -619,19 +759,12 @@ fn event_loop(
                     } else {
                         Some(app.selected_repos.clone())
                     };
-                    app.message = format!("→ haw change request {id}");
-                    dispatch(
-                        &mut app,
-                        jobs,
-                        "change request",
-                        ActionKind::ChangeRequest(id, only),
-                    );
+                    app.pending_confirm = Some(Confirm::Request(id, only));
                 }
             }
             KeyCode::Char('L') if app.view == View::Changeset => {
                 if let Some(id) = app.changeset.clone() {
-                    app.message = format!("→ haw change land {id}");
-                    dispatch(&mut app, jobs, "change land", ActionKind::ChangeLand(id));
+                    app.pending_confirm = Some(Confirm::Land(id));
                 }
             }
             _ => {}
@@ -715,9 +848,134 @@ fn draw(frame: &mut Frame, app: &mut App) {
     draw_status(frame, app, zones[2]);
     draw_crumbs(frame, app, zones[3]);
 
+    if let Some(output) = &app.output {
+        draw_output(frame, output);
+    }
+    if let Some(confirm) = &app.pending_confirm {
+        draw_confirm(frame, confirm);
+    }
     if app.help {
         draw_help(frame);
     }
+}
+
+fn draw_output(frame: &mut Frame, output: &str) {
+    let area = frame.area();
+    let width = area.width.saturating_sub(8).max(20);
+    let height = area.height.saturating_sub(6).max(6);
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    let visible = height.saturating_sub(2) as usize;
+    let all_lines: Vec<&str> = output.lines().collect();
+    let shown = if all_lines.len() > visible {
+        &all_lines[all_lines.len() - visible..]
+    } else {
+        &all_lines[..]
+    };
+    let text: Vec<Line> = shown
+        .iter()
+        .map(|l| Line::styled((*l).to_string(), Style::default().fg(theme::TEXT)))
+        .collect();
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(Text::from(text)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme::TEAL))
+                .title(Span::styled(
+                    format!(" output ({} lines) — any key closes ", all_lines.len()),
+                    Style::default()
+                        .fg(theme::MAUVE)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        ),
+        popup,
+    );
+}
+
+fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
+    let (command, reach, detail) = match confirm {
+        Confirm::Land(id) => (
+            format!("haw change land {id}"),
+            "this reaches the network:",
+            "merge the PR/MRs in dependency order".to_string(),
+        ),
+        Confirm::Request(id, only) => (
+            format!("haw change request {id}"),
+            "this reaches the network:",
+            match only {
+                Some(repos) => format!(
+                    "open PR/MRs for {} repo(s): {}",
+                    repos.len(),
+                    repos.join(", ")
+                ),
+                None => "open PR/MRs for every repo in the changeset".to_string(),
+            },
+        ),
+        Confirm::MergeCleanup(repo) => (
+            format!("haw merge cleanup --repo {repo}"),
+            "this commits and rewrites branches:",
+            "seal the merge and fast-forward its target branch".to_string(),
+        ),
+    };
+    let area = frame.area();
+    let width = area.width.min(64);
+    let height = 7;
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    let text = vec![
+        Line::from(vec![
+            Span::styled(
+                command,
+                Style::default()
+                    .fg(theme::YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!(" — {reach}"), Style::default().fg(theme::TEXT)),
+        ]),
+        Line::raw(""),
+        Line::styled(format!(" {detail}"), Style::default().fg(theme::TEXT)),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled(
+                "y",
+                Style::default()
+                    .fg(theme::GREEN)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("/enter confirm   ", Style::default().fg(theme::DIM)),
+            Span::styled(
+                "any other key",
+                Style::default().fg(theme::RED).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" cancels", Style::default().fg(theme::DIM)),
+        ]),
+    ];
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(Text::from(text)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme::YELLOW))
+                .title(Span::styled(
+                    " confirm ",
+                    Style::default()
+                        .fg(theme::YELLOW)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        ),
+        popup,
+    );
 }
 
 fn kv(key: &str, value: Span<'static>) -> Line<'static> {
@@ -905,7 +1163,7 @@ fn groups_label(groups: &[String]) -> (String, ratatui::style::Color) {
 fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
     let zones = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(4)])
+        .constraints([Constraint::Min(3), Constraint::Length(5)])
         .split(area);
 
     let rows: Vec<Row> = app
@@ -913,6 +1171,13 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|repo| {
             let (groups, groups_color) = groups_label(&repo.groups);
+            let merge_cell = match app.merge_badge(&repo.name) {
+                Some(badge) => Cell::from(Span::styled(
+                    format!("{}/{}", badge.resolved, badge.total),
+                    Style::default().fg(theme::YELLOW),
+                )),
+                None => Cell::from(Span::styled("—", Style::default().fg(theme::DIM))),
+            };
             if repo.missing {
                 return Row::new(vec![
                     Cell::from(state_dot(repo)),
@@ -955,6 +1220,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
                     Span::styled("·", Style::default().fg(theme::DIM))
                 }),
                 Cell::from(ahead_behind_cell(repo.ahead_behind)),
+                merge_cell,
             ])
         })
         .collect();
@@ -971,6 +1237,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Length(5),
             Constraint::Length(6),
             Constraint::Length(9),
+            Constraint::Length(7),
         ],
     )
     .header(header_row(&[
@@ -982,6 +1249,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
         "DIRTY",
         "DRIFT",
         "↑ / ↓",
+        "MERGE",
     ]))
     .block(panel(format!("fleet({count})")))
     .row_highlight_style(cursor_style())
@@ -1043,6 +1311,26 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
             Style::default().fg(theme::DIM),
         )],
     };
+    let mut lines = lines;
+    if let Some(repo) = app
+        .cursor
+        .selected()
+        .and_then(|i| app.fleet_rows().get(i).map(|r| r.name.clone()))
+        && let Some(badge) = app.merge_badge(&repo)
+    {
+        lines.push(Line::from(vec![
+            Span::styled(" merge ", Style::default().fg(theme::MAUVE)),
+            Span::styled(badge.source.clone(), Style::default().fg(theme::YELLOW)),
+            Span::styled(
+                format!("  {}/{} slices resolved", badge.resolved, badge.total),
+                Style::default().fg(theme::TEXT),
+            ),
+            Span::styled(
+                "  · :merge cleanup / :merge abort",
+                Style::default().fg(theme::DIM),
+            ),
+        ]));
+    }
     frame.render_widget(
         Paragraph::new(Text::from(lines)).block(panel("detail".to_string())),
         zones[1],
@@ -1375,20 +1663,22 @@ fn draw_help(frame: &mut Frame) {
         help_section("navigation"),
         help_entry("j / k", "move · enter drill in · esc/b back"),
         help_entry("q", "quit · ctrl-c force quit"),
+        help_entry("F5", "refresh now · ctrl-r also works"),
         Line::raw(""),
         help_section("fleet"),
         help_entry("s", "sync repo under cursor (or stack)"),
         help_entry("S", "stacks view · p pin · l lock"),
         help_entry("t", "tree · c changesets · r run · g goto"),
+        help_entry("/", "filter by name or group — reopens with your text"),
         Line::raw(""),
         help_section("changeset"),
         help_entry("n", "new · space select repos"),
-        help_entry("R", "request PR/MRs (cross-linked)"),
-        help_entry("L", "land in dependency order"),
+        help_entry("R", "request PR/MRs (cross-linked, asks y/n)"),
+        help_entry("L", "land in dependency order (asks y/n)"),
         Line::raw(""),
         help_section("command bar"),
-        help_entry(":sync", "· :stack NAME · :run CMD"),
-        help_entry(":change", "ID · :pin · :lock · :tree"),
+        help_entry(":sync", "· :stack NAME · :run CMD · :tree"),
+        help_entry(":change", "[ID | start ID | land ID | request ID]"),
         Line::raw(""),
         Line::styled(" press any key to close", Style::default().fg(theme::DIM)),
     ];

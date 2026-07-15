@@ -117,6 +117,9 @@ impl Forge for FakeForge {
             .push((repo_url.to_string(), body.to_string()));
         Ok(())
     }
+    fn list_open_prs(&self, _repo_url: &str) -> Result<Vec<keel_forge::OpenPr>, ForgeError> {
+        Ok(Vec::new())
+    }
 }
 
 struct FakeFactory {

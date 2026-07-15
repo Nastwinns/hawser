@@ -2,7 +2,7 @@
 //! `.keel/` state directory. Sync planning and status live here; execution
 //! goes through a [`GitBackend`].
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::git::{GitBackend, GitError, RevKind};
 use crate::lock::{LOCK_VERSION, LockError, LockedRepo, Lockfile};
@@ -49,11 +49,14 @@ pub enum SyncError {
     NotCloned(String),
 }
 
-/// A workspace rooted at the directory containing `keel.toml`.
+/// A workspace rooted at the directory containing its manifest.
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub root: PathBuf,
     pub manifest: Manifest,
+    /// Path the manifest was actually loaded from; usually `root/keel.toml`,
+    /// but [`Workspace::open_manifest`] allows any file name or location.
+    manifest_file: PathBuf,
 }
 
 /// Everything needed to bring one repo to its target state.
@@ -122,16 +125,40 @@ impl Workspace {
     /// Open the workspace rooted at `root` (must contain `keel.toml`).
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, WorkspaceError> {
         let root = root.into();
-        let manifest_path = root.join(MANIFEST_FILE);
-        if !manifest_path.exists() {
+        let manifest_file = root.join(MANIFEST_FILE);
+        if !manifest_file.exists() {
             return Err(WorkspaceError::NotAWorkspace(root));
         }
-        let manifest = TomlLoader.load(&manifest_path)?;
-        Ok(Self { root, manifest })
+        let manifest = TomlLoader.load(&manifest_file)?;
+        Ok(Self {
+            root,
+            manifest,
+            manifest_file,
+        })
+    }
+
+    /// Open using an explicit manifest path, which may have any file name or
+    /// live outside the workspace root; the root becomes its parent
+    /// directory (where `keel.lock` and `.keel/` are still expected).
+    pub fn open_manifest(path: impl Into<PathBuf>) -> Result<Self, WorkspaceError> {
+        let manifest_file = path.into();
+        if !manifest_file.exists() {
+            return Err(WorkspaceError::NotAWorkspace(manifest_file));
+        }
+        let root = manifest_file
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let manifest = TomlLoader.load(&manifest_file)?;
+        Ok(Self {
+            root,
+            manifest,
+            manifest_file,
+        })
     }
 
     pub fn manifest_path(&self) -> PathBuf {
-        self.root.join(MANIFEST_FILE)
+        self.manifest_file.clone()
     }
 
     pub fn lock_path(&self) -> PathBuf {

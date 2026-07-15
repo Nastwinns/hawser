@@ -1,6 +1,7 @@
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
@@ -79,7 +80,21 @@ impl Palette {
 }
 
 #[derive(Parser)]
-#[command(name = "haw", version, about = "The beam that binds the repos")]
+#[command(
+    name = "haw",
+    version,
+    about = "The beam that binds the repos",
+    after_help = "\
+Examples:
+  $ haw init keel.toml           bootstrap a workspace from a manifest
+  $ haw sync                     clone/update every repo, writing keel.lock
+  $ haw tree                     print the stack -> repo composition
+  $ haw status                   dirty/drift/ahead-behind per repo
+  $ haw change start FEAT-42     branch across every affected repo
+  $ haw                          open the fleet cockpit (bare, no subcommand)
+
+Run `haw <command> --help` for that command's own examples."
+)]
 struct Cli {
     /// Path to the manifest.
     #[arg(long, global = true, default_value = "keel.toml")]
@@ -93,11 +108,23 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Bootstrap a workspace from a manifest file or URL.
+    #[command(after_help = "\
+Examples:
+  $ haw init keel.toml                                 from a local file
+  $ haw init https://example.com/fleet/keel.toml       from a URL
+  $ haw --manifest custom.toml init keel.toml           bootstrap under a custom filename")]
     Init {
         /// Path or http(s) URL of an existing keel.toml.
         source: String,
     },
     /// Clone/update repos to the state in keel.lock (writes it if absent).
+    #[command(after_help = "\
+Examples:
+  $ haw sync                          clone/update every repo in the current stack
+  $ haw sync --stack gateway          sync one specific stack
+  $ haw sync --locked                 CI gate: fail unless keel.lock already exists
+  $ haw sync --shared                 clone via a local mirror cache (git alternates)
+  $ haw sync --group firmware -j 4    only `firmware`-grouped repos, 4 parallel jobs")]
     Sync {
         /// CI contract: fail unless keel.lock exists (no rev resolution).
         #[arg(long)]
@@ -117,15 +144,30 @@ enum Command {
         jobs: Option<usize>,
     },
     /// Resolve every repo's rev to a SHA and (re)write keel.lock.
+    #[command(after_help = "\
+Examples:
+  $ haw lock                    resolve every repo's manifest rev -> keel.lock
+  $ haw lock --overlay dev       resolve using the `dev` overlay's rev overrides")]
     Lock {
         #[arg(long)]
         overlay: Vec<String>,
     },
     /// Pin keel.lock to each repo's current HEAD (no network).
-    #[command(alias = "freeze")]
+    #[command(
+        alias = "freeze",
+        after_help = "\
+Examples:
+  $ haw pin       snapshot every repo's current checkout into keel.lock (no network)"
+    )]
     Pin,
     /// Restore keel.lock to the manifest revs (same as `haw lock`).
-    #[command(alias = "unfreeze")]
+    #[command(
+        alias = "unfreeze",
+        after_help = "\
+Examples:
+  $ haw unpin                    restore keel.lock to the manifest's declared revs
+  $ haw unpin --overlay dev       ...using the `dev` overlay's rev overrides"
+    )]
     Unpin {
         #[arg(long)]
         overlay: Vec<String>,
@@ -143,7 +185,15 @@ enum Command {
         command: StackCommand,
     },
     /// Aggregated fleet status: branch, head, dirty, drift per repo.
-    #[command(alias = "st")]
+    #[command(
+        alias = "st",
+        after_help = "\
+Examples:
+  $ haw status                       branch/head/dirty/drift for every repo
+  $ haw status --group firmware       only `firmware`-grouped repos
+  $ haw status --format json          machine-readable (schema keel.status/1)
+  $ haw status --verify               exit 3 if anything is missing, dirty, or drifted (CI gate)"
+    )]
     Status {
         /// Only repos in these groups (repeatable).
         #[arg(long = "group")]
@@ -156,13 +206,25 @@ enum Command {
         verify: bool,
     },
     /// Record a stack as current and sync it.
+    #[command(after_help = "\
+Examples:
+  $ haw switch sensor-node       record `sensor-node` as current, then sync it
+  $ haw switch gateway -j 8       ...with 8 parallel sync jobs")]
     Switch {
         stack: String,
         #[arg(long, short = 'j')]
         jobs: Option<usize>,
     },
     /// Print the stack -> repo tree.
-    #[command(alias = "graph")]
+    #[command(
+        alias = "graph",
+        after_help = "\
+Examples:
+  $ haw tree                       every stack -> repo composition
+  $ haw tree --stack gateway        just one stack
+  $ haw tree --overlay dev          composition after applying the `dev` overlay
+  $ haw tree --format json          machine-readable (schema keel.tree/1)"
+    )]
     Tree {
         #[arg(long = "stack", alias = "product")]
         stack: Option<String>,
@@ -173,7 +235,14 @@ enum Command {
         format: String,
     },
     /// Run a command in every repo, in parallel.
-    #[command(alias = "forall")]
+    #[command(
+        alias = "forall",
+        after_help = "\
+Examples:
+  $ haw run 'git fetch --tags'          quote multi-word commands
+  $ haw run -c 'git status -s'           repo-tool-style -c flag also works
+  $ haw run --group firmware 'make'       only `firmware`-grouped repos"
+    )]
     Run {
         /// The command (positional; `-c` also works, repo-tool style).
         #[arg(required_unless_present = "command_flag")]
@@ -187,17 +256,33 @@ enum Command {
         jobs: Option<usize>,
     },
     /// Cross-repo feature (changeset) workflow.
+    #[command(after_help = "\
+Examples:
+  $ haw change start FEAT-42 --repos kernel,hal    branch across two repos
+  $ haw change status FEAT-42                       per-repo branch + PR/CI dashboard
+  $ haw change request FEAT-42                       open cross-linked PR/MRs
+  $ haw change land FEAT-42                          merge them in dependency order
+
+Run `haw change <subcommand> --help` for that subcommand's own examples.")]
     Change {
         #[command(subcommand)]
         command: ChangeCommand,
     },
     /// Assert the on-disk tree matches keel.lock; exit 3 on drift (CI gate).
+    #[command(after_help = "\
+Examples:
+  $ haw verify                    exit 3 if any repo drifted from keel.lock (CI gate)
+  $ haw verify --format json       machine-readable (schema keel.status/1)")]
     Verify {
         /// `text` (default) or `json` (schema keel.status/1).
         #[arg(long, default_value = "text")]
         format: String,
     },
     /// Run each repo's `build` command from the manifest, in parallel.
+    #[command(after_help = "\
+Examples:
+  $ haw build                       run every repo's declared `build =` command
+  $ haw build --group firmware       only `firmware`-grouped repos")]
     Build {
         /// Only repos in these groups (repeatable).
         #[arg(long = "group")]
@@ -206,6 +291,10 @@ enum Command {
         jobs: Option<usize>,
     },
     /// Run each repo's `test` command from the manifest, in parallel.
+    #[command(after_help = "\
+Examples:
+  $ haw test                       run every repo's declared `test =` command
+  $ haw test --group firmware -j 2  only `firmware`-grouped repos, 2 parallel jobs")]
     Test {
         /// Only repos in these groups (repeatable).
         #[arg(long = "group")]
@@ -214,29 +303,56 @@ enum Command {
         jobs: Option<usize>,
     },
     /// Manage lifecycle hooks (.keel/hooks) and git integrity hooks.
+    #[command(after_help = "\
+Examples:
+  $ haw hooks install       write a pre-commit hook (runs `haw verify`) in every repo
+  $ haw hooks list          show the lifecycle hooks this workspace defines")]
     Hooks {
         #[command(subcommand)]
         command: HooksCommand,
     },
     /// Bundle baseline evidence (manifest, lock, audit log, status) for audits.
+    #[command(after_help = "\
+Examples:
+  $ haw evidence                        bundle into ./haw-evidence.tar.gz
+  $ haw evidence --out release.tar.gz    choose the output archive path")]
     Evidence {
         /// Output archive path.
         #[arg(long, default_value = "haw-evidence.tar.gz")]
         out: PathBuf,
     },
     /// Convert a west.yml or repo default.xml manifest to keel.toml.
+    #[command(after_help = "\
+Examples:
+  $ haw import --from west.yml            convert a west manifest
+  $ haw import --from default.xml          convert a Google `repo` manifest
+  $ haw import --from west.yml --manifest new.toml   write the result to a custom filename")]
     Import {
         /// Path to the foreign manifest.
         #[arg(long)]
         from: PathBuf,
     },
     /// Parallel collaborative merge: slice one big merge into reviewable units.
+    #[command(after_help = "\
+Examples:
+  $ haw merge plan origin/feature --repo kernel     slice a merge into per-directory units
+  $ haw merge resolve src --take theirs --repo kernel   auto-resolve one slice
+  $ haw merge status --repo kernel                   show slices and resolution state
+  $ haw merge cleanup --repo kernel -m 'merge feature'  seal it as one merge commit
+  $ haw merge abort --repo kernel                    give up and restore the target branch
+
+Run `haw merge <subcommand> --help` for that subcommand's own examples.")]
     Merge {
         #[command(subcommand)]
         command: MergeCommand,
     },
     /// Open the fleet dashboard (same as bare `haw`).
-    #[command(alias = "tui")]
+    #[command(
+        alias = "tui",
+        after_help = "\
+Examples:
+  $ haw dash       open the cockpit (identical to running bare `haw`)"
+    )]
     Dash,
     /// Anything else runs a `haw-<name>` plugin from PATH.
     #[command(external_subcommand)]
@@ -246,16 +362,30 @@ enum Command {
 #[derive(Subcommand)]
 enum HooksCommand {
     /// Write a pre-commit hook in every repo that runs `haw verify`.
+    #[command(after_help = "\
+Examples:
+  $ haw hooks install       add the pre-commit hook to every cloned repo")]
     Install,
     /// List the lifecycle hooks the workspace defines.
+    #[command(after_help = "\
+Examples:
+  $ haw hooks list       show pre-sync/post-sync/... hooks declared in keel.toml")]
     List,
 }
 
 #[derive(Subcommand)]
 enum RepoCommand {
     /// List repos with rev, path, and groups.
+    #[command(after_help = "\
+Examples:
+  $ haw repo list       show every repo's rev, checkout path, and groups")]
     List,
     /// Add a repo to the manifest (keeps your comments and formatting).
+    #[command(after_help = "\
+Examples:
+  $ haw repo add kernel --url git@github.com:acme/kernel.git --rev v6.1.2
+  $ haw repo add hal --remote internal --slug hal.git --group firmware
+  $ haw repo add app-mqtt --url git@github.com:acme/app-mqtt.git --path apps/mqtt --rev main")]
     Add {
         name: String,
         /// Full clone URL (or use --remote + --slug).
@@ -277,14 +407,23 @@ enum RepoCommand {
         groups: Vec<String>,
     },
     /// Remove a repo (refused while a stack or overlay references it).
+    #[command(after_help = "\
+Examples:
+  $ haw repo remove hal       fails if any stack/overlay still references `hal`")]
     Remove { name: String },
 }
 
 #[derive(Subcommand)]
 enum StackCommand {
     /// List stacks and their repos.
+    #[command(after_help = "\
+Examples:
+  $ haw stack list       show every stack and the repos it composes")]
     List,
     /// Add a stack composed of existing repos.
+    #[command(after_help = "\
+Examples:
+  $ haw stack add gateway --repos kernel,hal,app-mqtt")]
     Add {
         name: String,
         /// Repos in the stack.
@@ -297,12 +436,21 @@ enum StackCommand {
         repos: Vec<String>,
     },
     /// Remove a stack.
+    #[command(after_help = "\
+Examples:
+  $ haw stack remove sensor-node")]
     Remove { name: String },
 }
 
 #[derive(Subcommand)]
 enum ChangeCommand {
     /// Create one branch across the affected repos.
+    #[command(after_help = "\
+Examples:
+  $ haw change start FEAT-42 --repos kernel,hal      branch two repos
+  $ haw change start FEAT-42                          branch every repo in the manifest
+  $ haw change start FEAT-42 --skip-branch             adopt each repo's current branch instead
+  $ haw change start FEAT-42 --label adas --label perf  labels forwarded to `change request`")]
     Start {
         id: String,
         /// Repos to include (default: all repos in the manifest).
@@ -319,8 +467,15 @@ enum ChangeCommand {
         labels: Vec<String>,
     },
     /// Per-repo branch + PR/MR review + CI dashboard for a changeset.
+    #[command(after_help = "\
+Examples:
+  $ haw change status FEAT-42       branches, dirty state, and PR/MR + CI status")]
     Status { id: String },
     /// Push the changeset branches and open cross-linked PR/MRs.
+    #[command(after_help = "\
+Examples:
+  $ haw change request FEAT-42                base branch: the locked branch, else main
+  $ haw change request FEAT-42 --base develop   target a specific base branch")]
     Request {
         id: String,
         /// Target branch for the PR/MRs (default: the locked branch, else main).
@@ -328,25 +483,45 @@ enum ChangeCommand {
         base: Option<String>,
     },
     /// Merge the PR/MRs in dependency order; stops at the first failure.
+    #[command(after_help = "\
+Examples:
+  $ haw change land FEAT-42       merge every repo's PR/MR, in manifest `deps` order")]
     Land { id: String },
     /// Print a changeset repo's path (usable as: cd "$(haw change goto ID REPO)").
+    #[command(after_help = "\
+Examples:
+  $ haw change goto FEAT-42 kernel            print kernel's checkout path
+  $ cd \"$(haw change goto FEAT-42 kernel)\"     cd straight into it
+  $ haw change goto FEAT-42                    interactive picker (needs a terminal)")]
     Goto {
         id: String,
         /// Repo name; omit for an interactive picker.
         repo: Option<String>,
     },
     /// Save/restore the multi-repo state of a changeset.
+    #[command(after_help = "\
+Examples:
+  $ haw change snapshot save before-refactor       record every repo's branch + HEAD
+  $ haw change snapshot restore before-refactor     check every repo back out
+  $ haw change snapshot list                        show saved snapshots")]
     Snapshot {
         #[command(subcommand)]
         command: SnapshotCommand,
     },
     /// List recorded changesets.
+    #[command(after_help = "\
+Examples:
+  $ haw change list       show every changeset id recorded in .keel/changesets")]
     List,
 }
 
 #[derive(Subcommand)]
 enum MergeCommand {
     /// Start merging <source> into the current branch; slice the conflicts.
+    #[command(after_help = "\
+Examples:
+  $ haw merge plan origin/feature --repo kernel                merge feature into kernel
+  $ haw merge plan release/2.x --repo kernel --into custom-branch   name the integration branch")]
     Plan {
         /// Branch/tag/SHA to merge in.
         source: String,
@@ -358,6 +533,11 @@ enum MergeCommand {
         into: Option<String>,
     },
     /// Resolve one slice of the in-progress merge.
+    #[command(after_help = "\
+Examples:
+  $ haw merge resolve src --take theirs --repo kernel    accept the incoming side for `src`
+  $ haw merge resolve docs --take ours --repo kernel      keep the current side for `docs`
+  $ haw merge resolve src --repo kernel                    stage `src` as you edited it by hand")]
     Resolve {
         slice: String,
         #[arg(long)]
@@ -367,11 +547,18 @@ enum MergeCommand {
         take: Option<TakeSide>,
     },
     /// Show the planned slices and their resolution state.
+    #[command(after_help = "\
+Examples:
+  $ haw merge status --repo kernel       which slices are resolved, which remain")]
     Status {
         #[arg(long)]
         repo: Option<String>,
     },
     /// Seal the merge: commit it, fast-forward the target, drop temp branches.
+    #[command(after_help = "\
+Examples:
+  $ haw merge cleanup --repo kernel                        refuses if any slice is unresolved
+  $ haw merge cleanup --repo kernel -m 'merge feature'      custom merge commit message")]
     Cleanup {
         #[arg(long)]
         repo: Option<String>,
@@ -380,6 +567,9 @@ enum MergeCommand {
         message: Option<String>,
     },
     /// Abort the planned merge and restore the target branch.
+    #[command(after_help = "\
+Examples:
+  $ haw merge abort --repo kernel       undo the merge, drop the integration branch")]
     Abort {
         #[arg(long)]
         repo: Option<String>,
@@ -395,10 +585,19 @@ enum TakeSide {
 #[derive(Subcommand)]
 enum SnapshotCommand {
     /// Record every repo's branch + HEAD under a name.
+    #[command(after_help = "\
+Examples:
+  $ haw change snapshot save before-refactor")]
     Save { name: String },
     /// Check every repo back out to a saved state (refuses on dirty repos).
+    #[command(after_help = "\
+Examples:
+  $ haw change snapshot restore before-refactor")]
     Restore { name: String },
     /// List saved snapshots.
+    #[command(after_help = "\
+Examples:
+  $ haw change snapshot list")]
     List,
 }
 
@@ -414,6 +613,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
+    let _ = MANIFEST_ARG.set(cli.manifest.clone());
     let Some(command) = cli.command else {
         dash()?;
         return Ok(ExitCode::SUCCESS);
@@ -524,9 +724,25 @@ fn run() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// The `--manifest` flag, captured once in `run()` so every command —
+/// including the bare `dash`/TUI entrypoint — honors it, not just `tree`.
+static MANIFEST_ARG: OnceLock<PathBuf> = OnceLock::new();
+
+/// Resolve `--manifest` (default `keel.toml`) against the current directory.
+fn manifest_path() -> Result<PathBuf> {
+    let manifest = MANIFEST_ARG
+        .get()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from(MANIFEST_FILE));
+    Ok(if manifest.is_absolute() {
+        manifest
+    } else {
+        std::env::current_dir()?.join(manifest)
+    })
+}
+
 fn open_workspace() -> Result<Workspace> {
-    let cwd = std::env::current_dir()?;
-    Ok(Workspace::open(cwd)?)
+    Ok(Workspace::open_manifest(manifest_path()?)?)
 }
 
 fn default_jobs(flag: Option<usize>) -> usize {
@@ -545,9 +761,9 @@ fn record(ws: &Workspace, op: &str, repo: Option<&str>, before: Option<&str>, af
 }
 
 fn init(source: &str) -> Result<()> {
-    let dest = PathBuf::from(MANIFEST_FILE);
+    let dest = manifest_path()?;
     if dest.exists() {
-        bail!("{MANIFEST_FILE} already exists here");
+        bail!("{} already exists here", dest.display());
     }
     let text = if source.starts_with("http://") || source.starts_with("https://") {
         reqwest::blocking::get(source)
@@ -563,6 +779,9 @@ fn init(source: &str) -> Result<()> {
     };
     text.parse::<keel_core::manifest::Manifest>()
         .with_context(|| format!("{source} is not a valid manifest"))?;
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     std::fs::write(&dest, text)?;
     println!("initialized workspace from {source}");
     println!("next: haw sync");
@@ -1767,8 +1986,7 @@ struct CliController;
 
 impl CliController {
     fn workspace(&self) -> std::io::Result<Workspace> {
-        let cwd = std::env::current_dir()?;
-        Workspace::open(cwd).map_err(std::io::Error::other)
+        open_workspace().map_err(std::io::Error::other)
     }
 
     fn sync_filtered(&self, stack: &str, repo: Option<&str>) -> std::io::Result<String> {
@@ -1913,6 +2131,22 @@ impl keel_tui::Controller for CliController {
             .iter()
             .map(|(name, repo)| (name.clone(), ws.root.join(repo.checkout_path(name))))
             .collect();
+        let mut merges = Vec::new();
+        for name in ws.manifest.repos.keys() {
+            if let Some(plan) =
+                keel_merge::load_plan(&ws.state_dir(), name).map_err(std::io::Error::other)?
+            {
+                let resolved = plan.slices.iter().filter(|s| s.resolved).count();
+                merges.push((
+                    name.clone(),
+                    keel_tui::MergeBadge {
+                        source: plan.source,
+                        resolved,
+                        total: plan.slices.len(),
+                    },
+                ));
+            }
+        }
         Ok(keel_tui::Snapshot {
             root_label: ws.root.display().to_string(),
             stacks: ws.manifest.stacks.keys().cloned().collect(),
@@ -1922,6 +2156,7 @@ impl keel_tui::Controller for CliController {
             lock_present: ws.lock_path().exists(),
             paths,
             tree: tree_text(&ws),
+            merges,
         })
     }
 
@@ -1985,23 +2220,41 @@ impl keel_tui::Controller for CliController {
             .filter(|(_, path)| backend.is_repo(path))
             .collect();
         let results = fan_out(&repos, default_jobs(None), |(name, path)| {
-            let ok = shell_command(cmd)
-                .current_dir(path)
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            (name.clone(), ok)
+            let output = shell_command(cmd).current_dir(path).output();
+            (name.clone(), output)
         });
-        let failed: Vec<&str> = results
-            .iter()
-            .filter(|(_, ok)| !ok)
-            .map(|(name, _)| name.as_str())
-            .collect();
-        if failed.is_empty() {
-            Ok(format!("ran `{cmd}` in {} repos", results.len()))
-        } else {
-            Ok(format!("`{cmd}` failed in: {}", failed.join(", ")))
+
+        let mut report = format!("$ {cmd}\n");
+        let mut failures = 0usize;
+        for (name, result) in &results {
+            report.push_str(&format!("── {name} ──\n"));
+            match result {
+                Ok(out) => {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    if stdout.trim().is_empty() && stderr.trim().is_empty() {
+                        report.push_str("(no output)\n");
+                    } else {
+                        report.push_str(&stdout);
+                        report.push_str(&stderr);
+                    }
+                    if !out.status.success() {
+                        failures += 1;
+                        report.push_str(&format!("(exit: {})\n", out.status));
+                    }
+                }
+                Err(err) => {
+                    failures += 1;
+                    report.push_str(&format!("(failed to run: {err})\n"));
+                }
+            }
         }
+        report.push_str(&format!(
+            "ran in {}/{} repos",
+            results.len() - failures,
+            results.len()
+        ));
+        Ok(report)
     }
 
     fn change_start(&mut self, id: &str) -> std::io::Result<String> {
@@ -2034,6 +2287,37 @@ impl keel_tui::Controller for CliController {
             Some(outcome) => Ok(format!("landing stopped at `{}`", outcome.name)),
             None => Ok(format!("landed `{id}` ({} repos)", outcomes.len())),
         }
+    }
+
+    fn merge_cleanup(&mut self, repo: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let (name, path) = merge_repo(&ws, Some(repo)).map_err(std::io::Error::other)?;
+        let report = keel_merge::cleanup(
+            &keel_merge::git::GitMerge,
+            &path,
+            &ws.state_dir(),
+            &name,
+            None,
+        )
+        .map_err(std::io::Error::other)?;
+        Ok(format!(
+            "merged {} slice(s) into `{}` ({}); dropped `{}`",
+            report.slices,
+            report.target,
+            &report.merge_sha[..8.min(report.merge_sha.len())],
+            report.integration
+        ))
+    }
+
+    fn merge_abort(&mut self, repo: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let (name, path) = merge_repo(&ws, Some(repo)).map_err(std::io::Error::other)?;
+        let plan = keel_merge::abort(&keel_merge::git::GitMerge, &path, &ws.state_dir(), &name)
+            .map_err(std::io::Error::other)?;
+        Ok(format!(
+            "aborted merge of `{}`; back on `{}`",
+            plan.source, plan.target
+        ))
     }
 }
 

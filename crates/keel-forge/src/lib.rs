@@ -53,6 +53,23 @@ pub struct PrStatus {
     pub url: String,
 }
 
+/// One open PR/MR, for the fleet-wide PR/MR view (independent of any
+/// changeset — every open PR/MR on the repo's forge, not just yours).
+#[derive(Debug, Clone)]
+pub struct OpenPr {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub state: PrState,
+    pub approved: bool,
+    /// `None` while CI is pending or absent.
+    pub ci_passing: Option<bool>,
+}
+
+/// Hard cap on PRs fetched per repo — keeps the fleet-wide view's request
+/// count bounded on repos with a long history of open PRs.
+pub const OPEN_PRS_LIMIT: usize = 25;
+
 /// Errors from a forge implementation.
 #[derive(Debug, thiserror::Error)]
 pub enum ForgeError {
@@ -75,6 +92,9 @@ pub trait Forge {
     fn merge_pr(&self, repo_url: &str, number: u64) -> Result<(), ForgeError>;
     /// Rewrite the PR/MR description (used for cross-linking a changeset).
     fn update_pr_body(&self, repo_url: &str, number: u64, body: &str) -> Result<(), ForgeError>;
+    /// Every open PR/MR on the repo, capped at [`OPEN_PRS_LIMIT`] (fleet-wide
+    /// PR/MR view — independent of any changeset).
+    fn list_open_prs(&self, repo_url: &str) -> Result<Vec<OpenPr>, ForgeError>;
 }
 
 /// Turns a repo URL into a ready-to-call [`Forge`] client.
