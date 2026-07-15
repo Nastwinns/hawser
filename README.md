@@ -52,6 +52,25 @@ keel init keel.toml
 keel sync                       # clones every repo, writes keel.lock
 ```
 
+## Demos
+
+Rendered with [VHS](https://github.com/charmbracelet/vhs) from the tapes in
+[`demo/`](demo/) — CI re-renders them on every CLI/TUI change, so they never lie.
+Regenerate locally: `cargo build --release -p keel-cli && vhs demo/cli.tape`.
+
+**The CLI** — `sync`, `tree`, `status`, cross-repo changesets, in full color:
+
+![keel CLI demo](demo/keel-cli.gif)
+
+**The TUI cockpit** — bare `keel`, k9s-style, keyboard-first:
+
+![keel TUI demo](demo/keel-tui.gif)
+
+Output follows the conventions of the modern Rust CLI family (`bat`, `eza`, `ripgrep`):
+color on a TTY, plain when piped, `NO_COLOR` honored, `CLICOLOR_FORCE=1` to force color
+into pipes. One shared scheme everywhere — **cyan** repo/stack names, **yellow** revs and
+branches, dim SHAs and chrome, **green** ✓ / clean, **yellow** dirty, **red** drift.
+
 A typical session — compose, inspect, branch across repos:
 
 ```console

@@ -13,14 +13,19 @@ use keel_git::ShellGit;
 use keel_git::parallel::fan_out;
 use serde_json::json;
 
-/// Minimal ANSI painter: colored on a TTY, plain under `NO_COLOR` or when piped.
+/// Minimal ANSI painter: colored on a TTY, plain under `NO_COLOR` or when
+/// piped; `CLICOLOR_FORCE=1` forces color even when piped (bat/eza convention).
+/// Semantic helpers keep every command on one shared scheme:
+/// cyan names, yellow revs, dim chrome, green/yellow/red state.
 struct Palette {
     on: bool,
 }
 
 impl Palette {
     fn new() -> Self {
-        let on = std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal();
+        let force = std::env::var_os("CLICOLOR_FORCE").is_some_and(|v| v != "0");
+        let on =
+            std::env::var_os("NO_COLOR").is_none() && (force || std::io::stdout().is_terminal());
         Self { on }
     }
 
@@ -30,6 +35,46 @@ impl Palette {
         } else {
             text.to_string()
         }
+    }
+
+    /// Repo/stack names: bold cyan.
+    fn name(&self, text: &str) -> String {
+        self.paint("1;36", text)
+    }
+
+    /// Revisions, tags, branches: yellow.
+    fn rev(&self, text: &str) -> String {
+        self.paint("33", text)
+    }
+
+    /// SHAs, paths, secondary chrome: dim.
+    fn dim(&self, text: &str) -> String {
+        self.paint("2", text)
+    }
+
+    /// Success marks and clean state: green.
+    fn ok(&self, text: &str) -> String {
+        self.paint("32", text)
+    }
+
+    /// Warnings (dirty): bold yellow.
+    fn warn(&self, text: &str) -> String {
+        self.paint("1;33", text)
+    }
+
+    /// Failures and drift: bold red.
+    fn err(&self, text: &str) -> String {
+        self.paint("1;31", text)
+    }
+
+    /// Table headers: bold + underline.
+    fn header(&self, text: &str) -> String {
+        self.paint("1;4", text)
+    }
+
+    /// Summary lines: bold.
+    fn bold(&self, text: &str) -> String {
+        self.paint("1", text)
     }
 }
 
@@ -558,6 +603,8 @@ fn sync(
         sync_repo(task, &backend)
     });
 
+    let c = Palette::new();
+    let width = plan.tasks.iter().map(|t| t.name.len()).max().unwrap_or(4);
     let mut failures = 0usize;
     for (task, result) in plan.tasks.iter().zip(&results) {
         match result {
@@ -567,22 +614,30 @@ fn sync(
                     SyncOutcome::Updated => "updated",
                     SyncOutcome::AlreadySynced => "up to date",
                 };
-                println!("  ✓ {}  {verb}", task.name);
+                println!(
+                    "  {} {}  {}",
+                    c.ok("✓"),
+                    c.name(&format!("{:<width$}", task.name)),
+                    c.dim(verb)
+                );
                 if *outcome != SyncOutcome::AlreadySynced {
                     record(&ws, "sync", Some(&task.name), None, Some(&task.target));
                 }
             }
             Err(err) => {
                 failures += 1;
-                eprintln!("  ✗ {}  {err}", task.name);
+                eprintln!("  {} {}  {err}", c.err("✗"), task.name);
             }
         }
     }
     println!(
-        "synced stack `{}` ({}/{} repos)",
-        plan.stack,
-        results.len() - failures,
-        results.len()
+        "{}",
+        c.bold(&format!(
+            "synced stack `{}` ({}/{} repos)",
+            plan.stack,
+            results.len() - failures,
+            results.len()
+        ))
     );
     if failures > 0 {
         bail!("{failures} repo(s) failed to sync");
@@ -599,13 +654,27 @@ fn lock(overlays: &[String]) -> Result<()> {
     lockfile.save(&ws.lock_path())?;
     hooks::fire(&ws, hooks::Hook::PostLock, &json!({"overlays": overlays}))?;
     record(&ws, "lock.write", None, None, None);
-    println!("wrote keel.lock ({} repos pinned)", lockfile.repos.len());
+    let c = Palette::new();
+    println!(
+        "{}",
+        c.bold(&format!(
+            "wrote keel.lock ({} repos pinned)",
+            lockfile.repos.len()
+        ))
+    );
+    let width = lockfile
+        .repos
+        .iter()
+        .map(|r| r.name.len())
+        .max()
+        .unwrap_or(4);
     for repo in &lockfile.repos {
         println!(
-            "  {}  {}  <- {}",
-            repo.name,
-            &repo.rev[..12.min(repo.rev.len())],
-            repo.source_rev
+            "  {}  {}  {} {}",
+            c.name(&format!("{:<width$}", repo.name)),
+            c.dim(&repo.rev[..12.min(repo.rev.len())]),
+            c.dim("<-"),
+            c.rev(&repo.source_rev)
         );
     }
     Ok(())
@@ -616,16 +685,26 @@ fn pin() -> Result<()> {
     let lockfile = ws.pin(&ShellGit)?;
     lockfile.save(&ws.lock_path())?;
     record(&ws, "lock.pin", None, None, None);
+    let c = Palette::new();
     println!(
-        "pinned keel.lock to current HEADs ({} repos)",
-        lockfile.repos.len()
+        "{}",
+        c.bold(&format!(
+            "pinned keel.lock to current HEADs ({} repos)",
+            lockfile.repos.len()
+        ))
     );
+    let width = lockfile
+        .repos
+        .iter()
+        .map(|r| r.name.len())
+        .max()
+        .unwrap_or(4);
     for repo in &lockfile.repos {
         println!(
-            "  {}  {}  ({})",
-            repo.name,
-            &repo.rev[..8.min(repo.rev.len())],
-            repo.branch
+            "  {}  {}  {}",
+            c.name(&format!("{:<width$}", repo.name)),
+            c.dim(&repo.rev[..8.min(repo.rev.len())]),
+            c.rev(&format!("({})", repo.branch))
         );
     }
     Ok(())
@@ -643,6 +722,7 @@ fn repo_list() -> Result<()> {
         println!("no repos — add one with `keel repo add <name> --url <url>`");
         return Ok(());
     }
+    let c = Palette::new();
     let width = ws.manifest.repos.keys().map(String::len).max().unwrap_or(4);
     for (name, repo) in &ws.manifest.repos {
         let groups = if repo.groups.is_empty() {
@@ -651,9 +731,11 @@ fn repo_list() -> Result<()> {
             format!("  [{}]", repo.groups.join(", "))
         };
         println!(
-            "{name:<width$}  {}  {}{groups}",
-            repo.rev,
-            repo.checkout_path(name).display()
+            "{}  {}  {}{}",
+            c.name(&format!("{name:<width$}")),
+            c.rev(&repo.rev),
+            c.dim(&repo.checkout_path(name).display().to_string()),
+            c.dim(&groups)
         );
     }
     Ok(())
@@ -704,14 +786,19 @@ fn stack_list() -> Result<()> {
         println!("no stacks — add one with `keel stack add <name> --repos a,b`");
         return Ok(());
     }
+    let c = Palette::new();
     let current = ws.current_stack();
     for (name, stack) in &ws.manifest.stacks {
         let marker = if current.as_deref() == Some(name) {
-            "*"
+            c.ok("*")
         } else {
-            " "
+            " ".to_string()
         };
-        println!("{marker} {name}: {}", stack.repos.join(", "));
+        println!(
+            "{marker} {}: {}",
+            c.name(name),
+            c.rev(&stack.repos.join(", "))
+        );
     }
     Ok(())
 }
@@ -764,6 +851,7 @@ fn status(groups: &[String], format: &str, verify: bool) -> Result<ExitCode> {
             if statuses.is_empty() {
                 println!("no matching repos");
             } else {
+                let c = Palette::new();
                 let width = statuses
                     .iter()
                     .map(|s| s.name.len())
@@ -771,24 +859,45 @@ fn status(groups: &[String], format: &str, verify: bool) -> Result<ExitCode> {
                     .unwrap_or(4)
                     .max(4);
                 println!(
-                    "{:<width$}  {:<24} {:<10} {:<6} DRIFT",
-                    "REPO", "BRANCH", "HEAD", "DIRTY"
+                    "{}",
+                    c.header(&format!(
+                        "{:<width$}  {:<24} {:<10} {:<6} DRIFT",
+                        "REPO", "BRANCH", "HEAD", "DIRTY"
+                    ))
                 );
                 for s in &statuses {
                     if s.missing {
-                        println!("{:<width$}  (not cloned — run `keel sync`)", s.name);
+                        println!(
+                            "{}  {}",
+                            c.name(&format!("{:<width$}", s.name)),
+                            c.dim("(not cloned — run `keel sync`)")
+                        );
                         continue;
                     }
+                    let name = if s.dirty || s.drift {
+                        c.warn(&format!("{:<width$}", s.name))
+                    } else {
+                        c.name(&format!("{:<width$}", s.name))
+                    };
                     println!(
-                        "{:<width$}  {:<24} {:<10} {:<6} {}",
-                        s.name,
-                        s.branch.as_deref().unwrap_or("(detached)"),
-                        s.head
-                            .as_deref()
-                            .map(|h| &h[..8.min(h.len())])
-                            .unwrap_or("—"),
-                        if s.dirty { "yes" } else { "-" },
-                        if s.drift { "YES" } else { "-" },
+                        "{name}  {}  {} {} {}",
+                        c.rev(&format!(
+                            "{:<24}",
+                            s.branch.as_deref().unwrap_or("(detached)")
+                        )),
+                        c.dim(&format!(
+                            "{:<10}",
+                            s.head
+                                .as_deref()
+                                .map(|h| &h[..8.min(h.len())])
+                                .unwrap_or("—")
+                        )),
+                        if s.dirty {
+                            c.warn(&format!("{:<6}", "yes"))
+                        } else {
+                            c.ok(&format!("{:<6}", "-"))
+                        },
+                        if s.drift { c.err("YES") } else { c.ok("-") },
                     );
                 }
             }
@@ -913,8 +1022,9 @@ fn run_across(command: &str, groups: &[String], jobs: Option<usize>) -> Result<(
 
     let total = results.len();
     let mut failures = 0usize;
+    let c = Palette::new();
     for (name, output) in results {
-        println!("── {name} ──");
+        println!("{} {} {}", c.dim("──"), c.name(&name), c.dim("──"));
         match output {
             Ok(out) => {
                 print!("{}", String::from_utf8_lossy(&out.stdout));
@@ -962,13 +1072,28 @@ fn change_start(
     let changeset = change::start(&ws, &ShellGit, id, repos, branch, skip_branch, labels)?;
     record(&ws, "change.start", None, None, Some(id));
     hooks::fire(&ws, hooks::Hook::PostChangeStart, &json!({"id": id}))?;
+    let c = Palette::new();
     println!(
-        "changeset `{}` started across {} repo(s):",
-        changeset.id,
-        changeset.repos.len()
+        "{}",
+        c.bold(&format!(
+            "changeset `{}` started across {} repo(s):",
+            changeset.id,
+            changeset.repos.len()
+        ))
     );
+    let width = changeset
+        .repos
+        .iter()
+        .map(|r| r.name.len())
+        .max()
+        .unwrap_or(4);
     for repo in &changeset.repos {
-        println!("  {}  -> {}", repo.name, repo.branch);
+        println!(
+            "  {}  {} {}",
+            c.name(&format!("{:<width$}", repo.name)),
+            c.dim("->"),
+            c.rev(&repo.branch)
+        );
     }
     Ok(())
 }
@@ -985,27 +1110,46 @@ fn render_pr_state(state: PrState) -> &'static str {
 fn change_status(id: &str) -> Result<()> {
     let ws = open_workspace()?;
     let statuses = change::status(&ws, &ShellGit, id)?;
+    let c = Palette::new();
     let width = statuses.iter().map(|s| s.name.len()).max().unwrap_or(4);
-    println!("changeset `{id}`");
+    println!("{}", c.bold(&format!("changeset `{id}`")));
     println!(
-        "{:<width$}  {:<24} {:<9} {:<6} {:<10} PR",
-        "REPO", "BRANCH", "ON IT", "DIRTY", "HEAD"
+        "{}",
+        c.header(&format!(
+            "{:<width$}  {:<24} {:<9} {:<6} {:<10} PR",
+            "REPO", "BRANCH", "ON IT", "DIRTY", "HEAD"
+        ))
     );
     for s in &statuses {
         if s.missing {
-            println!("{:<width$}  (repo missing — run `keel sync`)", s.name);
+            println!(
+                "{}  {}",
+                c.name(&format!("{:<width$}", s.name)),
+                c.dim("(repo missing — run `keel sync`)")
+            );
             continue;
         }
         println!(
-            "{:<width$}  {:<24} {:<9} {:<6} {:<10} —",
-            s.name,
-            s.branch,
-            if s.on_branch { "yes" } else { "NO" },
-            if s.dirty { "yes" } else { "-" },
-            s.head
-                .as_deref()
-                .map(|h| &h[..8.min(h.len())])
-                .unwrap_or("—"),
+            "{}  {}  {} {} {} —",
+            c.name(&format!("{:<width$}", s.name)),
+            c.rev(&format!("{:<24}", s.branch)),
+            if s.on_branch {
+                c.ok(&format!("{:<9}", "yes"))
+            } else {
+                c.err(&format!("{:<9}", "NO"))
+            },
+            if s.dirty {
+                c.warn(&format!("{:<6}", "yes"))
+            } else {
+                c.ok(&format!("{:<6}", "-"))
+            },
+            c.dim(&format!(
+                "{:<10}",
+                s.head
+                    .as_deref()
+                    .map(|h| &h[..8.min(h.len())])
+                    .unwrap_or("—")
+            )),
         );
     }
 
@@ -1041,16 +1185,17 @@ fn change_request(id: &str, base: Option<&str>) -> Result<()> {
     let ws = open_workspace()?;
     let tokens = Tokens::from_env();
     let outcomes = orchestrate::request(&ws, &ShellGit, &tokens, id, base, None)?;
+    let c = Palette::new();
     let mut failures = 0usize;
     for outcome in &outcomes {
         match &outcome.result {
             Ok(url) => {
                 record(&ws, "change.request", Some(&outcome.name), None, Some(url));
-                println!("  ✓ {}  {url}", outcome.name);
+                println!("  {} {}  {}", c.ok("✓"), c.name(&outcome.name), c.dim(url));
             }
             Err(err) => {
                 failures += 1;
-                eprintln!("  ✗ {}  {err}", outcome.name);
+                eprintln!("  {} {}  {err}", c.err("✗"), outcome.name);
             }
         }
     }
@@ -1068,16 +1213,17 @@ fn change_land(id: &str) -> Result<()> {
     let ws = open_workspace()?;
     let tokens = Tokens::from_env();
     let outcomes = orchestrate::land(&ws, &tokens, id)?;
+    let c = Palette::new();
     let mut failed = false;
     for outcome in &outcomes {
         match &outcome.result {
             Ok(msg) => {
                 record(&ws, "change.land", Some(&outcome.name), None, Some(id));
-                println!("  ✓ {}  {msg}", outcome.name);
+                println!("  {} {}  {}", c.ok("✓"), c.name(&outcome.name), c.dim(msg));
             }
             Err(err) => {
                 failed = true;
-                eprintln!("  ✗ {}  {err}", outcome.name);
+                eprintln!("  {} {}  {err}", c.err("✗"), outcome.name);
             }
         }
     }
@@ -1176,17 +1322,28 @@ fn merge_plan(source: &str, repo: Option<&str>, into: Option<&str>) -> Result<()
         into,
     )?;
     record(&ws, "merge.plan", Some(&name), None, Some(source));
+    let c = Palette::new();
     println!(
-        "planned merge of `{}` into `{}` on `{}` ({} slice(s)):",
-        plan.source,
-        plan.target,
-        plan.integration,
-        plan.slices.len()
+        "{}",
+        c.bold(&format!(
+            "planned merge of `{}` into `{}` on `{}` ({} slice(s)):",
+            plan.source,
+            plan.target,
+            plan.integration,
+            plan.slices.len()
+        ))
     );
     for slice in &plan.slices {
-        println!("  {:<16} {} file(s)", slice.name, slice.paths.len());
+        println!(
+            "  {} {}",
+            c.name(&format!("{:<16}", slice.name)),
+            c.dim(&format!("{} file(s)", slice.paths.len()))
+        );
     }
-    println!("next: keel merge resolve <slice> [--take ours|theirs], then keel merge cleanup");
+    println!(
+        "{}",
+        c.dim("next: keel merge resolve <slice> [--take ours|theirs], then keel merge cleanup")
+    );
     Ok(())
 }
 
@@ -1206,12 +1363,13 @@ fn merge_resolve(slice: &str, repo: Option<&str>, take: Option<TakeSide>) -> Res
         side,
     )?;
     record(&ws, "merge.resolve", Some(&name), None, Some(slice));
+    let c = Palette::new();
     let remaining = plan.unresolved();
-    println!("resolved slice `{slice}`");
+    println!("{} resolved slice `{}`", c.ok("✓"), c.name(slice));
     if remaining.is_empty() {
-        println!("all slices resolved — run `keel merge cleanup`");
+        println!("{}", c.ok("all slices resolved — run `keel merge cleanup`"));
     } else {
-        println!("remaining: {}", remaining.join(", "));
+        println!("remaining: {}", c.warn(&remaining.join(", ")));
     }
     Ok(())
 }
@@ -1223,13 +1381,25 @@ fn merge_status(repo: Option<&str>) -> Result<()> {
         println!("no merge planned for `{name}` — start one with `keel merge plan <source>`");
         return Ok(());
     };
+    let c = Palette::new();
     println!(
-        "merge `{}` -> `{}` on `{}`",
-        plan.source, plan.target, plan.integration
+        "{}",
+        c.bold(&format!(
+            "merge `{}` -> `{}` on `{}`",
+            plan.source, plan.target, plan.integration
+        ))
     );
     for slice in &plan.slices {
-        let mark = if slice.resolved { "✓" } else { "·" };
-        println!("  {mark} {:<16} {} file(s)", slice.name, slice.paths.len());
+        let mark = if slice.resolved {
+            c.ok("✓")
+        } else {
+            c.dim("·")
+        };
+        println!(
+            "  {mark} {} {}",
+            c.name(&format!("{:<16}", slice.name)),
+            c.dim(&format!("{} file(s)", slice.paths.len()))
+        );
     }
     Ok(())
 }
@@ -1251,12 +1421,17 @@ fn merge_cleanup(repo: Option<&str>, message: Option<&str>) -> Result<()> {
         None,
         Some(&report.merge_sha),
     );
+    let c = Palette::new();
     println!(
-        "merged {} slice(s) into `{}` ({}); dropped `{}`",
-        report.slices,
-        report.target,
-        &report.merge_sha[..8.min(report.merge_sha.len())],
-        report.integration
+        "{} {}",
+        c.ok("✓"),
+        c.bold(&format!(
+            "merged {} slice(s) into `{}` ({}); dropped `{}`",
+            report.slices,
+            report.target,
+            &report.merge_sha[..8.min(report.merge_sha.len())],
+            report.integration
+        ))
     );
     Ok(())
 }
@@ -1398,8 +1573,9 @@ fn build_or_test(build: bool, groups: &[String], jobs: Option<usize>) -> Result<
     });
     let total = results.len();
     let mut failures = 0usize;
+    let c = Palette::new();
     for (name, output) in results {
-        println!("── {name} ──");
+        println!("{} {} {}", c.dim("──"), c.name(&name), c.dim("──"));
         match output {
             Ok(out) => {
                 print!("{}", String::from_utf8_lossy(&out.stdout));

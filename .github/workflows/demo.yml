@@ -1,0 +1,35 @@
+name: demos
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - "crates/keel-cli/**"
+      - "crates/keel-tui/**"
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p keel-cli
+      - name: Render CLI demo
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/cli.tape
+      - name: Render TUI demo
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/tui.tape
+      - name: Commit rendered GIFs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "demos: re-render VHS GIFs"
+          file_pattern: "demo/*.gif"
