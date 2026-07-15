@@ -8,32 +8,58 @@
     />
     <meta
       name="description"
-      content="keel — reproducible multi-repo stack composition + cross-repo MR orchestration, in Rust. This page IS the TUI."
+      content="haw — reproducible multi-repo stack composition + cross-repo MR orchestration, in Rust. This page IS the TUI."
     />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/fira_code.min.css"
     />
     <link data-trunk rel="rust" />
-    <title>keel — the beam that binds the repos</title>
+    <base data-trunk-public-url />
+    <title>haw — the beam that binds the repos</title>
     <style>
       body {
         margin: 0;
         width: 100%;
-        height: 100vh;
+        min-height: 100vh;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         align-content: center;
         background-color: #10141a;
+        gap: 16px;
+        padding: 16px 0;
       }
       pre {
         font-family: "Fira Code", monospace;
         font-size: 15px;
         margin: 0px;
       }
+      footer {
+        font-family: "Fira Code", monospace;
+        font-size: 13px;
+        color: #7f849c;
+      }
+      footer a {
+        color: #89b4fa;
+        text-decoration: none;
+      }
+      footer a:hover {
+        text-decoration: underline;
+      }
+      noscript {
+        font-family: "Fira Code", monospace;
+        color: #cdd6f4;
+      }
     </style>
   </head>
-  <body></body>
+  <body>
+    <noscript>This demo needs JavaScript + WebAssembly enabled.</noscript>
+    <footer>
+      <a href="https://github.com/Nastwinns/keelson">source</a>
+      · a scripted demo — the real cockpit runs on your terminal:
+      <code>cargo install hawser</code>
+    </footer>
+  </body>
 </html>

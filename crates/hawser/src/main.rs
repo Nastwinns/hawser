@@ -836,6 +836,7 @@ fn status_json(statuses: &[RepoStatus]) -> serde_json::Value {
             "locked_rev": s.locked_rev,
             "drift": s.drift,
             "ahead_behind": s.ahead_behind.map(|(a, b)| json!({"ahead": a, "behind": b})),
+            "groups": s.groups,
         })).collect::<Vec<_>>(),
     })
 }
@@ -1830,12 +1831,24 @@ fn render_changeset(
                     None => ("—".to_string(), "—".to_string()),
                 },
             };
+            let forge = ws
+                .manifest
+                .repos
+                .get(&s.name)
+                .and_then(|repo| repo.clone_url(&ws.manifest.remotes))
+                .map(|url| match keel_forge::detect(&url) {
+                    keel_forge::ForgeKind::GitHub => "github".to_string(),
+                    keel_forge::ForgeKind::GitLab => "gitlab".to_string(),
+                    keel_forge::ForgeKind::Unknown => "—".to_string(),
+                })
+                .unwrap_or_else(|| "—".to_string());
             keel_tui::ChangeRepoRow {
                 name: s.name,
                 branch: s.branch,
                 on_branch: s.on_branch,
                 dirty: s.dirty,
                 head: s.head,
+                forge,
                 pr,
                 ci,
             }

@@ -106,6 +106,7 @@ pub struct RepoStatus {
     pub drift: bool,
     /// Commits ahead/behind upstream; `None` without an upstream.
     pub ahead_behind: Option<(u64, u64)>,
+    pub groups: Vec<String>,
 }
 
 /// Local branch name for a locked repo: branches keep their name, tags and
@@ -316,24 +317,38 @@ impl Workspace {
         groups: &[String],
         backend: &dyn GitBackend,
     ) -> Result<Vec<RepoStatus>, SyncError> {
-        let entries: Vec<(String, PathBuf, Option<String>)> = match self.read_lock()? {
+        let entries: Vec<(String, PathBuf, Option<String>, Vec<String>)> = match self.read_lock()? {
             Some(lock) => lock
                 .repos
                 .iter()
                 .filter(|b| resolver::group_match(&b.groups, groups))
-                .map(|b| (b.name.clone(), b.path.clone(), Some(b.rev.clone())))
+                .map(|b| {
+                    (
+                        b.name.clone(),
+                        b.path.clone(),
+                        Some(b.rev.clone()),
+                        b.groups.clone(),
+                    )
+                })
                 .collect(),
             None => self
                 .manifest
                 .repos
                 .iter()
                 .filter(|(_, repo)| resolver::group_match(&repo.groups, groups))
-                .map(|(name, repo)| (name.clone(), repo.checkout_path(name), None))
+                .map(|(name, repo)| {
+                    (
+                        name.clone(),
+                        repo.checkout_path(name),
+                        None,
+                        repo.groups.clone(),
+                    )
+                })
                 .collect(),
         };
 
         let mut statuses = Vec::with_capacity(entries.len());
-        for (name, path, locked_rev) in entries {
+        for (name, path, locked_rev, repo_groups) in entries {
             let abs = self.root.join(&path);
             if !backend.is_repo(&abs) {
                 statuses.push(RepoStatus {
@@ -346,6 +361,7 @@ impl Workspace {
                     locked_rev,
                     drift: false,
                     ahead_behind: None,
+                    groups: repo_groups,
                 });
                 continue;
             }
@@ -361,6 +377,7 @@ impl Workspace {
                 locked_rev,
                 drift,
                 ahead_behind: backend.ahead_behind(&abs)?,
+                groups: repo_groups,
             });
         }
         Ok(statuses)

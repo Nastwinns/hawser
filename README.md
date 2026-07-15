@@ -66,6 +66,11 @@ Regenerate locally: `cargo build --release -p hawser && vhs demo/cli.tape`.
 
 ![haw TUI demo](demo/haw-tui.gif)
 
+**[Try the cockpit in your browser →](https://nastwinns.github.io/keelson/)** — a scripted
+fleet, rendered live with real ratatui widgets over [Ratzilla](https://github.com/ratatui/ratzilla)
+(Rust compiled to WASM, no server). Source: [`site/`](site/); rebuilds on every push via
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+
 Output follows the conventions of the modern Rust CLI family (`bat`, `eza`, `ripgrep`):
 color on a TTY, plain when piped, `NO_COLOR` honored, `CLICOLOR_FORCE=1` to force color
 into pipes. One shared scheme everywhere — **cyan** repo/stack names, **yellow** revs and

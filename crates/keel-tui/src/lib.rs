@@ -50,6 +50,8 @@ pub struct ChangeRepoRow {
     pub on_branch: bool,
     pub dirty: bool,
     pub head: Option<String>,
+    /// `github`/`gitlab`/`—`, detected from the repo's remote URL.
+    pub forge: String,
     /// Rendered PR/MR cell (`#128 ● open`), `—` before `change request`.
     pub pr: String,
     /// Rendered CI cell (`✓ passed`, `⏳ running`, `—`).
@@ -152,6 +154,8 @@ struct App {
     message: String,
     busy: Option<&'static str>,
     spinner: usize,
+    /// Free-running frame counter; paces the input cursor blink.
+    tick: u64,
     help: bool,
     goto: Option<PathBuf>,
 }
@@ -377,6 +381,7 @@ fn event_loop(
         message: "loading…".to_string(),
         busy: None,
         spinner: 0,
+        tick: 0,
         help: false,
         goto: None,
     };
@@ -433,6 +438,7 @@ fn event_loop(
             }
         }
 
+        app.tick = app.tick.wrapping_add(1);
         if app.busy.is_some() {
             app.spinner = (app.spinner + 1) % SPINNER.len();
         }
@@ -857,16 +863,56 @@ fn state_dot(repo: &RepoStatus) -> Span<'static> {
     Span::styled(dot, Style::default().fg(color))
 }
 
+/// Spans for `↑N ↓N`, green ahead / red behind; `—` without an upstream.
+fn ahead_behind_spans(ahead_behind: Option<(u64, u64)>) -> Vec<Span<'static>> {
+    match ahead_behind {
+        None => vec![Span::styled("—", Style::default().fg(theme::DIM))],
+        Some((0, 0)) => vec![Span::styled("up to date", Style::default().fg(theme::DIM))],
+        Some((ahead, behind)) => {
+            let mut spans = Vec::new();
+            if ahead > 0 {
+                spans.push(Span::styled(
+                    format!("↑{ahead} "),
+                    Style::default().fg(theme::GREEN),
+                ));
+            }
+            if behind > 0 {
+                spans.push(Span::styled(
+                    format!("↓{behind}"),
+                    Style::default().fg(theme::RED),
+                ));
+            }
+            spans
+        }
+    }
+}
+
+fn ahead_behind_cell(ahead_behind: Option<(u64, u64)>) -> Line<'static> {
+    match ahead_behind {
+        Some((0, 0)) => Line::styled("·", Style::default().fg(theme::DIM)),
+        other => Line::from(ahead_behind_spans(other)),
+    }
+}
+
+fn groups_label(groups: &[String]) -> (String, ratatui::style::Color) {
+    if groups.is_empty() {
+        ("—".to_string(), theme::DIM)
+    } else {
+        (groups.join(","), theme::TEAL)
+    }
+}
+
 fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
     let zones = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(3)])
+        .constraints([Constraint::Min(3), Constraint::Length(4)])
         .split(area);
 
     let rows: Vec<Row> = app
         .fleet_rows()
         .iter()
         .map(|repo| {
+            let (groups, groups_color) = groups_label(&repo.groups);
             if repo.missing {
                 return Row::new(vec![
                     Cell::from(state_dot(repo)),
@@ -874,15 +920,13 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
                         repo.name.clone(),
                         Style::default().fg(theme::RED),
                     )),
+                    Cell::from(Span::styled(groups, Style::default().fg(groups_color))),
                     Cell::from(Span::styled(
                         "not cloned — press s",
                         Style::default().fg(theme::DIM),
                     )),
                 ]);
             }
-            let ahead_behind = repo
-                .ahead_behind
-                .map_or("—".to_string(), |(a, b)| format!("↑{a} ↓{b}"));
             Row::new(vec![
                 Cell::from(state_dot(repo)),
                 Cell::from(Span::styled(
@@ -891,6 +935,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
                         .fg(theme::TEXT)
                         .add_modifier(Modifier::BOLD),
                 )),
+                Cell::from(Span::styled(groups, Style::default().fg(groups_color))),
                 Cell::from(Span::styled(
                     repo.branch.clone().unwrap_or_else(|| "(detached)".into()),
                     Style::default().fg(theme::YELLOW),
@@ -909,7 +954,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
                 } else {
                     Span::styled("·", Style::default().fg(theme::DIM))
                 }),
-                Cell::from(Span::styled(ahead_behind, Style::default().fg(theme::TEAL))),
+                Cell::from(ahead_behind_cell(repo.ahead_behind)),
             ])
         })
         .collect();
@@ -920,6 +965,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
         [
             Constraint::Length(1),
             Constraint::Min(10),
+            Constraint::Min(12),
             Constraint::Min(14),
             Constraint::Length(9),
             Constraint::Length(5),
@@ -930,6 +976,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
     .header(header_row(&[
         "",
         "REPO",
+        "GROUPS",
         "BRANCH",
         "HEAD",
         "DIRTY",
@@ -948,42 +995,56 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
         .cursor
         .selected()
         .and_then(|i| app.fleet_rows().get(i).copied().cloned());
-    let line = match detail {
-        Some(repo) => Line::from(vec![
-            Span::styled(
-                format!(" {} ", repo.name),
-                Style::default()
-                    .fg(theme::ACCENT)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("path ", Style::default().fg(theme::DIM)),
-            Span::styled(
-                format!("{} ", repo.path.display()),
-                Style::default().fg(theme::TEXT),
-            ),
-            Span::styled("· locked ", Style::default().fg(theme::DIM)),
-            Span::styled(
-                repo.locked_rev.as_deref().map_or("—", short).to_string(),
-                Style::default().fg(theme::TEXT),
-            ),
-            Span::styled(" · ", Style::default().fg(theme::DIM)),
-            if repo.missing {
-                Span::styled("NOT CLONED", Style::default().fg(theme::RED))
-            } else if repo.drift {
-                Span::styled("DRIFT (head ≠ lock)", Style::default().fg(theme::RED))
-            } else if repo.dirty {
-                Span::styled("dirty worktree", Style::default().fg(theme::YELLOW))
-            } else {
-                Span::styled("in sync ✓", Style::default().fg(theme::GREEN))
-            },
-        ]),
-        None => Line::styled(
+    let lines = match detail {
+        Some(repo) => {
+            let (groups, groups_color) = groups_label(&repo.groups);
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        format!(" {} ", repo.name),
+                        Style::default()
+                            .fg(theme::ACCENT)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("groups ", Style::default().fg(theme::DIM)),
+                    Span::styled(groups, Style::default().fg(groups_color)),
+                    Span::styled("  · path ", Style::default().fg(theme::DIM)),
+                    Span::styled(
+                        repo.path.display().to_string(),
+                        Style::default().fg(theme::TEXT),
+                    ),
+                ]),
+                {
+                    let mut spans = vec![
+                        Span::styled(" locked ", Style::default().fg(theme::DIM)),
+                        Span::styled(
+                            repo.locked_rev.as_deref().map_or("—", short).to_string(),
+                            Style::default().fg(theme::TEXT),
+                        ),
+                        Span::styled("  · remote ", Style::default().fg(theme::DIM)),
+                    ];
+                    spans.extend(ahead_behind_spans(repo.ahead_behind));
+                    spans.push(Span::styled("  · ", Style::default().fg(theme::DIM)));
+                    spans.push(if repo.missing {
+                        Span::styled("NOT CLONED", Style::default().fg(theme::RED))
+                    } else if repo.drift {
+                        Span::styled("DRIFT (head ≠ lock)", Style::default().fg(theme::RED))
+                    } else if repo.dirty {
+                        Span::styled("dirty worktree", Style::default().fg(theme::YELLOW))
+                    } else {
+                        Span::styled("in sync ✓", Style::default().fg(theme::GREEN))
+                    });
+                    Line::from(spans)
+                },
+            ]
+        }
+        None => vec![Line::styled(
             " no repos — check keel.toml",
             Style::default().fg(theme::DIM),
-        ),
+        )],
     };
     frame.render_widget(
-        Paragraph::new(line).block(panel("detail".to_string())),
+        Paragraph::new(Text::from(lines)).block(panel("detail".to_string())),
         zones[1],
     );
 }
@@ -1130,6 +1191,16 @@ fn draw_changeset(frame: &mut Frame, app: &mut App, area: Rect) {
                     repo.head.as_deref().map_or("—", short).to_string(),
                     Style::default().fg(theme::DIM),
                 )),
+                Cell::from(Span::styled(
+                    repo.forge.clone(),
+                    Style::default().fg(if repo.forge == "github" {
+                        theme::ACCENT
+                    } else if repo.forge == "gitlab" {
+                        theme::PEACH
+                    } else {
+                        theme::DIM
+                    }),
+                )),
                 Cell::from(pr_span(&repo.pr)),
                 Cell::from(ci_span(&repo.ci)),
             ])
@@ -1145,12 +1216,13 @@ fn draw_changeset(frame: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Length(5),
             Constraint::Length(5),
             Constraint::Length(9),
+            Constraint::Length(7),
             Constraint::Min(12),
             Constraint::Min(10),
         ],
     )
     .header(header_row(&[
-        "", "REPO", "BRANCH", "ON IT", "DIRTY", "HEAD", "PR / MR", "CI",
+        "", "REPO", "BRANCH", "ON IT", "DIRTY", "HEAD", "FORGE", "PR / MR", "CI",
     ]))
     .block(panel(format!(
         "change {}",
@@ -1177,7 +1249,13 @@ fn draw_tree(frame: &mut Frame, app: &mut App, area: Rect) {
     );
 }
 
+/// Alternates every 4 ticks (~500ms at the 120ms poll cadence) for an input caret blink.
+fn cursor_glyph(app: &App) -> &'static str {
+    if app.tick % 8 < 4 { "▏" } else { " " }
+}
+
 fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
+    let caret = cursor_glyph(app);
     let line = match (&app.input, app.busy) {
         (InputMode::Filter(buffer), _) => Line::from(vec![
             Span::styled(
@@ -1187,7 +1265,11 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(buffer.clone(), Style::default().fg(theme::TEXT)),
-            Span::styled("▏", Style::default().fg(theme::DIM)),
+            Span::styled(caret, Style::default().fg(theme::TEXT)),
+            Span::styled(
+                "   (live filter by name or group)",
+                Style::default().fg(theme::DIM),
+            ),
         ]),
         (InputMode::Command(buffer), _) => Line::from(vec![
             Span::styled(
@@ -1197,12 +1279,16 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(buffer.clone(), Style::default().fg(theme::TEXT)),
-            Span::styled("▏", Style::default().fg(theme::DIM)),
+            Span::styled(caret, Style::default().fg(theme::TEXT)),
+            Span::styled(
+                "   (mirrors the CLI — try: sync · switch <stack> · run <cmd> · tree)",
+                Style::default().fg(theme::DIM),
+            ),
         ]),
         (InputMode::NewChangeset(buffer), _) => Line::from(vec![
             Span::styled(" new changeset: ", Style::default().fg(theme::MAUVE)),
             Span::styled(buffer.clone(), Style::default().fg(theme::TEXT)),
-            Span::styled("▏", Style::default().fg(theme::DIM)),
+            Span::styled(caret, Style::default().fg(theme::TEXT)),
         ]),
         (InputMode::None, Some(label)) => Line::from(vec![
             Span::styled(

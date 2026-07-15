@@ -1,0 +1,54 @@
+name: pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: site
+      - name: Install trunk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R trunk-rs/trunk --pattern '*-x86_64-unknown-linux-gnu.tar.gz' -O trunk.tar.gz
+          tar xzf trunk.tar.gz
+          sudo install trunk /usr/local/bin/trunk
+      - name: Build site
+        working-directory: site
+        run: trunk build --release --public-url /keelson/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
