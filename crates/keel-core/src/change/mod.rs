@@ -1,5 +1,5 @@
-//! Changesets: one feature spanning several bricks — one logical branch
-//! created across N bricks, later linked to N PR/MRs.
+//! Changesets: one feature spanning several repos — one logical branch
+//! created across N repos, later linked to N PR/MRs.
 //!
 //! State lives in `.keel/changesets/<id>.toml`, outside the manifest.
 
@@ -28,24 +28,24 @@ pub enum ChangeError {
     #[error("changeset `{0}` not found")]
     NotFound(String),
     #[error("repo `{0}` is not in the manifest")]
-    UnknownBrick(String),
+    UnknownRepo(String),
     #[error("repo `{name}` is not cloned at {path}; run `keel sync` first")]
-    MissingBrickRepo { name: String, path: PathBuf },
+    MissingRepoRepo { name: String, path: PathBuf },
     #[error("repo `{0}` is on a detached HEAD; check out a branch first")]
     Detached(String),
     #[error(transparent)]
     Git(#[from] GitError),
 }
 
-/// One brick participating in a changeset, with its feature branch.
+/// One repo participating in a changeset, with its feature branch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ChangeBrick {
+pub struct ChangeRepo {
     pub name: String,
     pub branch: String,
 }
 
-/// A feature across several bricks.
+/// A feature across several repos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Changeset {
@@ -56,16 +56,16 @@ pub struct Changeset {
         alias = "brick",
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub bricks: Vec<ChangeBrick>,
+    pub repos: Vec<ChangeRepo>,
 }
 
-/// Observed state of one brick inside a changeset, for `change status`.
+/// Observed state of one repo inside a changeset, for `change status`.
 #[derive(Debug, Clone)]
-pub struct ChangeBrickStatus {
+pub struct ChangeRepoStatus {
     pub name: String,
     pub branch: String,
     pub missing: bool,
-    /// True when the brick is currently checked out on the changeset branch.
+    /// True when the repo is currently checked out on the changeset branch.
     pub on_branch: bool,
     pub dirty: bool,
     pub head: Option<String>,
@@ -124,12 +124,12 @@ impl Changeset {
 }
 
 /// Start a changeset: create (or adopt, with `skip_branch`) one branch across
-/// the given bricks. `bricks: None` means every brick in the manifest.
+/// the given repos. `repos: None` means every repo in the manifest.
 pub fn start(
     ws: &Workspace,
     backend: &dyn GitBackend,
     id: &str,
-    bricks: Option<&[String]>,
+    repos: Option<&[String]>,
     branch: Option<&str>,
     skip_branch: bool,
 ) -> Result<Changeset, ChangeError> {
@@ -137,22 +137,22 @@ pub fn start(
         return Err(ChangeError::AlreadyExists(id.to_string()));
     }
 
-    let names: Vec<String> = match bricks {
+    let names: Vec<String> = match repos {
         Some(list) => list.to_vec(),
-        None => ws.manifest.bricks.keys().cloned().collect(),
+        None => ws.manifest.repos.keys().cloned().collect(),
     };
     let branch_name = branch.map_or_else(|| default_branch(id), str::to_string);
 
     let mut resolved = Vec::with_capacity(names.len());
     for name in &names {
-        let brick = ws
+        let repo = ws
             .manifest
-            .bricks
+            .repos
             .get(name)
-            .ok_or_else(|| ChangeError::UnknownBrick(name.clone()))?;
-        let path = ws.root.join(brick.checkout_path(name));
+            .ok_or_else(|| ChangeError::UnknownRepo(name.clone()))?;
+        let path = ws.root.join(repo.checkout_path(name));
         if !backend.is_repo(&path) {
-            return Err(ChangeError::MissingBrickRepo {
+            return Err(ChangeError::MissingRepoRepo {
                 name: name.clone(),
                 path,
             });
@@ -170,7 +170,7 @@ pub fn start(
             backend.create_branch(&path, &branch_name)?;
             branch_name.clone()
         };
-        entries.push(ChangeBrick {
+        entries.push(ChangeRepo {
             name,
             branch: entry_branch,
         });
@@ -178,23 +178,23 @@ pub fn start(
 
     let changeset = Changeset {
         id: id.to_string(),
-        bricks: entries,
+        repos: entries,
     };
     changeset.save(ws)?;
     Ok(changeset)
 }
 
-/// Per-brick state of a changeset.
+/// Per-repo state of a changeset.
 pub fn status(
     ws: &Workspace,
     backend: &dyn GitBackend,
     id: &str,
-) -> Result<Vec<ChangeBrickStatus>, ChangeError> {
+) -> Result<Vec<ChangeRepoStatus>, ChangeError> {
     let changeset = Changeset::load(ws, id)?;
-    let mut out = Vec::with_capacity(changeset.bricks.len());
-    for entry in &changeset.bricks {
-        let Some(brick) = ws.manifest.bricks.get(&entry.name) else {
-            out.push(ChangeBrickStatus {
+    let mut out = Vec::with_capacity(changeset.repos.len());
+    for entry in &changeset.repos {
+        let Some(repo) = ws.manifest.repos.get(&entry.name) else {
+            out.push(ChangeRepoStatus {
                 name: entry.name.clone(),
                 branch: entry.branch.clone(),
                 missing: true,
@@ -204,9 +204,9 @@ pub fn status(
             });
             continue;
         };
-        let path = ws.root.join(brick.checkout_path(&entry.name));
+        let path = ws.root.join(repo.checkout_path(&entry.name));
         if !backend.is_repo(&path) {
-            out.push(ChangeBrickStatus {
+            out.push(ChangeRepoStatus {
                 name: entry.name.clone(),
                 branch: entry.branch.clone(),
                 missing: true,
@@ -217,7 +217,7 @@ pub fn status(
             continue;
         }
         let current = backend.current_branch(&path)?;
-        out.push(ChangeBrickStatus {
+        out.push(ChangeRepoStatus {
             name: entry.name.clone(),
             branch: entry.branch.clone(),
             missing: false,

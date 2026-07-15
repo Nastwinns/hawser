@@ -1,12 +1,12 @@
-//! Manifest + product + overlays -> the concrete set of bricks to materialize.
+//! Manifest + stack + overlays -> the concrete set of repos to materialize.
 
 use std::path::PathBuf;
 
-use crate::manifest::{Brick, Manifest, Overlay};
+use crate::manifest::{Manifest, Overlay, Repo};
 
-/// One brick after resolution: where to clone from, what to check out, where to put it.
+/// One repo after resolution: where to clone from, what to check out, where to put it.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedBrick {
+pub struct ResolvedRepo {
     pub name: String,
     pub url: String,
     pub rev: String,
@@ -20,31 +20,31 @@ pub fn group_match(groups: &[String], filter: &[String]) -> bool {
     filter.is_empty() || groups.iter().any(|g| filter.contains(g))
 }
 
-/// Drop bricks whose groups don't match the filter.
+/// Drop repos whose groups don't match the filter.
 pub fn filter_groups(resolution: &mut Resolution, filter: &[String]) {
     resolution
-        .bricks
-        .retain(|brick| group_match(&brick.groups, filter));
+        .repos
+        .retain(|repo| group_match(&repo.groups, filter));
 }
 
-/// The bricks of one product with all overlays applied.
+/// The repos of one stack with all overlays applied.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resolution {
-    pub product: String,
-    pub bricks: Vec<ResolvedBrick>,
+    pub stack: String,
+    pub repos: Vec<ResolvedRepo>,
 }
 
-/// Errors produced while resolving a product.
+/// Errors produced while resolving a stack.
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
     #[error("unknown stack `{0}`")]
-    UnknownProduct(String),
+    UnknownStack(String),
     #[error("unknown overlay `{0}`")]
     UnknownOverlay(String),
-    #[error("stack `{product}` references unknown repo `{brick}`")]
-    UnknownBrick { product: String, brick: String },
+    #[error("stack `{stack}` references unknown repo `{repo}`")]
+    UnknownRepo { stack: String, repo: String },
     #[error("repo `{0}` has no usable source")]
-    UnsourcedBrick(String),
+    UnsourcedRepo(String),
 }
 
 fn active_overlays<'m>(
@@ -65,13 +65,13 @@ fn active_overlays<'m>(
 fn resolve_one(
     manifest: &Manifest,
     name: &str,
-    brick: &Brick,
+    repo: &Repo,
     active: &[&Overlay],
-) -> Result<ResolvedBrick, ResolveError> {
-    let mut rev = brick.rev.clone();
-    let mut path = brick.checkout_path(name);
+) -> Result<ResolvedRepo, ResolveError> {
+    let mut rev = repo.rev.clone();
+    let mut path = repo.checkout_path(name);
     for overlay in active {
-        if let Some(over) = overlay.bricks.get(name) {
+        if let Some(over) = overlay.repos.get(name) {
             if let Some(r) = &over.rev {
                 rev = r.clone();
             }
@@ -80,59 +80,59 @@ fn resolve_one(
             }
         }
     }
-    let url = brick
+    let url = repo
         .clone_url(&manifest.remotes)
-        .ok_or_else(|| ResolveError::UnsourcedBrick(name.to_string()))?;
-    Ok(ResolvedBrick {
+        .ok_or_else(|| ResolveError::UnsourcedRepo(name.to_string()))?;
+    Ok(ResolvedRepo {
         name: name.to_string(),
         url,
         rev,
         path,
-        groups: brick.groups.clone(),
+        groups: repo.groups.clone(),
     })
 }
 
-/// Resolve `product` against `manifest`, applying `overlays` in order
+/// Resolve `stack` against `manifest`, applying `overlays` in order
 /// (later overlays win).
 pub fn resolve(
     manifest: &Manifest,
-    product: &str,
+    stack: &str,
     overlays: &[String],
 ) -> Result<Resolution, ResolveError> {
     let spec = manifest
-        .products
-        .get(product)
-        .ok_or_else(|| ResolveError::UnknownProduct(product.to_string()))?;
+        .stacks
+        .get(stack)
+        .ok_or_else(|| ResolveError::UnknownStack(stack.to_string()))?;
     let active = active_overlays(manifest, overlays)?;
 
-    let mut bricks = Vec::with_capacity(spec.bricks.len());
-    for name in &spec.bricks {
-        let brick = manifest
-            .bricks
+    let mut repos = Vec::with_capacity(spec.repos.len());
+    for name in &spec.repos {
+        let repo = manifest
+            .repos
             .get(name)
-            .ok_or_else(|| ResolveError::UnknownBrick {
-                product: product.to_string(),
-                brick: name.clone(),
+            .ok_or_else(|| ResolveError::UnknownRepo {
+                stack: stack.to_string(),
+                repo: name.clone(),
             })?;
-        bricks.push(resolve_one(manifest, name, brick, &active)?);
+        repos.push(resolve_one(manifest, name, repo, &active)?);
     }
 
     Ok(Resolution {
-        product: product.to_string(),
-        bricks,
+        stack: stack.to_string(),
+        repos,
     })
 }
 
-/// Resolve every brick in the manifest (manifest order), applying `overlays`.
-/// This is what lockfile generation uses: the lock covers all bricks.
+/// Resolve every repo in the manifest (manifest order), applying `overlays`.
+/// This is what lockfile generation uses: the lock covers all repos.
 pub fn resolve_all(
     manifest: &Manifest,
     overlays: &[String],
-) -> Result<Vec<ResolvedBrick>, ResolveError> {
+) -> Result<Vec<ResolvedRepo>, ResolveError> {
     let active = active_overlays(manifest, overlays)?;
-    let mut bricks = Vec::with_capacity(manifest.bricks.len());
-    for (name, brick) in &manifest.bricks {
-        bricks.push(resolve_one(manifest, name, brick, &active)?);
+    let mut repos = Vec::with_capacity(manifest.repos.len());
+    for (name, repo) in &manifest.repos {
+        repos.push(resolve_one(manifest, name, repo, &active)?);
     }
-    Ok(bricks)
+    Ok(repos)
 }

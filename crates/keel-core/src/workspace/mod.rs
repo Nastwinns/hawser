@@ -1,11 +1,11 @@
-//! The on-disk workspace: `keel.toml`, `keel.lock`, the bricks, and the
+//! The on-disk workspace: `keel.toml`, `keel.lock`, the repos, and the
 //! `.keel/` state directory. Sync planning and status live here; execution
 //! goes through a [`GitBackend`].
 
 use std::path::PathBuf;
 
 use crate::git::{GitBackend, GitError, RevKind};
-use crate::lock::{LOCK_VERSION, LockError, LockedBrick, Lockfile};
+use crate::lock::{LOCK_VERSION, LockError, LockedRepo, Lockfile};
 use crate::manifest::{Manifest, ManifestError, ManifestLoader, TomlLoader};
 use crate::resolver::{self, ResolveError};
 
@@ -27,9 +27,9 @@ pub enum WorkspaceError {
         source: std::io::Error,
     },
     #[error("unknown stack `{0}`")]
-    UnknownProduct(String),
+    UnknownStack(String),
     #[error("no stack selected; pass --stack or `keel switch` (available: {available})")]
-    ProductRequired { available: String },
+    StackRequired { available: String },
 }
 
 /// Errors while planning or executing a sync.
@@ -54,9 +54,9 @@ pub struct Workspace {
     pub manifest: Manifest,
 }
 
-/// Everything needed to bring one brick to its target state.
+/// Everything needed to bring one repo to its target state.
 #[derive(Debug, Clone)]
-pub struct BrickTask {
+pub struct RepoTask {
     pub name: String,
     pub url: String,
     /// Absolute checkout path.
@@ -70,16 +70,16 @@ pub struct BrickTask {
     pub branch: String,
 }
 
-/// The full set of brick tasks for one product.
+/// The full set of repo tasks for one stack.
 #[derive(Debug, Clone)]
 pub struct SyncPlan {
-    pub product: String,
-    pub tasks: Vec<BrickTask>,
+    pub stack: String,
+    pub tasks: Vec<RepoTask>,
     /// True when this plan generated and wrote a fresh lockfile.
     pub wrote_lock: bool,
 }
 
-/// What `sync_brick` did.
+/// What `sync_repo` did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncOutcome {
     Cloned,
@@ -87,9 +87,9 @@ pub enum SyncOutcome {
     AlreadySynced,
 }
 
-/// Observed state of one brick, for `keel status` and the TUI.
+/// Observed state of one repo, for `keel status` and the TUI.
 #[derive(Debug, Clone)]
-pub struct BrickStatus {
+pub struct RepoStatus {
     pub name: String,
     /// Workspace-relative path.
     pub path: PathBuf,
@@ -102,7 +102,7 @@ pub struct BrickStatus {
     pub drift: bool,
 }
 
-/// Local branch name for a locked brick: branches keep their name, tags and
+/// Local branch name for a locked repo: branches keep their name, tags and
 /// SHAs get a `keel/` prefix so the checkout is never detached.
 pub fn branch_for(source_rev: &str, kind: RevKind) -> String {
     match kind {
@@ -144,44 +144,44 @@ impl Workspace {
         }
     }
 
-    /// The product recorded by the last `keel switch`, if any.
-    pub fn current_product(&self) -> Option<String> {
-        std::fs::read_to_string(self.state_dir().join("product"))
+    /// The stack recorded by the last `keel switch`, if any.
+    pub fn current_stack(&self) -> Option<String> {
+        std::fs::read_to_string(self.state_dir().join("stack"))
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
     }
 
-    pub fn set_current_product(&self, name: &str) -> Result<(), WorkspaceError> {
+    pub fn set_current_stack(&self, name: &str) -> Result<(), WorkspaceError> {
         let dir = self.state_dir();
-        let path = dir.join("product");
+        let path = dir.join("stack");
         std::fs::create_dir_all(&dir).map_err(|source| WorkspaceError::Io { path: dir, source })?;
         std::fs::write(&path, name).map_err(|source| WorkspaceError::Io { path, source })
     }
 
-    /// Pick the product to operate on: explicit flag > recorded switch >
-    /// the only product > error.
-    pub fn pick_product(&self, flag: Option<&str>) -> Result<String, WorkspaceError> {
+    /// Pick the stack to operate on: explicit flag > recorded switch >
+    /// the only stack > error.
+    pub fn pick_stack(&self, flag: Option<&str>) -> Result<String, WorkspaceError> {
         let validate = |name: &str| {
-            if self.manifest.products.contains_key(name) {
+            if self.manifest.stacks.contains_key(name) {
                 Ok(name.to_string())
             } else {
-                Err(WorkspaceError::UnknownProduct(name.to_string()))
+                Err(WorkspaceError::UnknownStack(name.to_string()))
             }
         };
         if let Some(name) = flag {
             return validate(name);
         }
-        if let Some(name) = self.current_product() {
+        if let Some(name) = self.current_stack() {
             return validate(&name);
         }
-        let mut names = self.manifest.products.keys();
+        let mut names = self.manifest.stacks.keys();
         match (names.next(), names.next()) {
             (Some(only), None) => Ok(only.clone()),
-            _ => Err(WorkspaceError::ProductRequired {
+            _ => Err(WorkspaceError::StackRequired {
                 available: self
                     .manifest
-                    .products
+                    .stacks
                     .keys()
                     .cloned()
                     .collect::<Vec<_>>()
@@ -190,18 +190,18 @@ impl Workspace {
         }
     }
 
-    /// Resolve every manifest brick's rev to a SHA and build a fresh lockfile.
+    /// Resolve every manifest repo's rev to a SHA and build a fresh lockfile.
     pub fn make_lock(
         &self,
         overlays: &[String],
         backend: &dyn GitBackend,
     ) -> Result<Lockfile, SyncError> {
         let resolved = resolver::resolve_all(&self.manifest, overlays)?;
-        let mut bricks = Vec::with_capacity(resolved.len());
+        let mut repos = Vec::with_capacity(resolved.len());
         for rb in resolved {
             let r = backend.resolve_rev(&rb.url, &rb.rev)?;
             let branch = branch_for(&rb.rev, r.kind);
-            bricks.push(LockedBrick {
+            repos.push(LockedRepo {
                 name: rb.name,
                 url: rb.url,
                 path: rb.path,
@@ -213,21 +213,21 @@ impl Workspace {
         }
         Ok(Lockfile {
             version: LOCK_VERSION,
-            bricks,
+            repos,
         })
     }
 
-    /// Build the sync plan for `product`. Uses the existing lock; generates
+    /// Build the sync plan for `stack`. Uses the existing lock; generates
     /// and writes one when absent. Overlays only apply to lock generation.
-    /// A non-empty `groups` filter limits the plan to matching bricks.
+    /// A non-empty `groups` filter limits the plan to matching repos.
     pub fn plan_sync(
         &self,
-        product: &str,
+        stack: &str,
         overlays: &[String],
         groups: &[String],
         backend: &dyn GitBackend,
     ) -> Result<SyncPlan, SyncError> {
-        let mut resolution = resolver::resolve(&self.manifest, product, overlays)?;
+        let mut resolution = resolver::resolve(&self.manifest, stack, overlays)?;
         resolver::filter_groups(&mut resolution, groups);
         let (lock, wrote_lock) = match self.read_lock()? {
             Some(lock) => (lock, false),
@@ -238,12 +238,12 @@ impl Workspace {
             }
         };
 
-        let mut tasks = Vec::with_capacity(resolution.bricks.len());
-        for rb in &resolution.bricks {
+        let mut tasks = Vec::with_capacity(resolution.repos.len());
+        for rb in &resolution.repos {
             let locked = lock
                 .get(&rb.name)
                 .ok_or_else(|| SyncError::MissingLockEntry(rb.name.clone()))?;
-            tasks.push(BrickTask {
+            tasks.push(RepoTask {
                 name: locked.name.clone(),
                 url: locked.url.clone(),
                 path: self.root.join(&locked.path),
@@ -254,32 +254,32 @@ impl Workspace {
             });
         }
         Ok(SyncPlan {
-            product: resolution.product,
+            stack: resolution.stack,
             tasks,
             wrote_lock,
         })
     }
 
-    /// Observed state of every brick (lock order when a lock exists).
-    /// A non-empty `groups` filter limits the report to matching bricks.
+    /// Observed state of every repo (lock order when a lock exists).
+    /// A non-empty `groups` filter limits the report to matching repos.
     pub fn status(
         &self,
         groups: &[String],
         backend: &dyn GitBackend,
-    ) -> Result<Vec<BrickStatus>, SyncError> {
+    ) -> Result<Vec<RepoStatus>, SyncError> {
         let entries: Vec<(String, PathBuf, Option<String>)> = match self.read_lock()? {
             Some(lock) => lock
-                .bricks
+                .repos
                 .iter()
                 .filter(|b| resolver::group_match(&b.groups, groups))
                 .map(|b| (b.name.clone(), b.path.clone(), Some(b.rev.clone())))
                 .collect(),
             None => self
                 .manifest
-                .bricks
+                .repos
                 .iter()
-                .filter(|(_, brick)| resolver::group_match(&brick.groups, groups))
-                .map(|(name, brick)| (name.clone(), brick.checkout_path(name), None))
+                .filter(|(_, repo)| resolver::group_match(&repo.groups, groups))
+                .map(|(name, repo)| (name.clone(), repo.checkout_path(name), None))
                 .collect(),
         };
 
@@ -287,7 +287,7 @@ impl Workspace {
         for (name, path, locked_rev) in entries {
             let abs = self.root.join(&path);
             if !backend.is_repo(&abs) {
-                statuses.push(BrickStatus {
+                statuses.push(RepoStatus {
                     name,
                     path,
                     missing: true,
@@ -301,7 +301,7 @@ impl Workspace {
             }
             let head = backend.head_sha(&abs)?;
             let drift = locked_rev.as_deref().is_some_and(|rev| rev != head);
-            statuses.push(BrickStatus {
+            statuses.push(RepoStatus {
                 name,
                 path,
                 missing: false,
@@ -316,8 +316,8 @@ impl Workspace {
     }
 }
 
-/// Bring one brick to its target state. Safe to run in parallel across bricks.
-pub fn sync_brick(task: &BrickTask, backend: &dyn GitBackend) -> Result<SyncOutcome, GitError> {
+/// Bring one repo to its target state. Safe to run in parallel across repos.
+pub fn sync_repo(task: &RepoTask, backend: &dyn GitBackend) -> Result<SyncOutcome, GitError> {
     if !backend.is_repo(&task.path) {
         backend.clone_repo(&task.url, &task.path)?;
         backend.checkout(&task.path, &task.target, &task.branch)?;

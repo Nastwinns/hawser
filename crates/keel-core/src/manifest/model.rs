@@ -22,14 +22,14 @@ pub struct Manifest {
         alias = "brick",
         skip_serializing_if = "IndexMap::is_empty"
     )]
-    pub bricks: IndexMap<String, Brick>,
+    pub repos: IndexMap<String, Repo>,
     #[serde(
         default,
         rename = "stack",
         alias = "product",
         skip_serializing_if = "IndexMap::is_empty"
     )]
-    pub products: IndexMap<String, Product>,
+    pub stacks: IndexMap<String, Stack>,
     #[serde(
         default,
         rename = "overlay",
@@ -38,7 +38,7 @@ pub struct Manifest {
     pub overlays: IndexMap<String, Overlay>,
 }
 
-/// A named base URL bricks can be cloned from.
+/// A named base URL repos can be cloned from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Remote {
@@ -48,7 +48,7 @@ pub struct Remote {
 /// One Git repository: a full autonomous clone at a declared path.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Brick {
+pub struct Repo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,8 +62,8 @@ pub struct Brick {
     pub groups: Vec<String>,
 }
 
-impl Brick {
-    /// Checkout path in the workspace; defaults to the brick's name.
+impl Repo {
+    /// Checkout path in the workspace; defaults to the repo's name.
     pub fn checkout_path(&self, name: &str) -> PathBuf {
         self.path.clone().unwrap_or_else(|| PathBuf::from(name))
     }
@@ -82,14 +82,14 @@ impl Brick {
 /// A named composition (a "stack"): the set of repos it is built from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Product {
+pub struct Stack {
     #[serde(rename = "repos", alias = "bricks")]
-    pub bricks: Vec<String>,
+    pub repos: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-/// Named per-brick overrides applied on top of the manifest at resolve time.
+/// Named per-repo overrides applied on top of the manifest at resolve time.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Overlay {
@@ -99,13 +99,13 @@ pub struct Overlay {
         alias = "brick",
         skip_serializing_if = "IndexMap::is_empty"
     )]
-    pub bricks: IndexMap<String, BrickOverride>,
+    pub repos: IndexMap<String, RepoOverride>,
 }
 
-/// The fields an overlay may override on one brick.
+/// The fields an overlay may override on one repo.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct BrickOverride {
+pub struct RepoOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rev: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -113,11 +113,11 @@ pub struct BrickOverride {
 }
 
 impl Manifest {
-    /// Check referential integrity: brick sources, remote names, product and
-    /// overlay brick references.
+    /// Check referential integrity: repo sources, remote names, stack and
+    /// overlay repo references.
     pub fn validate(&self) -> Result<(), ManifestError> {
-        for (name, brick) in &self.bricks {
-            match (&brick.url, &brick.remote, &brick.repo) {
+        for (name, repo) in &self.repos {
+            match (&repo.url, &repo.remote, &repo.repo) {
                 (Some(_), None, None) => {}
                 (Some(_), _, _) => {
                     return Err(ManifestError::AmbiguousSource(name.clone()));
@@ -125,7 +125,7 @@ impl Manifest {
                 (None, Some(remote), Some(_)) => {
                     if !self.remotes.contains_key(remote) {
                         return Err(ManifestError::UnknownRemote {
-                            brick: name.clone(),
+                            repo: name.clone(),
                             remote: remote.clone(),
                         });
                     }
@@ -135,22 +135,22 @@ impl Manifest {
                 }
             }
         }
-        for (name, product) in &self.products {
-            for brick in &product.bricks {
-                if !self.bricks.contains_key(brick) {
-                    return Err(ManifestError::UnknownBrickInProduct {
-                        product: name.clone(),
-                        brick: brick.clone(),
+        for (name, stack) in &self.stacks {
+            for repo in &stack.repos {
+                if !self.repos.contains_key(repo) {
+                    return Err(ManifestError::UnknownRepoInStack {
+                        stack: name.clone(),
+                        repo: repo.clone(),
                     });
                 }
             }
         }
         for (name, overlay) in &self.overlays {
-            for brick in overlay.bricks.keys() {
-                if !self.bricks.contains_key(brick) {
-                    return Err(ManifestError::UnknownBrickInOverlay {
+            for repo in overlay.repos.keys() {
+                if !self.repos.contains_key(repo) {
+                    return Err(ManifestError::UnknownRepoInOverlay {
                         overlay: name.clone(),
-                        brick: brick.clone(),
+                        repo: repo.clone(),
                     });
                 }
             }

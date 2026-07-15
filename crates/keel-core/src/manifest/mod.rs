@@ -1,9 +1,9 @@
-//! The human-authored `keel.toml` manifest: remotes, bricks, products, overlays.
+//! The human-authored `keel.toml` manifest: remotes, repos, stacks, overlays.
 
 mod model;
 mod toml_loader;
 
-pub use model::{Brick, BrickOverride, Manifest, Overlay, Product, Remote};
+pub use model::{Manifest, Overlay, Remote, Repo, RepoOverride, Stack};
 pub use toml_loader::TomlLoader;
 
 use std::path::{Path, PathBuf};
@@ -19,16 +19,16 @@ pub enum ManifestError {
     },
     #[error("invalid manifest TOML")]
     Parse(#[source] Box<toml::de::Error>),
-    #[error("repo `{brick}` references unknown remote `{remote}`")]
-    UnknownRemote { brick: String, remote: String },
+    #[error("repo `{repo}` references unknown remote `{remote}`")]
+    UnknownRemote { repo: String, remote: String },
     #[error("repo `{0}` must declare either `url` or `remote` + `repo`")]
     MissingSource(String),
     #[error("repo `{0}` declares both `url` and `remote`/`repo`")]
     AmbiguousSource(String),
-    #[error("stack `{product}` references unknown repo `{brick}`")]
-    UnknownBrickInProduct { product: String, brick: String },
-    #[error("overlay `{overlay}` references unknown repo `{brick}`")]
-    UnknownBrickInOverlay { overlay: String, brick: String },
+    #[error("stack `{stack}` references unknown repo `{repo}`")]
+    UnknownRepoInStack { stack: String, repo: String },
+    #[error("overlay `{overlay}` references unknown repo `{repo}`")]
+    UnknownRepoInOverlay { overlay: String, repo: String },
 }
 
 /// Anything that can produce a [`Manifest`] from a file on disk.

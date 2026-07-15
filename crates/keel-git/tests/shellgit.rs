@@ -66,7 +66,7 @@ fn clone_checkout_and_introspect() {
     let src = make_source_repo(tmp.path());
     let url = src.to_string_lossy().into_owned();
     let head = git(&src, &["rev-parse", "main"]);
-    let dest = tmp.path().join("clones").join("brick");
+    let dest = tmp.path().join("clones").join("repo");
 
     assert!(!ShellGit.is_repo(&dest));
     ShellGit.clone_repo(&url, &dest).unwrap();
@@ -97,7 +97,7 @@ fn refuses_to_discard_local_commits() {
     let src = make_source_repo(tmp.path());
     let url = src.to_string_lossy().into_owned();
     let old = git(&src, &["rev-parse", "main"]);
-    let dest = tmp.path().join("brick");
+    let dest = tmp.path().join("repo");
 
     ShellGit.clone_repo(&url, &dest).unwrap();
     ShellGit.checkout(&dest, &old, "main").unwrap();
@@ -117,7 +117,7 @@ fn create_branch_and_fetch() {
     let tmp = tempfile::tempdir().unwrap();
     let src = make_source_repo(tmp.path());
     let url = src.to_string_lossy().into_owned();
-    let dest = tmp.path().join("brick");
+    let dest = tmp.path().join("repo");
 
     ShellGit.clone_repo(&url, &dest).unwrap();
     ShellGit.create_branch(&dest, "change/FEAT-1").unwrap();

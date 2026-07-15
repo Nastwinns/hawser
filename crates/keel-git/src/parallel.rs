@@ -1,4 +1,4 @@
-//! Bounded fan-out across bricks with plain scoped threads.
+//! Bounded fan-out across repos with plain scoped threads.
 //! (tokio arrives with the async forge APIs; process-spawning git work
 //! doesn't need an async runtime.)
 

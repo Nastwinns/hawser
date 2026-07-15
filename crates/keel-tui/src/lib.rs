@@ -1,9 +1,9 @@
-//! Read-only ratatui fleet dashboard: product -> brick tree on the left,
-//! per-brick detail on the right. Actions arrive in Phase 4.
+//! Read-only ratatui fleet dashboard: stack -> repo tree on the left,
+//! per-repo detail on the right. Actions arrive in Phase 4.
 
 use std::io;
 
-use keel_core::workspace::BrickStatus;
+use keel_core::workspace::RepoStatus;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -11,35 +11,35 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
-/// One product and the observed state of its bricks.
+/// One stack and the observed state of its repos.
 #[derive(Debug, Clone)]
 pub struct FleetView {
-    pub product: String,
-    pub bricks: Vec<BrickStatus>,
+    pub stack: String,
+    pub repos: Vec<RepoStatus>,
 }
 
 enum Row {
-    Product(String),
-    Brick(BrickStatus),
+    Stack(String),
+    Repo(RepoStatus),
 }
 
 fn flatten(views: &[FleetView]) -> Vec<Row> {
     let mut rows = Vec::new();
     for view in views {
-        rows.push(Row::Product(view.product.clone()));
-        for brick in &view.bricks {
-            rows.push(Row::Brick(brick.clone()));
+        rows.push(Row::Stack(view.stack.clone()));
+        for repo in &view.repos {
+            rows.push(Row::Repo(repo.clone()));
         }
     }
     rows
 }
 
-fn glyph(brick: &BrickStatus) -> (&'static str, Color) {
-    if brick.missing {
+fn glyph(repo: &RepoStatus) -> (&'static str, Color) {
+    if repo.missing {
         ("✗", Color::Red)
-    } else if brick.dirty {
+    } else if repo.dirty {
         ("!", Color::Yellow)
-    } else if brick.drift {
+    } else if repo.drift {
         ("●", Color::Magenta)
     } else {
         ("✓", Color::Green)
@@ -106,14 +106,14 @@ fn draw(frame: &mut Frame, rows: &[Row], state: &mut ListState) {
     let items: Vec<ListItem> = rows
         .iter()
         .map(|row| match row {
-            Row::Product(name) => ListItem::new(Line::styled(
+            Row::Stack(name) => ListItem::new(Line::styled(
                 name.clone(),
                 Style::default().add_modifier(Modifier::BOLD),
             )),
-            Row::Brick(brick) => {
-                let (mark, color) = glyph(brick);
+            Row::Repo(repo) => {
+                let (mark, color) = glyph(repo);
                 ListItem::new(Line::styled(
-                    format!("  {mark} {}", brick.name),
+                    format!("  {mark} {}", repo.name),
                     Style::default().fg(color),
                 ))
             }
@@ -125,40 +125,37 @@ fn draw(frame: &mut Frame, rows: &[Row], state: &mut ListState) {
     frame.render_stateful_widget(list, panes[0], state);
 
     let detail: Vec<Line> = match state.selected().and_then(|i| rows.get(i)) {
-        Some(Row::Brick(brick)) => vec![
-            Line::from(format!("repo    {}", brick.name)),
-            Line::from(format!("path    {}", brick.path.display())),
+        Some(Row::Repo(repo)) => vec![
+            Line::from(format!("repo    {}", repo.name)),
+            Line::from(format!("path    {}", repo.path.display())),
             Line::from(format!(
                 "branch  {}",
-                brick.branch.as_deref().unwrap_or("(detached)")
+                repo.branch.as_deref().unwrap_or("(detached)")
             )),
             Line::from(format!(
                 "head    {}",
-                brick.head.as_deref().map_or("—", short)
+                repo.head.as_deref().map_or("—", short)
             )),
             Line::from(format!(
                 "lock    {}",
-                brick.locked_rev.as_deref().map_or("—", short)
+                repo.locked_rev.as_deref().map_or("—", short)
             )),
-            Line::from(format!(
-                "dirty   {}",
-                if brick.dirty { "yes" } else { "no" }
-            )),
+            Line::from(format!("dirty   {}", if repo.dirty { "yes" } else { "no" })),
             Line::from(format!(
                 "drift   {}",
-                if brick.drift {
+                if repo.drift {
                     "YES (head != lock)"
                 } else {
                     "no"
                 }
             )),
-            Line::from(if brick.missing {
+            Line::from(if repo.missing {
                 "state   NOT CLONED — run `keel sync`"
             } else {
                 "state   present"
             }),
         ],
-        Some(Row::Product(name)) => vec![
+        Some(Row::Stack(name)) => vec![
             Line::from(format!("stack   {name}")),
             Line::from("select a repo for details"),
         ],

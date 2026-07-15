@@ -12,31 +12,31 @@ url = "git@gitlab.company.com:firmware"
 [remote.github]
 url = "git@github.com:acme"
 
-[brick.kernel]
+[repo.kernel]
 remote = "internal"
 repo = "kernel.git"
 rev = "v6.1.2"
 groups = ["firmware"]
 
-[brick.hal]
+[repo.hal]
 remote = "internal"
 repo = "hal.git"
 rev = "main"
 groups = ["firmware"]
 
-[brick.app-mqtt]
+[repo.app-mqtt]
 remote = "github"
 repo = "app-mqtt.git"
 rev = "release/2.x"
 path = "apps/mqtt"
 
-[product.gateway]
-bricks = ["kernel", "hal", "app-mqtt"]
+[stack.gateway]
+repos = ["kernel", "hal", "app-mqtt"]
 
-[product.sensor-node]
-bricks = ["kernel", "hal"]
+[stack.sensor-node]
+repos = ["kernel", "hal"]
 
-[overlay.dev.brick.kernel]
+[overlay.dev.repo.kernel]
 rev = "main"
 "#;
 
@@ -44,11 +44,11 @@ rev = "main"
 fn parses_the_reference_example() {
     let manifest: Manifest = EXAMPLE.parse().unwrap();
     assert_eq!(manifest.remotes.len(), 2);
-    assert_eq!(manifest.bricks.len(), 3);
-    assert_eq!(manifest.products.len(), 2);
+    assert_eq!(manifest.repos.len(), 3);
+    assert_eq!(manifest.stacks.len(), 2);
     assert_eq!(manifest.overlays.len(), 1);
 
-    let kernel = &manifest.bricks["kernel"];
+    let kernel = &manifest.repos["kernel"];
     assert_eq!(kernel.rev, "v6.1.2");
     assert_eq!(kernel.groups, ["firmware"]);
     assert_eq!(
@@ -57,7 +57,7 @@ fn parses_the_reference_example() {
     );
     assert_eq!(kernel.checkout_path("kernel"), PathBuf::from("kernel"));
 
-    let mqtt = &manifest.bricks["app-mqtt"];
+    let mqtt = &manifest.repos["app-mqtt"];
     assert_eq!(mqtt.checkout_path("app-mqtt"), PathBuf::from("apps/mqtt"));
 }
 
@@ -72,7 +72,7 @@ fn round_trips_through_toml() {
 #[test]
 fn rejects_unknown_remote() {
     let err = r#"
-[brick.a]
+[repo.a]
 remote = "nope"
 repo = "a.git"
 rev = "main"
@@ -83,9 +83,9 @@ rev = "main"
 }
 
 #[test]
-fn rejects_brick_without_source() {
+fn rejects_repo_without_source() {
     let err = r#"
-[brick.a]
+[repo.a]
 rev = "main"
 "#
     .parse::<Manifest>()
@@ -99,7 +99,7 @@ fn rejects_ambiguous_source() {
 [remote.r]
 url = "git@example.com:x"
 
-[brick.a]
+[repo.a]
 url = "git@example.com:x/a.git"
 remote = "r"
 repo = "a.git"
@@ -111,46 +111,46 @@ rev = "main"
 }
 
 #[test]
-fn rejects_unknown_brick_in_product() {
+fn rejects_unknown_repo_in_stack() {
     let err = r#"
-[product.p]
-bricks = ["ghost"]
+[stack.p]
+repos = ["ghost"]
 "#
     .parse::<Manifest>()
     .unwrap_err();
-    assert!(matches!(err, ManifestError::UnknownBrickInProduct { .. }));
+    assert!(matches!(err, ManifestError::UnknownRepoInStack { .. }));
 }
 
 #[test]
-fn rejects_unknown_brick_in_overlay() {
+fn rejects_unknown_repo_in_overlay() {
     let err = r#"
-[overlay.dev.brick.ghost]
+[overlay.dev.repo.ghost]
 rev = "main"
 "#
     .parse::<Manifest>()
     .unwrap_err();
-    assert!(matches!(err, ManifestError::UnknownBrickInOverlay { .. }));
+    assert!(matches!(err, ManifestError::UnknownRepoInOverlay { .. }));
 }
 
 #[test]
 fn rejects_unknown_top_level_key() {
-    assert!("[bricks.a]\nrev = \"main\"\n".parse::<Manifest>().is_err());
+    assert!("[repos.a]\nrev = \"main\"\n".parse::<Manifest>().is_err());
 }
 
 #[test]
-fn resolves_a_product() {
+fn resolves_a_stack() {
     let manifest: Manifest = EXAMPLE.parse().unwrap();
     let resolution = resolver::resolve(&manifest, "gateway", &[]).unwrap();
-    assert_eq!(resolution.product, "gateway");
-    assert_eq!(resolution.bricks.len(), 3);
+    assert_eq!(resolution.stack, "gateway");
+    assert_eq!(resolution.repos.len(), 3);
 
-    let kernel = &resolution.bricks[0];
+    let kernel = &resolution.repos[0];
     assert_eq!(kernel.name, "kernel");
     assert_eq!(kernel.rev, "v6.1.2");
     assert_eq!(kernel.url, "git@gitlab.company.com:firmware/kernel.git");
     assert_eq!(kernel.path, PathBuf::from("kernel"));
 
-    let mqtt = &resolution.bricks[2];
+    let mqtt = &resolution.repos[2];
     assert_eq!(mqtt.path, PathBuf::from("apps/mqtt"));
     assert_eq!(mqtt.url, "git@github.com:acme/app-mqtt.git");
 }
@@ -159,16 +159,16 @@ fn resolves_a_product() {
 fn overlay_overrides_rev() {
     let manifest: Manifest = EXAMPLE.parse().unwrap();
     let resolution = resolver::resolve(&manifest, "sensor-node", &["dev".into()]).unwrap();
-    assert_eq!(resolution.bricks[0].rev, "main");
-    assert_eq!(resolution.bricks[1].rev, "main");
+    assert_eq!(resolution.repos[0].rev, "main");
+    assert_eq!(resolution.repos[1].rev, "main");
 }
 
 #[test]
-fn unknown_product_and_overlay_error() {
+fn unknown_stack_and_overlay_error() {
     let manifest: Manifest = EXAMPLE.parse().unwrap();
     assert!(matches!(
         resolver::resolve(&manifest, "ghost", &[]),
-        Err(ResolveError::UnknownProduct(_))
+        Err(ResolveError::UnknownStack(_))
     ));
     assert!(matches!(
         resolver::resolve(&manifest, "gateway", &["ghost".into()]),
@@ -195,10 +195,10 @@ rev = "next"
 "#
     .parse()
     .unwrap();
-    assert_eq!(manifest.bricks.len(), 1);
-    assert_eq!(manifest.products["gateway"].bricks, ["kernel"]);
+    assert_eq!(manifest.repos.len(), 1);
+    assert_eq!(manifest.stacks["gateway"].repos, ["kernel"]);
     assert_eq!(
-        manifest.overlays["dev"].bricks["kernel"].rev.as_deref(),
+        manifest.overlays["dev"].repos["kernel"].rev.as_deref(),
         Some("next")
     );
 

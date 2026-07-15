@@ -1,7 +1,7 @@
-//! The machine-generated `keel.lock`: every brick pinned to an exact SHA.
+//! The machine-generated `keel.lock`: every repo pinned to an exact SHA.
 //!
-//! The lockfile covers **all** bricks in the manifest (not just one product),
-//! so switching products never changes the lock. Overlays only take effect
+//! The lockfile covers **all** repos in the manifest (not just one stack),
+//! so switching stacks never changes the lock. Overlays only take effect
 //! when the lock is (re)generated.
 
 use std::path::{Path, PathBuf};
@@ -39,13 +39,13 @@ pub struct Lockfile {
         alias = "brick",
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub bricks: Vec<LockedBrick>,
+    pub repos: Vec<LockedRepo>,
 }
 
-/// One brick pinned to an exact commit.
+/// One repo pinned to an exact commit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct LockedBrick {
+pub struct LockedRepo {
     pub name: String,
     pub url: String,
     pub path: PathBuf,
@@ -53,7 +53,7 @@ pub struct LockedBrick {
     pub rev: String,
     /// The manifest rev this SHA was resolved from.
     pub source_rev: String,
-    /// The local branch bricks are checked out on (never detached).
+    /// The local branch repos are checked out on (never detached).
     pub branch: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
@@ -81,7 +81,7 @@ impl Lockfile {
         })
     }
 
-    pub fn get(&self, name: &str) -> Option<&LockedBrick> {
-        self.bricks.iter().find(|b| b.name == name)
+    pub fn get(&self, name: &str) -> Option<&LockedRepo> {
+        self.repos.iter().find(|b| b.name == name)
     }
 }

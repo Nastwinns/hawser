@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use keel_core::git::GitBackend;
 use keel_core::manifest::{ManifestLoader, TomlLoader};
-use keel_core::workspace::{MANIFEST_FILE, SyncOutcome, Workspace, sync_brick};
+use keel_core::workspace::{MANIFEST_FILE, SyncOutcome, Workspace, sync_repo};
 use keel_core::{change, resolver};
 use keel_git::ShellGit;
 use keel_git::parallel::fan_out;
@@ -32,7 +32,7 @@ impl Palette {
 }
 
 #[derive(Parser)]
-#[command(name = "keel", version, about = "The beam that binds the bricks")]
+#[command(name = "keel", version, about = "The beam that binds the repos")]
 struct Cli {
     /// Path to the manifest.
     #[arg(long, global = true, default_value = "keel.toml")]
@@ -52,7 +52,7 @@ enum Command {
     /// Clone/update repos to the state in keel.lock (writes it if absent).
     Sync {
         #[arg(long = "stack", alias = "product")]
-        product: Option<String>,
+        stack: Option<String>,
         /// Overlays only apply when the lock is generated.
         #[arg(long)]
         overlay: Vec<String>,
@@ -75,14 +75,14 @@ enum Command {
     },
     /// Record a stack as current and sync it.
     Switch {
-        product: String,
+        stack: String,
         #[arg(long, short = 'j')]
         jobs: Option<usize>,
     },
     /// Print the stack -> repo tree.
     Graph {
         #[arg(long = "stack", alias = "product")]
-        product: Option<String>,
+        stack: Option<String>,
         #[arg(long)]
         overlay: Vec<String>,
     },
@@ -112,7 +112,7 @@ enum ChangeCommand {
         id: String,
         /// Repos to include (default: all repos in the manifest).
         #[arg(long = "repos", alias = "bricks", value_delimiter = ',')]
-        bricks: Option<Vec<String>>,
+        repos: Option<Vec<String>>,
         /// Branch name (default: change/<id>).
         #[arg(long)]
         branch: Option<String>,
@@ -141,15 +141,15 @@ fn run() -> Result<()> {
     match cli.command {
         Command::Init { source } => init(&source),
         Command::Sync {
-            product,
+            stack,
             overlay,
             groups,
             jobs,
-        } => sync(product.as_deref(), &overlay, &groups, jobs),
+        } => sync(stack.as_deref(), &overlay, &groups, jobs),
         Command::Lock { overlay } => lock(&overlay),
         Command::Status { groups } => status(&groups),
-        Command::Switch { product, jobs } => switch(&product, jobs),
-        Command::Graph { product, overlay } => graph(&cli.manifest, product.as_deref(), &overlay),
+        Command::Switch { stack, jobs } => switch(&stack, jobs),
+        Command::Graph { stack, overlay } => graph(&cli.manifest, stack.as_deref(), &overlay),
         Command::Forall {
             command,
             groups,
@@ -158,10 +158,10 @@ fn run() -> Result<()> {
         Command::Change { command } => match command {
             ChangeCommand::Start {
                 id,
-                bricks,
+                repos,
                 branch,
                 skip_branch,
-            } => change_start(&id, bricks.as_deref(), branch.as_deref(), skip_branch),
+            } => change_start(&id, repos.as_deref(), branch.as_deref(), skip_branch),
             ChangeCommand::Status { id } => change_status(&id),
             ChangeCommand::List => change_list(),
         },
@@ -205,15 +205,15 @@ fn init(source: &Path) -> Result<()> {
 }
 
 fn sync(
-    product: Option<&str>,
+    stack: Option<&str>,
     overlays: &[String],
     groups: &[String],
     jobs: Option<usize>,
 ) -> Result<()> {
     let ws = open_workspace()?;
-    let product = ws.pick_product(product)?;
+    let stack = ws.pick_stack(stack)?;
     let backend = ShellGit;
-    let plan = ws.plan_sync(&product, overlays, groups, &backend)?;
+    let plan = ws.plan_sync(&stack, overlays, groups, &backend)?;
     if plan.wrote_lock {
         println!("wrote keel.lock ({} repos pinned)", plan.tasks.len());
     } else if !overlays.is_empty() {
@@ -221,7 +221,7 @@ fn sync(
     }
 
     let results = fan_out(&plan.tasks, default_jobs(jobs), |task| {
-        (task.name.clone(), sync_brick(task, &backend))
+        (task.name.clone(), sync_repo(task, &backend))
     });
 
     let mut failures = 0usize;
@@ -238,7 +238,7 @@ fn sync(
     }
     println!(
         "synced stack `{}` ({}/{} repos)",
-        plan.product,
+        plan.stack,
         results.len() - failures,
         results.len()
     );
@@ -253,13 +253,13 @@ fn lock(overlays: &[String]) -> Result<()> {
     let backend = ShellGit;
     let lockfile = ws.make_lock(overlays, &backend)?;
     lockfile.save(&ws.lock_path())?;
-    println!("wrote keel.lock ({} repos pinned)", lockfile.bricks.len());
-    for brick in &lockfile.bricks {
+    println!("wrote keel.lock ({} repos pinned)", lockfile.repos.len());
+    for repo in &lockfile.repos {
         println!(
             "  {}  {}  <- {}",
-            brick.name,
-            &brick.rev[..12.min(brick.rev.len())],
-            brick.source_rev
+            repo.name,
+            &repo.rev[..12.min(repo.rev.len())],
+            repo.source_rev
         );
     }
     Ok(())
@@ -269,7 +269,7 @@ fn status(groups: &[String]) -> Result<()> {
     let ws = open_workspace()?;
     let statuses = ws.status(groups, &ShellGit)?;
     if statuses.is_empty() {
-        println!("no matching bricks");
+        println!("no matching repos");
         return Ok(());
     }
     let width = statuses.iter().map(|s| s.name.len()).max().unwrap_or(4);
@@ -297,20 +297,20 @@ fn status(groups: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn switch(product: &str, jobs: Option<usize>) -> Result<()> {
+fn switch(stack: &str, jobs: Option<usize>) -> Result<()> {
     let ws = open_workspace()?;
-    let product = ws.pick_product(Some(product))?;
-    ws.set_current_product(&product)?;
-    println!("switched to stack `{product}`");
-    sync(Some(&product), &[], &[], jobs)
+    let stack = ws.pick_stack(Some(stack))?;
+    ws.set_current_stack(&stack)?;
+    println!("switched to stack `{stack}`");
+    sync(Some(&stack), &[], &[], jobs)
 }
 
-fn graph(path: &Path, product: Option<&str>, overlays: &[String]) -> Result<()> {
+fn graph(path: &Path, stack: Option<&str>, overlays: &[String]) -> Result<()> {
     let manifest = TomlLoader.load(path)?;
 
-    let selected: Vec<String> = match product {
+    let selected: Vec<String> = match stack {
         Some(name) => vec![name.to_string()],
-        None => manifest.products.keys().cloned().collect(),
+        None => manifest.stacks.keys().cloned().collect(),
     };
     if selected.is_empty() {
         println!("no stacks defined in {}", path.display());
@@ -321,19 +321,19 @@ fn graph(path: &Path, product: Option<&str>, overlays: &[String]) -> Result<()> 
     println!("{}", c.paint("2", &path.display().to_string()));
     for (i, name) in selected.iter().enumerate() {
         let resolution = resolver::resolve(&manifest, name, overlays)?;
-        let last_product = i == selected.len() - 1;
-        let branch = if last_product { "└─" } else { "├─" };
+        let last_stack = i == selected.len() - 1;
+        let branch = if last_stack { "└─" } else { "├─" };
         println!("{} {}", c.paint("2", branch), c.paint("1;36", name));
 
-        let stem = if last_product { "   " } else { "│  " };
+        let stem = if last_stack { "   " } else { "│  " };
         let width = resolution
-            .bricks
+            .repos
             .iter()
             .map(|b| b.name.len())
             .max()
             .unwrap_or(0);
-        for (j, brick) in resolution.bricks.iter().enumerate() {
-            let tee = if j == resolution.bricks.len() - 1 {
+        for (j, repo) in resolution.repos.iter().enumerate() {
+            let tee = if j == resolution.repos.len() - 1 {
                 "└─"
             } else {
                 "├─"
@@ -342,9 +342,9 @@ fn graph(path: &Path, product: Option<&str>, overlays: &[String]) -> Result<()> 
                 "{}{} {}  {}  {}",
                 c.paint("2", stem),
                 c.paint("2", tee),
-                format_args!("{:<width$}", brick.name),
-                c.paint("33", &brick.rev),
-                c.paint("2", &format!("({})", brick.url)),
+                format_args!("{:<width$}", repo.name),
+                c.paint("33", &repo.rev),
+                c.paint("2", &format!("({})", repo.url)),
             );
         }
     }
@@ -354,22 +354,22 @@ fn graph(path: &Path, product: Option<&str>, overlays: &[String]) -> Result<()> 
 fn forall(command: &str, groups: &[String], jobs: Option<usize>) -> Result<()> {
     let ws = open_workspace()?;
     let backend = ShellGit;
-    let bricks: Vec<(String, PathBuf)> = match ws.read_lock()? {
+    let repos: Vec<(String, PathBuf)> = match ws.read_lock()? {
         Some(lock) => lock
-            .bricks
+            .repos
             .iter()
             .filter(|b| resolver::group_match(&b.groups, groups))
             .map(|b| (b.name.clone(), ws.root.join(&b.path)))
             .collect(),
         None => ws
             .manifest
-            .bricks
+            .repos
             .iter()
-            .filter(|(_, brick)| resolver::group_match(&brick.groups, groups))
-            .map(|(name, brick)| (name.clone(), ws.root.join(brick.checkout_path(name))))
+            .filter(|(_, repo)| resolver::group_match(&repo.groups, groups))
+            .map(|(name, repo)| (name.clone(), ws.root.join(repo.checkout_path(name))))
             .collect(),
     };
-    let present: Vec<(String, PathBuf)> = bricks
+    let present: Vec<(String, PathBuf)> = repos
         .into_iter()
         .filter(|(_, path)| backend.is_repo(path))
         .collect();
@@ -422,19 +422,19 @@ fn shell_command(command: &str) -> std::process::Command {
 
 fn change_start(
     id: &str,
-    bricks: Option<&[String]>,
+    repos: Option<&[String]>,
     branch: Option<&str>,
     skip_branch: bool,
 ) -> Result<()> {
     let ws = open_workspace()?;
-    let changeset = change::start(&ws, &ShellGit, id, bricks, branch, skip_branch)?;
+    let changeset = change::start(&ws, &ShellGit, id, repos, branch, skip_branch)?;
     println!(
         "changeset `{}` started across {} repo(s):",
         changeset.id,
-        changeset.bricks.len()
+        changeset.repos.len()
     );
-    for brick in &changeset.bricks {
-        println!("  {}  -> {}", brick.name, brick.branch);
+    for repo in &changeset.repos {
+        println!("  {}  -> {}", repo.name, repo.branch);
     }
     Ok(())
 }
@@ -488,13 +488,13 @@ fn tui() -> Result<()> {
         let statuses = ws.status(&[], &ShellGit).map_err(std::io::Error::other)?;
         let views: Vec<keel_tui::FleetView> = ws
             .manifest
-            .products
+            .stacks
             .iter()
-            .map(|(product, spec)| keel_tui::FleetView {
-                product: product.clone(),
-                bricks: statuses
+            .map(|(stack, spec)| keel_tui::FleetView {
+                stack: stack.clone(),
+                repos: statuses
                     .iter()
-                    .filter(|s| spec.bricks.contains(&s.name))
+                    .filter(|s| spec.repos.contains(&s.name))
                     .cloned()
                     .collect(),
             })
