@@ -1,0 +1,265 @@
+# Keelson — Architecture & Implementation Plan
+
+## 1. Crate architecture (Cargo workspace)
+
+A workspace of small crates so the core stays reusable by the CLI, the TUI, and later a
+Tauri GUI. The golden rule: **all business logic lives in `keel-core`; the CLI and TUI are
+thin front-ends.** Formats and forges sit behind traits so a format or API change is an
+impl swap, not a rewrite.
+
+```
+keelson/
+├── Cargo.toml                     # [workspace]
+├── crates/
+│   ├── keel-core/                 # domain logic, no I/O opinions leaked
+│   │   ├── manifest/              # serde structs + `ManifestLoader` trait
+│   │   │   ├── model.rs           #   Manifest, Brick, Product, Remote, Overlay
+│   │   │   ├── toml_loader.rs     #   default loader
+│   │   │   └── import/            #   west.yml + repo default.xml -> model
+│   │   ├── lock/                  # keel.lock read/write, resolve, drift detection
+│   │   ├── workspace/             # on-disk layout, product materialization
+│   │   ├── resolver/              # manifest + overlays -> concrete brick set
+│   │   └── change/                # changeset model (feature across bricks)
+│   │
+│   ├── keel-git/                  # git operations abstraction
+│   │   ├── introspect.rs          #   gitoxide: status, ahead/behind, current SHA
+│   │   ├── ops.rs                 #   shell-out: clone, fetch, checkout, --reference
+│   │   └── parallel.rs            #   tokio-driven fan-out across bricks
+│   │
+│   ├── keel-forge/                # PR/MR orchestration
+│   │   ├── mod.rs                 #   `Forge` trait: open_pr, pr_status, merge_pr
+│   │   ├── github.rs              #   octocrab
+│   │   ├── gitlab.rs              #   gitlab crate / REST
+│   │   └── detect.rs              #   remote URL -> which forge
+│   │
+│   ├── keel-merge/                # optional: mergetopus-style slicing (later phase)
+│   │
+│   ├── keel-cli/                  # clap-based binary `keel` (thin over core)
+│   └── keel-tui/                  # ratatui dashboard (thin over core)
+└── xtask/                         # release/packaging automation
+```
+
+### Why these boundaries
+
+- **`keel-core` knows nothing about clap, ratatui, or a terminal.** It exposes an API
+  (`Workspace::sync`, `Changeset::start`, …). This is what lets the TUI and a future Tauri
+  GUI reuse everything.
+- **`ManifestLoader` trait** — TOML is the reference format, but `import` produces the same
+  in-memory model from west/repo files. Supporting another format later = new impl.
+- **`Forge` trait** — GitHub and GitLab differ enough (PR vs MR, review APIs) that a common
+  trait with two impls keeps `change` logic forge-agnostic.
+- **`keel-git` splits introspect (gitoxide) from ops (shell-out).** gitoxide is fast and
+  native for reads; heavy/rare mutating operations shell out to the user's `git` for
+  correctness and to avoid gitoxide's still-maturing high-level clone/push APIs.
+
+## 2. Key dependencies
+
+| Concern            | Crate                    | Note                                            |
+|--------------------|--------------------------|--------------------------------------------------|
+| Git introspection  | `gix` (gitoxide)         | status, refs, ahead/behind, SHA — fast, native  |
+| Git heavy ops      | shell-out to `git`       | clone `--reference`, fetch, checkout, merge     |
+| Async fan-out      | `tokio`                  | parallel sync/forall across bricks              |
+| Manifest/lock      | `serde` + `toml`         | typed structs; lock is generated TOML           |
+| CLI                | `clap` (derive)          | subcommand tree                                 |
+| TUI                | `ratatui` + `crossterm`  | fleet dashboard, cross-platform                 |
+| GitHub API         | `octocrab`               | PRs, reviews, checks                            |
+| GitLab API         | `gitlab` or `reqwest`    | MRs, approvals, pipelines                       |
+| Errors             | `thiserror` + `anyhow`   | typed in core, contextual at edges              |
+| Config/paths       | `directories`            | cross-platform cache dir for `--reference`      |
+
+## 3. Cross-platform discipline (Linux + Windows + macOS)
+
+- `PathBuf` everywhere, never a hard-coded `/`.
+- **No symlinks in the workspace layout.** Object sharing uses git `alternates` via
+  `--reference` (a text file). This is the single most important design choice for Windows.
+- Handle `core.autocrlf`; do not assume LF.
+- Assume `git` is on PATH (reasonable on Windows); gitoxide covers the read side natively.
+- CI matrix builds all three OSes from day one (like mergetopus does).
+
+## 4. Data flow: `keel sync`
+
+```
+read keel.toml ──▶ resolver (apply overlays, pick product)
+                        │
+                        ▼
+              does keel.lock exist?
+                 │              │
+                yes             no
+                 │              │
+    for each brick:      resolve each rev ──▶ SHA
+    target = lock SHA          │
+                 │             ▼
+                 │        write keel.lock
+                 └──────┬───────┘
+                        ▼
+        tokio fan-out over bricks (parallel):
+          not cloned?  -> git clone [--reference cache] to declared path
+          cloned?      -> git fetch + checkout target (NOT detached: real branch)
+                        ▼
+              gitoxide: verify each brick SHA == target
+              report drift (local SHA != lock)
+```
+
+## 5. Data flow: `keel change` (the RepoFleet-beating part)
+
+```
+change start FEAT-123 --bricks kernel,app-mqtt
+        │
+        ▼  keel-core/change: create branch feat/123 in each listed brick (real branch)
+        ▼  record changeset (which bricks, which branch) in workspace state
+
+change request
+        │
+        ▼  keel-forge/detect: per brick, GitHub or GitLab?
+        ▼  Forge::open_pr on each -> collect PR/MR URLs, cross-link them in descriptions
+
+change status
+        │
+        ▼  Forge::pr_status per brick (review state + CI/pipeline) -> aggregated table/TUI
+
+change land
+        │
+        ▼  topological order from product->brick graph
+        ▼  Forge::merge_pr in order; stop on failure
+```
+
+## 6. Implementation plan (phased)
+
+Two design decisions shape this plan:
+
+1. **The v0.1 MVP spans both value layers** — reproducible composition *and* cross-repo
+   MR orchestration — rather than shipping composition alone and bolting MR on later. The
+   union is the differentiator; a composition-only v0.1 would just be "repo with a lock",
+   and a MR-only v0.1 would just be "RepoFleet in Rust". Shipping both, even minimally, is
+   what makes the first release defensible.
+2. **The TUI ships in v0.1**, not as a late phase. The fleet dashboard is the most visible
+   differentiator and the cheapest way to make the double-layer value legible. It is a thin
+   front-end over `keel-core`, so building it early also validates that the core API is
+   genuinely UI-agnostic.
+
+Each phase still ends with a usable binary. Ship early, narrow, correct.
+
+### Phase 0 — Skeleton (week 1)
+- Cargo workspace, the crate boundaries above, CI matrix (Linux/macOS/Windows) from day one.
+- `keel-core::manifest` serde model + TOML loader + round-trip tests.
+- `keel --version`, `keel graph` (parse manifest, print product→brick tree).
+- **Deliverable:** parses a manifest, prints the composition. Nothing clones yet.
+
+### Phase 1 — Double-layer MVP (weeks 2–6) — *the whole point, minimally*
+
+The MVP deliberately cuts a thin vertical slice through **both** layers plus the TUI,
+rather than completing one layer fully. Scope each item to the minimum that proves value.
+
+*Composition (minimal):*
+- `keel-git`: clone (shell-out), fetch, checkout as a real branch; gitoxide introspection.
+- `keel init`, `keel sync`, `keel lock`, `keel status`.
+- `keel.lock` generation + drift detection. Parallel sync via tokio.
+- Products modeled and parsed; `keel switch <product>` for the single-product common case.
+  (Overlays and `--shared` object sharing deferred to Phase 2 — not needed to prove value.)
+
+*MR orchestration (minimal):*
+- `keel-forge`: `Forge` trait + URL→forge detection + **GitHub (octocrab) first**, GitLab
+  stubbed behind the same trait.
+- `keel change start` (branch across bricks) and `keel change status` (aggregated view).
+  `request` and `land` land in Phase 3; `start`+`status` alone already beat manual `cd`-ing.
+
+*TUI (minimal):*
+- `keel tui`: read-only ratatui fleet dashboard — product→brick tree, per-brick state
+  (branch, SHA, dirty, ahead/behind, drift-vs-lock), and the changeset view. Actions
+  (sync/switch/start) added in Phase 4; a read-only cockpit is already the visual hook.
+
+- **Deliverable:** from a manifest, reproducibly clone a product with a committed lockfile,
+  start a feature branch across its bricks, and see the whole fleet + changeset in a TUI.
+  No competitor ships this combination.
+
+### Phase 2 — Composition depth (weeks 7–8)
+- Overlays / profile inheritance in the resolver (grit-style, kills manifest duplication).
+- `--shared` object sharing via `git clone --reference` (text file, **no symlinks**).
+- `keel freeze` / `unfreeze`; `product`/`brick` add/remove editing the manifest.
+- **Deliverable:** the products×bricks model at full power, incl. shared bricks and DRY
+  manifests for large (50+ brick) trees.
+
+### Phase 3 — MR orchestration depth (weeks 9–11) — *closing the RepoFleet gap*
+- GitLab impl fully behind the `Forge` trait (MRs, approvals, pipelines).
+- `keel change request` (open cross-linked PR/MRs on both forges) and `keel change land`
+  (merge in topological order from the product→brick graph).
+- `keel change goto` (interactive picker + cd, RepoFleet-style shell integration).
+- `keel forall -c` parallel.
+- Changeset **snapshots** (save/restore multi-brick feature state), a RepoFleet idea worth
+  matching.
+- **Deliverable:** full cross-repo feature lifecycle on GitHub *and* GitLab, with
+  composition underneath — strictly a superset of RepoFleet.
+
+### Phase 4 — TUI actions & polish (week 12)
+- Promote the read-only TUI to interactive: keyboard-driven sync, switch, change
+  start/request/land, goto.
+- **Deliverable:** the fleet cockpit becomes a control surface, not just a viewer.
+
+### Phase 5 — Migration & distribution (week 13)
+- `keel import --from west.yml | default.xml` (convert existing manifests).
+- Homebrew tap + Scoop bucket + `cargo install` (match RepoFleet's distribution channels).
+- Docs, an embedded/BSP example, an automotive-style pinned-manifest example.
+- **Deliverable:** low-friction adoption path for `repo`/`west` users.
+
+### Phase 6 (optional, later) — Collaborative merge
+- `keel merge plan | resolve | cleanup` (mergetopus-style slicing), reusing its proven
+  workflow. Only if user demand appears; it is orthogonal to the core value.
+
+## 7. Sequencing rationale
+
+The MVP (Phase 1) is intentionally a thin slice of the *full* vision rather than a complete
+slice of *one* layer, because the value proposition is the union. After that, Phases 2 and 3
+deepen the two layers independently, so each can be released, tested, and reprioritized on
+its own — you deepen composition or MR orchestration based on which users actually pull on,
+without having bet the first release on either one alone.
+
+## 8. What we borrow from the field (and how we differ)
+
+| Source        | What we take                                              | Where we go further                                  |
+|---------------|-----------------------------------------------------------|------------------------------------------------------|
+| Google `repo` | manifest-driven multi-repo checkout, groups               | + lockfile, no Python, no detached HEAD, no symlinks |
+| `west`        | plain-clone layout (Windows-safe), `manifest --freeze`    | + products×bricks composition, MR orchestration      |
+| `grit`        | overlays / profile inheritance to keep manifests DRY      | integrated with lock + forge layers                  |
+| RepoFleet     | workspace + issue-centered branches, status dashboard, `goto`, snapshots, `--skip-branch` to adopt existing branches | + reproducible composition, both forges, TUI, Rust |
+| mergetopus    | parallel collaborative merge slicing (Phase 6)            | wired into a multi-repo changeset, not single-repo    |
+
+RepoFleet is the closest prior art on the MR side, so its concrete choices are worth
+matching deliberately: a **workspace** grouping repos, an **issue/changeset** as the unit of
+cross-repo work, a **status dashboard** as the primary view, `goto` shell integration,
+**snapshots** of multi-repo state, and `--skip-branch` to adopt already-checked-out branches
+instead of forcing new ones. Keelson's edge is everything underneath and around that:
+a committed lockfile, product composition, GitHub *and* GitLab, a real TUI, and a
+gitoxide-native Rust core.
+
+## 9. Decision records (as implemented)
+
+Decisions the plan left open, fixed during Phase 1. Each one is reversible behind a
+trait or a file format version.
+
+- **DR-1 — Lock covers the whole manifest, not one product.** `keel.lock` pins every
+  brick; `sync --product` consumes a subset. Switching products never rewrites the lock.
+- **DR-2 — Overlays only apply at lock time.** `keel lock --overlay dev` re-resolves;
+  `keel sync` with an existing lock ignores overlays (and says so). Lock stays the single
+  source of truth for reproducibility.
+- **DR-3 — Branch policy, never detached.** A branch rev checks out on a local branch of
+  the same name; tags and SHAs check out on `keel/<rev>`. The lock records the branch
+  (`branch` field) so re-syncs need no network. `checkout -B` is guarded: local commits
+  not contained in the target abort the sync (`GitError::LocalCommits`).
+- **DR-4 — Rev resolution without cloning** uses `git ls-remote --heads --tags` (peeled
+  `^{}` entries win for annotated tags). Full 40-hex revs pass through unresolved.
+- **DR-5 — Reads shell out too, for now.** `gix` is deferred: the `GitBackend` trait in
+  `keel-core::git` is the seam, `keel-git::ShellGit` the only impl. Swapping reads to
+  gitoxide later touches one crate, zero callers. Keeps Phase 1's dep tree small.
+- **DR-6 — Threads, not tokio, for fan-out.** Git work is process-spawning; a bounded
+  `std::thread::scope` pool (`keel-git::parallel::fan_out`) suffices and stays sync.
+  tokio arrives with the async forge APIs (octocrab) in Phase 3.
+- **DR-7 — Workspace state lives in `.keel/`** (uncommitted): `product` records the
+  current product; `changesets/<id>.toml` records changeset membership + branches.
+- **DR-8 — keel-core depends on nothing that does I/O by policy**, but performs manifest,
+  lock, and state file I/O itself (it owns those formats). Network/git I/O stays behind
+  `GitBackend`.
+- **DR-9 — Lockfile is versioned** (`version = 1`); unknown versions are a hard error,
+  schema evolution goes through explicit migration.
+- **DR-10 — Forge detection is hostname-substring** (`github`/`gitlab`), which covers
+  self-hosted GitLab; anything else will need an explicit `forge =` key on the remote
+  (Phase 3).

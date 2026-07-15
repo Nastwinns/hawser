@@ -1,0 +1,13 @@
+[package]
+name = "keel-merge"
+description = "Keelson optional parallel collaborative merge slicing (Phase 6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

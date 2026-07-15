@@ -1,0 +1,157 @@
+//! Production [`GitBackend`]: shell-out to the user's `git`.
+//!
+//! Mutations always shell out (correctness, credential helpers, hooks).
+//! Reads shell out too for now; gitoxide (`gix`) replaces them later behind
+//! the same trait without touching callers.
+
+pub mod parallel;
+
+use std::path::Path;
+use std::process::Command;
+
+use keel_core::git::{GitBackend, GitError, ResolvedRev, RevKind};
+
+/// The default backend: runs `git` from PATH, prompts disabled.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ShellGit;
+
+fn git_command(cwd: Option<&Path>) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
+    }
+    cmd
+}
+
+fn run(args: &[&str], cwd: Option<&Path>) -> Result<String, GitError> {
+    let output = git_command(cwd).args(args).output()?;
+    if !output.status.success() {
+        return Err(GitError::Command {
+            context: format!("git {}", args.join(" ")),
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn is_full_sha(rev: &str) -> bool {
+    rev.len() == 40 && rev.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+impl GitBackend for ShellGit {
+    fn resolve_rev(&self, url: &str, rev: &str) -> Result<ResolvedRev, GitError> {
+        if is_full_sha(rev) {
+            return Ok(ResolvedRev {
+                sha: rev.to_ascii_lowercase(),
+                kind: RevKind::Sha,
+            });
+        }
+        let head_ref = format!("refs/heads/{rev}");
+        let tag_ref = format!("refs/tags/{rev}");
+        let out = run(&["ls-remote", "--heads", "--tags", url], None)?;
+
+        let mut head = None;
+        let mut tag = None;
+        let mut peeled_tag = None;
+        for line in out.lines() {
+            let Some((sha, reference)) = line.split_once('\t') else {
+                continue;
+            };
+            if reference == head_ref {
+                head = Some(sha.to_string());
+            } else if reference == tag_ref {
+                tag = Some(sha.to_string());
+            } else if reference == format!("{tag_ref}^{{}}") {
+                peeled_tag = Some(sha.to_string());
+            }
+        }
+        if let Some(sha) = head {
+            return Ok(ResolvedRev {
+                sha,
+                kind: RevKind::Branch,
+            });
+        }
+        if let Some(sha) = peeled_tag.or(tag) {
+            return Ok(ResolvedRev {
+                sha,
+                kind: RevKind::Tag,
+            });
+        }
+        Err(GitError::RevNotFound {
+            url: url.to_string(),
+            rev: rev.to_string(),
+        })
+    }
+
+    fn clone_repo(&self, url: &str, dest: &Path) -> Result<(), GitError> {
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let output = git_command(None).arg("clone").arg(url).arg(dest).output()?;
+        if !output.status.success() {
+            return Err(GitError::Command {
+                context: format!("git clone {url}"),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    fn fetch(&self, repo: &Path) -> Result<(), GitError> {
+        run(
+            &["fetch", "--tags", "--force", "--prune", "origin"],
+            Some(repo),
+        )?;
+        Ok(())
+    }
+
+    fn checkout(&self, repo: &Path, sha: &str, branch: &str) -> Result<(), GitError> {
+        let branch_ref = format!("refs/heads/{branch}");
+        let exists = run(
+            &["rev-parse", "--verify", "--quiet", &branch_ref],
+            Some(repo),
+        )
+        .is_ok();
+        if exists {
+            let range = format!("{sha}..{branch_ref}");
+            let count: u64 = run(&["rev-list", "--count", &range], Some(repo))?
+                .parse()
+                .unwrap_or(0);
+            if count > 0 {
+                return Err(GitError::LocalCommits {
+                    branch: branch.to_string(),
+                    path: repo.to_path_buf(),
+                    count,
+                });
+            }
+        }
+        run(&["checkout", "-B", branch, sha], Some(repo))?;
+        Ok(())
+    }
+
+    fn create_branch(&self, repo: &Path, name: &str) -> Result<(), GitError> {
+        run(&["checkout", "-b", name], Some(repo))?;
+        Ok(())
+    }
+
+    fn head_sha(&self, repo: &Path) -> Result<String, GitError> {
+        run(&["rev-parse", "HEAD"], Some(repo))
+    }
+
+    fn current_branch(&self, repo: &Path) -> Result<Option<String>, GitError> {
+        match run(&["symbolic-ref", "--short", "-q", "HEAD"], Some(repo)) {
+            Ok(branch) => Ok(Some(branch)),
+            Err(GitError::Command { .. }) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn is_dirty(&self, repo: &Path) -> Result<bool, GitError> {
+        Ok(!run(&["status", "--porcelain"], Some(repo))?.is_empty())
+    }
+
+    fn is_repo(&self, repo: &Path) -> bool {
+        repo.join(".git").exists()
+    }
+}

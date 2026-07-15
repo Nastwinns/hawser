@@ -1,0 +1,32 @@
+[remote.internal]
+url = "git@gitlab.company.com:firmware"
+
+[remote.github]
+url = "git@github.com:acme"
+
+[repo.kernel]
+remote = "internal"
+repo = "kernel.git"
+rev = "v6.1.2"
+groups = ["firmware"]
+
+[repo.hal]
+remote = "internal"
+repo = "hal.git"
+rev = "main"
+groups = ["firmware"]
+
+[repo.app-mqtt]
+remote = "github"
+repo = "app-mqtt.git"
+rev = "release/2.x"
+path = "apps/mqtt"
+
+[stack.gateway]
+repos = ["kernel", "hal", "app-mqtt"]
+
+[stack.sensor-node]
+repos = ["kernel", "hal"]
+
+[overlay.dev.repo.kernel]
+rev = "main"

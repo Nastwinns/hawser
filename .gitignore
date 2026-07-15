@@ -1,0 +1,6 @@
+/target
+
+# local AI tooling (BMAD install + generated skills)
+/_bmad/
+/bmad-output/
+/.claude/skills/

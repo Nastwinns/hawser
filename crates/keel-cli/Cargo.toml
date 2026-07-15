@@ -1,0 +1,23 @@
+[package]
+name = "keel-cli"
+description = "keel: multi-repo product composition and cross-repo MR orchestration"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "keel"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+keel-core.workspace = true
+keel-forge.workspace = true
+keel-git.workspace = true
+keel-tui.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,40 @@
+//! The human-authored `keel.toml` manifest: remotes, bricks, products, overlays.
+
+mod model;
+mod toml_loader;
+
+pub use model::{Brick, BrickOverride, Manifest, Overlay, Product, Remote};
+pub use toml_loader::TomlLoader;
+
+use std::path::{Path, PathBuf};
+
+/// Errors produced while loading or validating a manifest.
+#[derive(Debug, thiserror::Error)]
+pub enum ManifestError {
+    #[error("failed to read manifest at {path}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("invalid manifest TOML")]
+    Parse(#[source] Box<toml::de::Error>),
+    #[error("repo `{brick}` references unknown remote `{remote}`")]
+    UnknownRemote { brick: String, remote: String },
+    #[error("repo `{0}` must declare either `url` or `remote` + `repo`")]
+    MissingSource(String),
+    #[error("repo `{0}` declares both `url` and `remote`/`repo`")]
+    AmbiguousSource(String),
+    #[error("stack `{product}` references unknown repo `{brick}`")]
+    UnknownBrickInProduct { product: String, brick: String },
+    #[error("overlay `{overlay}` references unknown repo `{brick}`")]
+    UnknownBrickInOverlay { overlay: String, brick: String },
+}
+
+/// Anything that can produce a [`Manifest`] from a file on disk.
+///
+/// TOML is the reference implementation; `west.yml` / repo `default.xml`
+/// importers implement the same trait later.
+pub trait ManifestLoader {
+    fn load(&self, path: &Path) -> Result<Manifest, ManifestError>;
+}

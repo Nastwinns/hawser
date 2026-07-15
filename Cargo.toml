@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/balin/keelson"
+
+[workspace.dependencies]
+keel-core = { path = "crates/keel-core", version = "0.1.0" }
+keel-git = { path = "crates/keel-git", version = "0.1.0" }
+keel-forge = { path = "crates/keel-forge", version = "0.1.0" }
+keel-merge = { path = "crates/keel-merge", version = "0.1.0" }
+keel-tui = { path = "crates/keel-tui", version = "0.1.0" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+indexmap = { version = "2", features = ["serde"] }
+ratatui = "0.29"
+serde = { version = "1", features = ["derive"] }
+tempfile = "3"
+thiserror = "2"
+toml = "0.8"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
