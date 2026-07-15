@@ -20,14 +20,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release -p keel-cli
-      - name: Render CLI demo
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/cli.tape
-      - name: Render TUI demo
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/tui.tape
+      - name: Install VHS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          gh release download -R tsl0922/ttyd --pattern 'ttyd.x86_64' -O ttyd
+          sudo install ttyd /usr/local/bin/ttyd
+          gh release download -R charmbracelet/vhs --pattern '*Linux_x86_64.tar.gz' -O vhs.tar.gz
+          mkdir vhs-dist && tar xzf vhs.tar.gz -C vhs-dist
+          sudo install "$(find vhs-dist -name vhs -type f | head -1)" /usr/local/bin/vhs
+      - name: Render demos
+        run: |
+          vhs demo/cli.tape
+          vhs demo/tui.tape
       - name: Commit rendered GIFs
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
