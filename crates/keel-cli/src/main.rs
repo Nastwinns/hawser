@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use keel_core::git::GitBackend;
 use keel_core::manifest::{ManifestLoader, TomlLoader, edit, import};
 use keel_core::workspace::{MANIFEST_FILE, RepoStatus, SyncOutcome, Workspace, sync_repo};
-use keel_core::{audit, change, resolver, snapshot};
+use keel_core::{audit, change, hooks, resolver, snapshot};
 use keel_forge::{PrState, Tokens, orchestrate};
 use keel_git::ShellGit;
 use keel_git::parallel::fan_out;
@@ -54,6 +54,9 @@ enum Command {
     },
     /// Clone/update repos to the state in keel.lock (writes it if absent).
     Sync {
+        /// CI contract: fail unless keel.lock exists (no rev resolution).
+        #[arg(long)]
+        locked: bool,
         #[arg(long = "stack", alias = "product")]
         stack: Option<String>,
         /// Overlays only apply when the lock is generated.
@@ -143,6 +146,39 @@ enum Command {
         #[command(subcommand)]
         command: ChangeCommand,
     },
+    /// Assert the on-disk tree matches keel.lock; exit 3 on drift (CI gate).
+    Verify {
+        /// `text` (default) or `json` (schema keel.status/1).
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// Run each repo's `build` command from the manifest, in parallel.
+    Build {
+        /// Only repos in these groups (repeatable).
+        #[arg(long = "group")]
+        groups: Vec<String>,
+        #[arg(long, short = 'j')]
+        jobs: Option<usize>,
+    },
+    /// Run each repo's `test` command from the manifest, in parallel.
+    Test {
+        /// Only repos in these groups (repeatable).
+        #[arg(long = "group")]
+        groups: Vec<String>,
+        #[arg(long, short = 'j')]
+        jobs: Option<usize>,
+    },
+    /// Manage lifecycle hooks (.keel/hooks) and git integrity hooks.
+    Hooks {
+        #[command(subcommand)]
+        command: HooksCommand,
+    },
+    /// Bundle baseline evidence (manifest, lock, audit log, status) for audits.
+    Evidence {
+        /// Output archive path.
+        #[arg(long, default_value = "keel-evidence.tar.gz")]
+        out: PathBuf,
+    },
     /// Convert a west.yml or repo default.xml manifest to keel.toml.
     Import {
         /// Path to the foreign manifest.
@@ -152,6 +188,17 @@ enum Command {
     /// Open the fleet dashboard (same as bare `keel`).
     #[command(alias = "tui")]
     Dash,
+    /// Anything else runs a `keel-<name>` plugin from PATH.
+    #[command(external_subcommand)]
+    Plugin(Vec<String>),
+}
+
+#[derive(Subcommand)]
+enum HooksCommand {
+    /// Write a pre-commit hook in every repo that runs `keel verify`.
+    Install,
+    /// List the lifecycle hooks the workspace defines.
+    List,
 }
 
 #[derive(Subcommand)]
@@ -276,12 +323,13 @@ fn run() -> Result<ExitCode> {
     match command {
         Command::Init { source } => init(&source)?,
         Command::Sync {
+            locked,
             stack,
             overlay,
             groups,
             shared,
             jobs,
-        } => sync(stack.as_deref(), &overlay, &groups, shared, jobs)?,
+        } => sync(stack.as_deref(), &overlay, &groups, shared, locked, jobs)?,
         Command::Lock { overlay } => lock(&overlay)?,
         Command::Pin => pin()?,
         Command::Unpin { overlay } => unpin(&overlay)?,
@@ -350,8 +398,17 @@ fn run() -> Result<ExitCode> {
             },
             ChangeCommand::List => change_list()?,
         },
+        Command::Verify { format } => return verify(&format),
+        Command::Build { groups, jobs } => build_or_test(true, &groups, jobs)?,
+        Command::Test { groups, jobs } => build_or_test(false, &groups, jobs)?,
+        Command::Hooks { command } => match command {
+            HooksCommand::Install => hooks_install()?,
+            HooksCommand::List => hooks_list()?,
+        },
+        Command::Evidence { out } => evidence(&out)?,
         Command::Import { from } => import_manifest(&from)?,
         Command::Dash => dash()?,
+        Command::Plugin(args) => return plugin(&args),
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -406,10 +463,15 @@ fn sync(
     overlays: &[String],
     groups: &[String],
     shared: bool,
+    locked: bool,
     jobs: Option<usize>,
 ) -> Result<()> {
     let ws = open_workspace()?;
     let stack = ws.pick_stack(stack)?;
+    if locked && !ws.lock_path().exists() {
+        bail!("--locked: no keel.lock — commit one (keel lock) before running CI syncs");
+    }
+    hooks::fire(&ws, hooks::Hook::PreSync, &json!({"stack": stack}))?;
     let backend = ShellGit;
     let cache_root = if shared {
         let root = keel_git::default_cache_root().context("no cache directory on this platform")?;
@@ -459,14 +521,17 @@ fn sync(
     if failures > 0 {
         bail!("{failures} repo(s) failed to sync");
     }
+    hooks::fire(&ws, hooks::Hook::PostSync, &json!({"stack": plan.stack}))?;
     Ok(())
 }
 
 fn lock(overlays: &[String]) -> Result<()> {
     let ws = open_workspace()?;
     let backend = ShellGit;
+    hooks::fire(&ws, hooks::Hook::PreLock, &json!({"overlays": overlays}))?;
     let lockfile = ws.make_lock(overlays, &backend)?;
     lockfile.save(&ws.lock_path())?;
+    hooks::fire(&ws, hooks::Hook::PostLock, &json!({"overlays": overlays}))?;
     record(&ws, "lock.write", None, None, None);
     println!("wrote keel.lock ({} repos pinned)", lockfile.repos.len());
     for repo in &lockfile.repos {
@@ -675,8 +740,9 @@ fn switch(stack: &str, jobs: Option<usize>) -> Result<()> {
     let stack = ws.pick_stack(Some(stack))?;
     ws.set_current_stack(&stack)?;
     record(&ws, "switch", None, None, Some(&stack));
+    hooks::fire(&ws, hooks::Hook::PostSwitch, &json!({"stack": stack}))?;
     println!("switched to stack `{stack}`");
-    sync(Some(&stack), &[], &[], false, jobs)
+    sync(Some(&stack), &[], &[], false, false, jobs)
 }
 
 fn tree(path: &Path, stack: Option<&str>, overlays: &[String], format: &str) -> Result<()> {
@@ -829,6 +895,7 @@ fn change_start(
     let ws = open_workspace()?;
     let changeset = change::start(&ws, &ShellGit, id, repos, branch, skip_branch, labels)?;
     record(&ws, "change.start", None, None, Some(id));
+    hooks::fire(&ws, hooks::Hook::PostChangeStart, &json!({"id": id}))?;
     println!(
         "changeset `{}` started across {} repo(s):",
         changeset.id,
@@ -1048,6 +1115,246 @@ fn change_list() -> Result<()> {
         println!("{id}");
     }
     Ok(())
+}
+
+fn verify(format: &str) -> Result<ExitCode> {
+    let ws = open_workspace()?;
+    if !ws.lock_path().exists() {
+        bail!("no keel.lock to verify against — run `keel lock` first");
+    }
+    let statuses = ws.status(&[], &ShellGit)?;
+    let offenders: Vec<&RepoStatus> = statuses
+        .iter()
+        .filter(|s| s.missing || s.dirty || s.drift)
+        .collect();
+
+    if format == "json" {
+        println!("{}", serde_json::to_string_pretty(&status_json(&statuses))?);
+    } else {
+        for s in &offenders {
+            let why = if s.missing {
+                "not cloned"
+            } else if s.dirty {
+                "dirty"
+            } else {
+                "drift (head != lock)"
+            };
+            println!("  ✗ {}  {why}", s.name);
+        }
+    }
+    if offenders.is_empty() {
+        if format != "json" {
+            println!(
+                "verified: tree matches keel.lock ({} repos)",
+                statuses.len()
+            );
+        }
+        Ok(ExitCode::SUCCESS)
+    } else {
+        if format != "json" {
+            eprintln!(
+                "verify failed: {} repo(s) diverge from keel.lock",
+                offenders.len()
+            );
+        }
+        Ok(ExitCode::from(3))
+    }
+}
+
+fn build_or_test(build: bool, groups: &[String], jobs: Option<usize>) -> Result<()> {
+    let ws = open_workspace()?;
+    let backend = ShellGit;
+    let verb = if build { "build" } else { "test" };
+    let targets: Vec<(String, PathBuf, String)> = ws
+        .manifest
+        .repos
+        .iter()
+        .filter(|(_, repo)| resolver::group_match(&repo.groups, groups))
+        .filter_map(|(name, repo)| {
+            let cmd = if build { &repo.build } else { &repo.test };
+            cmd.as_ref().map(|cmd| {
+                (
+                    name.clone(),
+                    ws.root.join(repo.checkout_path(name)),
+                    cmd.clone(),
+                )
+            })
+        })
+        .filter(|(_, path, _)| backend.is_repo(path))
+        .collect();
+    if targets.is_empty() {
+        bail!("no cloned repo declares a `{verb}` command in the manifest");
+    }
+
+    let results = fan_out(&targets, default_jobs(jobs), |(name, path, cmd)| {
+        let output = shell_command(cmd).current_dir(path).output();
+        (name.clone(), output)
+    });
+    let total = results.len();
+    let mut failures = 0usize;
+    for (name, output) in results {
+        println!("── {name} ──");
+        match output {
+            Ok(out) => {
+                print!("{}", String::from_utf8_lossy(&out.stdout));
+                eprint!("{}", String::from_utf8_lossy(&out.stderr));
+                if !out.status.success() {
+                    failures += 1;
+                    eprintln!("(exit: {})", out.status);
+                }
+            }
+            Err(err) => {
+                failures += 1;
+                eprintln!("(failed to run: {err})");
+            }
+        }
+    }
+    println!("{verb} ran in {}/{} repos", total - failures, total);
+    if failures > 0 {
+        bail!("{verb} failed in {failures} repo(s)");
+    }
+    Ok(())
+}
+
+fn hooks_install() -> Result<()> {
+    let ws = open_workspace()?;
+    let backend = ShellGit;
+    let script = "#!/bin/sh\n# installed by `keel hooks install`\nkeel verify || {\n  echo 'keel: tree diverges from keel.lock (run keel sync or keel pin)' >&2\n  exit 1\n}\n";
+    let mut installed = 0usize;
+    for (name, repo) in &ws.manifest.repos {
+        let path = ws.root.join(repo.checkout_path(name));
+        if !backend.is_repo(&path) {
+            continue;
+        }
+        let hook = path.join(".git").join("hooks").join("pre-commit");
+        std::fs::write(&hook, script)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755))?;
+        }
+        installed += 1;
+        println!("  ✓ {name}  pre-commit -> keel verify");
+    }
+    if installed == 0 {
+        bail!("no cloned repos — run `keel sync` first");
+    }
+    println!("installed the integrity pre-commit in {installed} repo(s)");
+    Ok(())
+}
+
+fn hooks_list() -> Result<()> {
+    let ws = open_workspace()?;
+    let dir = ws.state_dir().join("hooks");
+    let known = [
+        "pre-sync",
+        "post-sync",
+        "pre-lock",
+        "post-lock",
+        "post-switch",
+        "post-change-start",
+    ];
+    let mut any = false;
+    for name in known {
+        let path = dir.join(name);
+        if path.exists() {
+            any = true;
+            println!("  {name}  {}", path.display());
+        }
+    }
+    if !any {
+        println!(
+            "no lifecycle hooks — add executables under {}",
+            dir.display()
+        );
+    }
+    Ok(())
+}
+
+fn evidence(out: &Path) -> Result<()> {
+    let ws = open_workspace()?;
+    let staging = ws.state_dir().join("evidence");
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging)?;
+
+    std::fs::copy(ws.manifest_path(), staging.join(MANIFEST_FILE))?;
+    if ws.lock_path().exists() {
+        std::fs::copy(ws.lock_path(), staging.join("keel.lock"))?;
+    }
+    let audit_log = ws.state_dir().join("audit.jsonl");
+    if audit_log.exists() {
+        std::fs::copy(&audit_log, staging.join("audit.jsonl"))?;
+    }
+    let statuses = ws.status(&[], &ShellGit)?;
+    std::fs::write(
+        staging.join("status.json"),
+        serde_json::to_string_pretty(&status_json(&statuses))?,
+    )?;
+    std::fs::write(
+        staging.join("tool.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema": "keel.evidence/1",
+            "tool": "keel",
+            "version": env!("CARGO_PKG_VERSION"),
+        }))?,
+    )?;
+
+    let status = std::process::Command::new("tar")
+        .arg("-czf")
+        .arg(std::env::current_dir()?.join(out))
+        .arg("-C")
+        .arg(&staging)
+        .arg(".")
+        .status()?;
+    if !status.success() {
+        bail!("tar failed while writing {}", out.display());
+    }
+    let _ = std::fs::remove_dir_all(&staging);
+    record(
+        &ws,
+        "evidence",
+        None,
+        None,
+        Some(&out.display().to_string()),
+    );
+    println!("wrote evidence bundle {}", out.display());
+    Ok(())
+}
+
+fn plugin(args: &[String]) -> Result<ExitCode> {
+    let Some((name, rest)) = args.split_first() else {
+        bail!("empty plugin invocation");
+    };
+    let binary = format!("keel-{name}");
+    let context = match open_workspace() {
+        Ok(ws) => json!({
+            "schema": "keel.plugin/1",
+            "root": ws.root.to_string_lossy(),
+            "stack": ws.current_stack(),
+            "repos": ws.manifest.repos.iter().map(|(repo_name, repo)| json!({
+                "name": repo_name,
+                "path": ws.root.join(repo.checkout_path(repo_name)).to_string_lossy(),
+                "rev": repo.rev,
+                "groups": repo.groups,
+            })).collect::<Vec<_>>(),
+        }),
+        Err(_) => json!({"schema": "keel.plugin/1"}),
+    };
+
+    use std::io::Write;
+    let mut child = std::process::Command::new(&binary)
+        .args(rest)
+        .env("KEEL_JSON", context.to_string())
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("no built-in `{name}` and no `{binary}` on PATH"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(context.to_string().as_bytes());
+    }
+    let status = child.wait()?;
+    Ok(ExitCode::from(
+        status.code().unwrap_or(1).clamp(0, 255) as u8
+    ))
 }
 
 fn import_manifest(from: &Path) -> Result<()> {

@@ -408,6 +408,7 @@ changesets, read-only TUI, CI matrix. See the docs below for the plan and the ro
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Tool qualification, SBOM/CRA, crypto/signing, GDPR, secure SDLC |
 | [docs/COMMERCIALIZATION.md](docs/COMMERCIALIZATION.md) | Editions, licensing, LTS, qualification kit, pricing, GTM |
+| [docs/LAUNCH.md](docs/LAUNCH.md) | Reddit/HN launch playbook: timing gate, media assets, copy-ready post drafts |
 | [AGENTS.md](AGENTS.md) | Token-saving output rules for AI coding agents in this repo |
 
 ## License

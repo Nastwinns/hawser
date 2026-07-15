@@ -124,6 +124,8 @@ pub fn from_west_str(text: &str) -> Result<Manifest, ImportError> {
                 path: project.path.clone().map(Into::into),
                 groups: project.groups.clone(),
                 deps: Vec::new(),
+                build: None,
+                test: None,
             },
         );
     }
@@ -223,6 +225,8 @@ pub fn from_repo_xml_str(text: &str) -> Result<Manifest, ImportError> {
                 ),
                 groups,
                 deps: Vec::new(),
+                build: None,
+                test: None,
             },
         );
     }

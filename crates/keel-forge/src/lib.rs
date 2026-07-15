@@ -103,17 +103,37 @@ pub struct Tokens {
 
 impl Tokens {
     /// Read tokens from the conventional environment variables.
+    /// `KEEL_FORGE_TOKEN` is the generic fallback for both forges; a GitHub
+    /// token is also reused from a logged-in `gh` CLI when the env is empty.
     pub fn from_env() -> Self {
         let first = |names: &[&str]| {
             names
                 .iter()
                 .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))
         };
-        Self {
-            github: first(&["KEEL_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"]),
-            gitlab: first(&["KEEL_GITLAB_TOKEN", "GITLAB_TOKEN"]),
-        }
+        let github = first(&[
+            "KEEL_GITHUB_TOKEN",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "KEEL_FORGE_TOKEN",
+        ])
+        .or_else(gh_cli_token);
+        let gitlab = first(&["KEEL_GITLAB_TOKEN", "GITLAB_TOKEN", "KEEL_FORGE_TOKEN"]);
+        Self { github, gitlab }
     }
+}
+
+/// Token of a logged-in `gh` CLI, if one is on PATH.
+fn gh_cli_token() -> Option<String> {
+    let output = std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!token.is_empty()).then_some(token)
 }
 
 impl ForgeFactory for Tokens {

@@ -5,6 +5,7 @@
 pub mod audit;
 pub mod change;
 pub mod git;
+pub mod hooks;
 pub mod lock;
 pub mod manifest;
 pub mod resolver;
