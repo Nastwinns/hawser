@@ -43,6 +43,10 @@ pub struct Manifest {
 #[serde(deny_unknown_fields)]
 pub struct Remote {
     pub url: String,
+    /// Explicit forge (`"github"` | `"gitlab"`) for hosts the URL heuristic
+    /// misses; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forge: Option<String>,
 }
 
 /// One Git repository: a full autonomous clone at a declared path.
@@ -60,6 +64,10 @@ pub struct Repo {
     pub path: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
+    /// Repos this repo depends on; drives the topological order of
+    /// `keel change land`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deps: Vec<String>,
 }
 
 impl Repo {
@@ -116,6 +124,26 @@ impl Manifest {
     /// Check referential integrity: repo sources, remote names, stack and
     /// overlay repo references.
     pub fn validate(&self) -> Result<(), ManifestError> {
+        for (name, remote) in &self.remotes {
+            if let Some(forge) = &remote.forge
+                && !matches!(forge.as_str(), "github" | "gitlab")
+            {
+                return Err(ManifestError::UnknownForge {
+                    remote: name.clone(),
+                    forge: forge.clone(),
+                });
+            }
+        }
+        for (name, repo) in &self.repos {
+            for dep in &repo.deps {
+                if !self.repos.contains_key(dep) {
+                    return Err(ManifestError::UnknownDep {
+                        repo: name.clone(),
+                        dep: dep.clone(),
+                    });
+                }
+            }
+        }
         for (name, repo) in &self.repos {
             match (&repo.url, &repo.remote, &repo.repo) {
                 (Some(_), None, None) => {}

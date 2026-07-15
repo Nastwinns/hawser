@@ -178,6 +178,25 @@ impl GitBackend for ShellGit {
         run(&["rev-parse", "HEAD"], Some(repo))
     }
 
+    fn ahead_behind(&self, repo: &Path) -> Result<Option<(u64, u64)>, GitError> {
+        let counts = match run(
+            &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+            Some(repo),
+        ) {
+            Ok(out) => out,
+            Err(GitError::Command { .. }) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+        let mut parts = counts.split_whitespace();
+        match (
+            parts.next().and_then(|n| n.parse().ok()),
+            parts.next().and_then(|n| n.parse().ok()),
+        ) {
+            (Some(ahead), Some(behind)) => Ok(Some((ahead, behind))),
+            _ => Ok(None),
+        }
+    }
+
     fn current_branch(&self, repo: &Path) -> Result<Option<String>, GitError> {
         match run(&["symbolic-ref", "--short", "-q", "HEAD"], Some(repo)) {
             Ok(branch) => Ok(Some(branch)),

@@ -2,6 +2,7 @@
 //! call this API and render the results. Git side effects go through the
 //! [`git::GitBackend`] trait so the core stays testable and backend-agnostic.
 
+pub mod audit;
 pub mod change;
 pub mod git;
 pub mod lock;

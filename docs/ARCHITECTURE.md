@@ -190,10 +190,14 @@ rather than completing one layer fully. Scope each item to the minimum that prov
 - **Deliverable:** full cross-repo feature lifecycle on GitHub *and* GitLab, with
   composition underneath — strictly a superset of RepoFleet.
 
-### Phase 4 — TUI actions & polish (week 12)
-- Promote the read-only TUI to interactive: keyboard-driven sync, switch, change
+### Phase 4 — TUI actions & polish (week 12) — *a k9s-grade cockpit*
+- Promote the read-only TUI to interactive: keyboard-driven sync, switch, `pin`, change
   start/request/land, goto.
-- **Deliverable:** the fleet cockpit becomes a control surface, not just a viewer.
+- **Design bar (non-negotiable): match [`k9s`](https://k9scli.io).** Keyboard-first + modal:
+  `:` command bar, `/` filter, single-key actions, live-updating grid, always-visible help
+  bar. Async refresh (no frozen frames), color-coded status, themeable + `NO_COLOR`-aware.
+  Mouse optional, never required. Open with a bare `keel` or `keel dash`.
+- **Deliverable:** the fleet cockpit becomes a polished control surface, not just a viewer.
 
 ### Phase 5 — Migration & distribution (week 13)
 - `keel import --from west.yml | default.xml` (convert existing manifests).
@@ -204,6 +208,27 @@ rather than completing one layer fully. Scope each item to the minimum that prov
 ### Phase 6 (optional, later) — Collaborative merge
 - `keel merge plan | resolve | cleanup` (mergetopus-style slicing), reusing its proven
   workflow. Only if user demand appears; it is orthogonal to the core value.
+
+### Extensibility, auth & CI/CD (cross-phase)
+Keelson stays open at the edges: it orchestrates git, forges, and build tools without
+reimplementing them. The extension surface — `forall`, lifecycle hooks, per-repo build
+commands, `keel-<name>` subcommand plugins, the `--format json` machine interface — plus the
+auth model (git-native transport + opt-in forge tokens / OAuth device flow) and the CI/CD
+integration (`sync --locked`, `verify`, `evidence`, object-sharing cache) are specified in
+[EXTENDING.md](EXTENDING.md), with each item mapped to the phase that ships it. Guiding
+constraint: **the core never grows a hard dependency on a specific build tool, tracker, or
+CI system** — those arrive as hooks, per-repo commands, or plugins.
+
+### Lexicon & testing (cross-phase)
+- **Lexicon**: verbs are one guessable word each — `tree` (was `graph`), `run` (was
+  `forall -c`), `pin`/`unpin` (was `freeze`/`unfreeze`), bare `keel`/`dash` (was `tui`);
+  flag `--slug` (was `--repo`) on `repo add`. Old names stay as hidden aliases. Canonical
+  spec: [CLI-DESIGN.md](CLI-DESIGN.md). Landed incrementally across Phases 1–2, cosmetic.
+- **Golden CLI-output tests** (Phase 2): snapshot `tree`/`status`/`lock` output so lexicon or
+  format changes surface in review.
+- **Determinism tests** (Phase 1→2): assert `keel.lock` is byte-identical across
+  Linux/macOS/Windows for identical inputs — a hard certification requirement
+  ([COMPLIANCE.md §8](COMPLIANCE.md)).
 
 ## 7. Sequencing rationale
 

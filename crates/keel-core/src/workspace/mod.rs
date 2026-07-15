@@ -104,6 +104,8 @@ pub struct RepoStatus {
     pub locked_rev: Option<String>,
     /// True when HEAD differs from the locked rev.
     pub drift: bool,
+    /// Commits ahead/behind upstream; `None` without an upstream.
+    pub ahead_behind: Option<(u64, u64)>,
 }
 
 /// Local branch name for a locked repo: branches keep their name, tags and
@@ -343,6 +345,7 @@ impl Workspace {
                     dirty: false,
                     locked_rev,
                     drift: false,
+                    ahead_behind: None,
                 });
                 continue;
             }
@@ -357,6 +360,7 @@ impl Workspace {
                 dirty: backend.is_dirty(&abs)?,
                 locked_rev,
                 drift,
+                ahead_behind: backend.ahead_behind(&abs)?,
             });
         }
         Ok(statuses)

@@ -9,7 +9,7 @@ use keel_core::change::{ChangeError, Changeset};
 use keel_core::git::{GitBackend, GitError};
 use keel_core::workspace::Workspace;
 
-use crate::{ForgeError, ForgeFactory, PrSpec, PrStatus};
+use crate::{ForgeError, ForgeFactory, ForgeKind, PrSpec, PrStatus, kind_from_key};
 
 /// Errors from the changeset lifecycle that abort the whole operation
 /// (per-repo failures are reported per repo instead).
@@ -21,6 +21,58 @@ pub enum OrchestrateError {
     UnknownRepo(String),
     #[error("repo `{0}` has no resolvable clone URL")]
     Unsourced(String),
+    #[error("dependency cycle among the changeset repos (involving `{0}`)")]
+    DependencyCycle(String),
+}
+
+/// The manifest's explicit forge for a repo's remote, if declared.
+fn forge_hint(ws: &Workspace, name: &str) -> Option<ForgeKind> {
+    let repo = ws.manifest.repos.get(name)?;
+    let remote = ws.manifest.remotes.get(repo.remote.as_deref()?)?;
+    kind_from_key(remote.forge.as_deref()?)
+}
+
+/// Changeset repos reordered so that every repo comes after its manifest
+/// `deps` (stable within ties: original changeset order).
+fn topological(ws: &Workspace, changeset: &Changeset) -> Result<Vec<usize>, OrchestrateError> {
+    let members: Vec<&str> = changeset.repos.iter().map(|r| r.name.as_str()).collect();
+    let mut ordered: Vec<usize> = Vec::with_capacity(members.len());
+    let mut placed = vec![false; members.len()];
+    while ordered.len() < members.len() {
+        let mut progressed = false;
+        for index in 0..members.len() {
+            if placed[index] {
+                continue;
+            }
+            let deps = ws
+                .manifest
+                .repos
+                .get(members[index])
+                .map(|r| r.deps.as_slice())
+                .unwrap_or_default();
+            let ready = deps.iter().all(|dep| {
+                members
+                    .iter()
+                    .position(|m| m == dep)
+                    .is_none_or(|i| placed[i])
+            });
+            if ready {
+                ordered.push(index);
+                placed[index] = true;
+                progressed = true;
+            }
+        }
+        if !progressed {
+            let stuck = members
+                .iter()
+                .zip(&placed)
+                .find(|(_, placed)| !**placed)
+                .map(|(name, _)| (*name).to_string())
+                .unwrap_or_default();
+            return Err(OrchestrateError::DependencyCycle(stuck));
+        }
+    }
+    Ok(ordered)
 }
 
 /// What happened to one repo during `request` or `land`.
@@ -92,6 +144,7 @@ pub fn request(
     forges: &dyn ForgeFactory,
     id: &str,
     base: Option<&str>,
+    only: Option<&[String]>,
 ) -> Result<Vec<RepoOutcome>, OrchestrateError> {
     let mut changeset = Changeset::load(ws, id)?;
     let mut outcomes = Vec::with_capacity(changeset.repos.len());
@@ -105,6 +158,9 @@ pub fn request(
                 entry.pr_url.clone(),
             )
         };
+        if only.is_some_and(|list| !list.iter().any(|n| n == &name)) {
+            continue;
+        }
         if let Some(url) = existing {
             outcomes.push(RepoOutcome {
                 name,
@@ -124,12 +180,13 @@ pub fn request(
 
         let attempt = || -> Result<crate::PrHandle, RepoFailure> {
             backend.push_branch(&repo_dir, &branch)?;
-            let forge = forges.client_for(&url)?;
+            let forge = forges.client_for(&url, forge_hint(ws, &name))?;
             let spec = PrSpec {
                 title: format!("{}: {}", changeset.id, branch),
                 body: changeset_body(&changeset),
                 source_branch: branch.clone(),
                 target_branch: base_branch(ws, &name, base),
+                labels: changeset.labels.clone(),
             };
             Ok(forge.open_pr(&url, &spec)?)
         };
@@ -161,7 +218,7 @@ pub fn request(
         let Ok(url) = clone_url(ws, &entry.name) else {
             continue;
         };
-        if let Ok(forge) = forges.client_for(&url) {
+        if let Ok(forge) = forges.client_for(&url, forge_hint(ws, &entry.name)) {
             let _ = forge.update_pr_body(&url, number, &body);
         }
     }
@@ -189,7 +246,7 @@ pub fn statuses(
             |()| Err(RepoFailure::NoPr),
             |url| {
                 forges
-                    .client_for(&url)
+                    .client_for(&url, forge_hint(ws, &entry.name))
                     .and_then(|forge| forge.pr_status(&url, number))
                     .map_err(RepoFailure::from)
             },
@@ -199,16 +256,19 @@ pub fn statuses(
     Ok(out)
 }
 
-/// Merge every PR/MR in changeset order; already-merged entries are skipped
-/// and the first failure stops the sequence (later repos stay unmerged).
+/// Merge every PR/MR in topological order (manifest `deps` first, changeset
+/// order within ties); already-merged entries are skipped and the first
+/// failure stops the sequence (later repos stay unmerged).
 pub fn land(
     ws: &Workspace,
     forges: &dyn ForgeFactory,
     id: &str,
 ) -> Result<Vec<RepoOutcome>, OrchestrateError> {
     let changeset = Changeset::load(ws, id)?;
+    let order = topological(ws, &changeset)?;
     let mut outcomes = Vec::with_capacity(changeset.repos.len());
-    for entry in &changeset.repos {
+    for index in order {
+        let entry = &changeset.repos[index];
         let Some(number) = entry.pr_number else {
             outcomes.push(RepoOutcome {
                 name: entry.name.clone(),
@@ -219,7 +279,7 @@ pub fn land(
         };
         let url = clone_url(ws, &entry.name)?;
         let attempt = || -> Result<String, RepoFailure> {
-            let forge = forges.client_for(&url)?;
+            let forge = forges.client_for(&url, forge_hint(ws, &entry.name))?;
             if forge.pr_status(&url, number)?.state == crate::PrState::Merged {
                 return Ok("already merged".to_string());
             }

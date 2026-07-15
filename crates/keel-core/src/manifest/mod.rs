@@ -1,6 +1,7 @@
 //! The human-authored `keel.toml` manifest: remotes, repos, stacks, overlays.
 
 pub mod edit;
+pub mod import;
 mod model;
 mod toml_loader;
 
@@ -30,6 +31,10 @@ pub enum ManifestError {
     UnknownRepoInStack { stack: String, repo: String },
     #[error("overlay `{overlay}` references unknown repo `{repo}`")]
     UnknownRepoInOverlay { overlay: String, repo: String },
+    #[error("remote `{remote}` declares unknown forge `{forge}` (use \"github\" or \"gitlab\")")]
+    UnknownForge { remote: String, forge: String },
+    #[error("repo `{repo}` depends on unknown repo `{dep}`")]
+    UnknownDep { repo: String, dep: String },
 }
 
 /// Anything that can produce a [`Manifest`] from a file on disk.

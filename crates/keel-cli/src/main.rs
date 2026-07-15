@@ -5,11 +5,13 @@ use std::process::ExitCode;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use keel_core::git::GitBackend;
-use keel_core::manifest::{ManifestLoader, TomlLoader, edit};
-use keel_core::workspace::{MANIFEST_FILE, SyncOutcome, Workspace, sync_repo};
-use keel_core::{change, resolver};
+use keel_core::manifest::{ManifestLoader, TomlLoader, edit, import};
+use keel_core::workspace::{MANIFEST_FILE, RepoStatus, SyncOutcome, Workspace, sync_repo};
+use keel_core::{audit, change, resolver, snapshot};
+use keel_forge::{PrState, Tokens, orchestrate};
 use keel_git::ShellGit;
 use keel_git::parallel::fan_out;
+use serde_json::json;
 
 /// Minimal ANSI painter: colored on a TTY, plain under `NO_COLOR` or when piped.
 struct Palette {
@@ -38,16 +40,17 @@ struct Cli {
     #[arg(long, global = true, default_value = "keel.toml")]
     manifest: PathBuf,
 
+    /// No subcommand opens the TUI cockpit (same as `keel dash`).
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Bootstrap a workspace from a manifest file.
+    /// Bootstrap a workspace from a manifest file or URL.
     Init {
-        /// Path to an existing keel.toml to copy here.
-        source: PathBuf,
+        /// Path or http(s) URL of an existing keel.toml.
+        source: String,
     },
     /// Clone/update repos to the state in keel.lock (writes it if absent).
     Sync {
@@ -92,10 +95,17 @@ enum Command {
         command: StackCommand,
     },
     /// Aggregated fleet status: branch, head, dirty, drift per repo.
+    #[command(alias = "st")]
     Status {
         /// Only repos in these groups (repeatable).
         #[arg(long = "group")]
         groups: Vec<String>,
+        /// `text` (default) or `json` (schema keel.status/1).
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// Exit 3 when any repo is missing, dirty, or drifted (CI gate).
+        #[arg(long)]
+        verify: bool,
     },
     /// Record a stack as current and sync it.
     Switch {
@@ -104,16 +114,24 @@ enum Command {
         jobs: Option<usize>,
     },
     /// Print the stack -> repo tree.
-    Graph {
+    #[command(alias = "graph")]
+    Tree {
         #[arg(long = "stack", alias = "product")]
         stack: Option<String>,
         #[arg(long)]
         overlay: Vec<String>,
+        /// `text` (default) or `json` (schema keel.tree/1).
+        #[arg(long, default_value = "text")]
+        format: String,
     },
     /// Run a command in every repo, in parallel.
-    Forall {
-        #[arg(short = 'c', long = "command")]
-        command: String,
+    #[command(alias = "forall")]
+    Run {
+        /// The command (positional; `-c` also works, repo-tool style).
+        #[arg(required_unless_present = "command_flag")]
+        command: Option<String>,
+        #[arg(short = 'c', long = "command", conflicts_with = "command")]
+        command_flag: Option<String>,
         /// Only repos in these groups (repeatable).
         #[arg(long = "group")]
         groups: Vec<String>,
@@ -125,23 +143,15 @@ enum Command {
         #[command(subcommand)]
         command: ChangeCommand,
     },
-    /// Save/restore named multi-repo states (branch + commit per repo).
-    Snapshot {
-        #[command(subcommand)]
-        command: SnapshotCommand,
+    /// Convert a west.yml or repo default.xml manifest to keel.toml.
+    Import {
+        /// Path to the foreign manifest.
+        #[arg(long)]
+        from: PathBuf,
     },
-    /// Launch the fleet dashboard.
-    Tui,
-}
-
-#[derive(Subcommand)]
-enum SnapshotCommand {
-    /// Record every repo's branch + HEAD under a name.
-    Save { name: String },
-    /// Check every repo back out to a saved state (refuses on dirty repos).
-    Restore { name: String },
-    /// List saved snapshots.
-    List,
+    /// Open the fleet dashboard (same as bare `keel`).
+    #[command(alias = "tui")]
+    Dash,
 }
 
 #[derive(Subcommand)]
@@ -151,15 +161,15 @@ enum RepoCommand {
     /// Add a repo to the manifest (keeps your comments and formatting).
     Add {
         name: String,
-        /// Full clone URL (or use --remote + --repo).
-        #[arg(long, conflicts_with_all = ["remote", "repo"])]
+        /// Full clone URL (or use --remote + --slug).
+        #[arg(long, conflicts_with_all = ["remote", "slug"])]
         url: Option<String>,
         /// Named remote from [remote.X].
-        #[arg(long, requires = "repo")]
+        #[arg(long, requires = "slug")]
         remote: Option<String>,
         /// Repository path under the remote.
-        #[arg(long, requires = "remote")]
-        repo: Option<String>,
+        #[arg(long, alias = "repo", requires = "remote")]
+        slug: Option<String>,
         #[arg(long, default_value = "main")]
         rev: String,
         /// Checkout path (default: the repo name).
@@ -207,8 +217,11 @@ enum ChangeCommand {
         /// Adopt each repo's current branch instead of creating one.
         #[arg(long)]
         skip_branch: bool,
+        /// Label forwarded to the PR/MRs at `change request` (repeatable).
+        #[arg(long = "label")]
+        labels: Vec<String>,
     },
-    /// Per-repo branch + PR/MR dashboard for a changeset.
+    /// Per-repo branch + PR/MR review + CI dashboard for a changeset.
     Status { id: String },
     /// Push the changeset branches and open cross-linked PR/MRs.
     Request {
@@ -217,7 +230,7 @@ enum ChangeCommand {
         #[arg(long)]
         base: Option<String>,
     },
-    /// Merge the changeset PR/MRs in order; stops at the first failure.
+    /// Merge the PR/MRs in dependency order; stops at the first failure.
     Land { id: String },
     /// Print a changeset repo's path (usable as: cd "$(keel change goto ID REPO)").
     Goto {
@@ -225,13 +238,28 @@ enum ChangeCommand {
         /// Repo name; omit for an interactive picker.
         repo: Option<String>,
     },
+    /// Save/restore the multi-repo state of a changeset.
+    Snapshot {
+        #[command(subcommand)]
+        command: SnapshotCommand,
+    },
     /// List recorded changesets.
+    List,
+}
+
+#[derive(Subcommand)]
+enum SnapshotCommand {
+    /// Record every repo's branch + HEAD under a name.
+    Save { name: String },
+    /// Check every repo back out to a saved state (refuses on dirty repos).
+    Restore { name: String },
+    /// List saved snapshots.
     List,
 }
 
 fn main() -> ExitCode {
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(err) => {
             eprintln!("error: {err:#}");
             ExitCode::FAILURE
@@ -239,66 +267,93 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<()> {
+fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
-    match cli.command {
-        Command::Init { source } => init(&source),
+    let Some(command) = cli.command else {
+        dash()?;
+        return Ok(ExitCode::SUCCESS);
+    };
+    match command {
+        Command::Init { source } => init(&source)?,
         Command::Sync {
             stack,
             overlay,
             groups,
             shared,
             jobs,
-        } => sync(stack.as_deref(), &overlay, &groups, shared, jobs),
-        Command::Lock { overlay } => lock(&overlay),
-        Command::Pin => pin(),
-        Command::Unpin { overlay } => unpin(&overlay),
+        } => sync(stack.as_deref(), &overlay, &groups, shared, jobs)?,
+        Command::Lock { overlay } => lock(&overlay)?,
+        Command::Pin => pin()?,
+        Command::Unpin { overlay } => unpin(&overlay)?,
         Command::Repo { command } => match command {
-            RepoCommand::List => repo_list(),
+            RepoCommand::List => repo_list()?,
             RepoCommand::Add {
                 name,
                 url,
                 remote,
-                repo,
+                slug,
                 rev,
                 path,
                 groups,
-            } => repo_add(&name, url, remote, repo, rev, path, groups),
-            RepoCommand::Remove { name } => repo_remove(&name),
+            } => repo_add(&name, url, remote, slug, rev, path, groups)?,
+            RepoCommand::Remove { name } => repo_remove(&name)?,
         },
         Command::Stack { command } => match command {
-            StackCommand::List => stack_list(),
-            StackCommand::Add { name, repos } => stack_add(&name, &repos),
-            StackCommand::Remove { name } => stack_remove(&name),
+            StackCommand::List => stack_list()?,
+            StackCommand::Add { name, repos } => stack_add(&name, &repos)?,
+            StackCommand::Remove { name } => stack_remove(&name)?,
         },
-        Command::Status { groups } => status(&groups),
-        Command::Switch { stack, jobs } => switch(&stack, jobs),
-        Command::Graph { stack, overlay } => graph(&cli.manifest, stack.as_deref(), &overlay),
-        Command::Forall {
+        Command::Status {
+            groups,
+            format,
+            verify,
+        } => return status(&groups, &format, verify),
+        Command::Switch { stack, jobs } => switch(&stack, jobs)?,
+        Command::Tree {
+            stack,
+            overlay,
+            format,
+        } => tree(&cli.manifest, stack.as_deref(), &overlay, &format)?,
+        Command::Run {
             command,
+            command_flag,
             groups,
             jobs,
-        } => forall(&command, &groups, jobs),
+        } => {
+            let cmd = command
+                .or(command_flag)
+                .context("pass the command: keel run 'git fetch'")?;
+            run_across(&cmd, &groups, jobs)?;
+        }
         Command::Change { command } => match command {
             ChangeCommand::Start {
                 id,
                 repos,
                 branch,
                 skip_branch,
-            } => change_start(&id, repos.as_deref(), branch.as_deref(), skip_branch),
-            ChangeCommand::Status { id } => change_status(&id),
-            ChangeCommand::Request { id, base } => change_request(&id, base.as_deref()),
-            ChangeCommand::Land { id } => change_land(&id),
-            ChangeCommand::Goto { id, repo } => change_goto(&id, repo.as_deref()),
-            ChangeCommand::List => change_list(),
+                labels,
+            } => change_start(
+                &id,
+                repos.as_deref(),
+                branch.as_deref(),
+                skip_branch,
+                &labels,
+            )?,
+            ChangeCommand::Status { id } => change_status(&id)?,
+            ChangeCommand::Request { id, base } => change_request(&id, base.as_deref())?,
+            ChangeCommand::Land { id } => change_land(&id)?,
+            ChangeCommand::Goto { id, repo } => change_goto(&id, repo.as_deref())?,
+            ChangeCommand::Snapshot { command } => match command {
+                SnapshotCommand::Save { name } => snapshot_save(&name)?,
+                SnapshotCommand::Restore { name } => snapshot_restore(&name)?,
+                SnapshotCommand::List => snapshot_list()?,
+            },
+            ChangeCommand::List => change_list()?,
         },
-        Command::Snapshot { command } => match command {
-            SnapshotCommand::Save { name } => snapshot_save(&name),
-            SnapshotCommand::Restore { name } => snapshot_restore(&name),
-            SnapshotCommand::List => snapshot_list(),
-        },
-        Command::Tui => tui(),
+        Command::Import { from } => import_manifest(&from)?,
+        Command::Dash => dash()?,
     }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn open_workspace() -> Result<Workspace> {
@@ -315,23 +370,33 @@ fn default_jobs(flag: Option<usize>) -> usize {
     })
 }
 
-fn init(source: &Path) -> Result<()> {
+fn record(ws: &Workspace, op: &str, repo: Option<&str>, before: Option<&str>, after: Option<&str>) {
+    if let Err(err) = audit::record(ws, op, repo, before, after) {
+        eprintln!("warning: audit log not written: {err}");
+    }
+}
+
+fn init(source: &str) -> Result<()> {
     let dest = PathBuf::from(MANIFEST_FILE);
     if dest.exists() {
         bail!("{MANIFEST_FILE} already exists here");
     }
-    if !source.is_file() {
-        bail!(
-            "{} is not a file (URL bootstrap lands with forge integration; pass a local path)",
-            source.display()
-        );
-    }
-    TomlLoader
-        .load(source)
-        .with_context(|| format!("{} is not a valid manifest", source.display()))?;
-    std::fs::copy(source, &dest)
-        .with_context(|| format!("copying {} to {MANIFEST_FILE}", source.display()))?;
-    println!("initialized workspace from {}", source.display());
+    let text = if source.starts_with("http://") || source.starts_with("https://") {
+        reqwest::blocking::get(source)
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .and_then(reqwest::blocking::Response::text)
+            .with_context(|| format!("fetching {source}"))?
+    } else {
+        let path = Path::new(source);
+        if !path.is_file() {
+            bail!("{source} is not a file or URL");
+        }
+        std::fs::read_to_string(path)?
+    };
+    text.parse::<keel_core::manifest::Manifest>()
+        .with_context(|| format!("{source} is not a valid manifest"))?;
+    std::fs::write(&dest, text)?;
+    println!("initialized workspace from {source}");
     println!("next: keel sync");
     Ok(())
 }
@@ -356,23 +421,32 @@ fn sync(
     let plan = ws.plan_sync(&stack, overlays, groups, cache_root.as_deref(), &backend)?;
     if plan.wrote_lock {
         println!("wrote keel.lock ({} repos pinned)", plan.tasks.len());
+        record(&ws, "lock.write", None, None, None);
     } else if !overlays.is_empty() {
         println!("note: keel.lock exists — overlays ignored (run `keel lock` to re-resolve)");
     }
 
     let results = fan_out(&plan.tasks, default_jobs(jobs), |task| {
-        (task.name.clone(), sync_repo(task, &backend))
+        sync_repo(task, &backend)
     });
 
     let mut failures = 0usize;
-    for (name, result) in &results {
+    for (task, result) in plan.tasks.iter().zip(&results) {
         match result {
-            Ok(SyncOutcome::Cloned) => println!("  ✓ {name}  cloned"),
-            Ok(SyncOutcome::Updated) => println!("  ✓ {name}  updated"),
-            Ok(SyncOutcome::AlreadySynced) => println!("  ✓ {name}  up to date"),
+            Ok(outcome) => {
+                let verb = match outcome {
+                    SyncOutcome::Cloned => "cloned",
+                    SyncOutcome::Updated => "updated",
+                    SyncOutcome::AlreadySynced => "up to date",
+                };
+                println!("  ✓ {}  {verb}", task.name);
+                if *outcome != SyncOutcome::AlreadySynced {
+                    record(&ws, "sync", Some(&task.name), None, Some(&task.target));
+                }
+            }
             Err(err) => {
                 failures += 1;
-                eprintln!("  ✗ {name}  {err}");
+                eprintln!("  ✗ {}  {err}", task.name);
             }
         }
     }
@@ -393,6 +467,7 @@ fn lock(overlays: &[String]) -> Result<()> {
     let backend = ShellGit;
     let lockfile = ws.make_lock(overlays, &backend)?;
     lockfile.save(&ws.lock_path())?;
+    record(&ws, "lock.write", None, None, None);
     println!("wrote keel.lock ({} repos pinned)", lockfile.repos.len());
     for repo in &lockfile.repos {
         println!(
@@ -409,6 +484,7 @@ fn pin() -> Result<()> {
     let ws = open_workspace()?;
     let lockfile = ws.pin(&ShellGit)?;
     lockfile.save(&ws.lock_path())?;
+    record(&ws, "lock.pin", None, None, None);
     println!(
         "pinned keel.lock to current HEADs ({} repos)",
         lockfile.repos.len()
@@ -456,7 +532,7 @@ fn repo_add(
     name: &str,
     url: Option<String>,
     remote: Option<String>,
-    repo: Option<String>,
+    slug: Option<String>,
     rev: String,
     path: Option<String>,
     groups: Vec<String>,
@@ -466,7 +542,7 @@ fn repo_add(
         name: name.to_string(),
         url,
         remote,
-        repo,
+        repo: slug,
         rev,
         path,
         groups,
@@ -474,6 +550,7 @@ fn repo_add(
     let text = std::fs::read_to_string(ws.manifest_path())?;
     let updated = edit::add_repo(&text, &spec)?;
     std::fs::write(ws.manifest_path(), updated)?;
+    record(&ws, "repo.add", Some(name), None, None);
     println!("added repo `{name}`");
     println!("next: keel lock && keel sync");
     Ok(())
@@ -484,6 +561,7 @@ fn repo_remove(name: &str) -> Result<()> {
     let text = std::fs::read_to_string(ws.manifest_path())?;
     let updated = edit::remove_repo(&text, name)?;
     std::fs::write(ws.manifest_path(), updated)?;
+    record(&ws, "repo.remove", Some(name), None, None);
     println!("removed repo `{name}` from the manifest");
     println!("note: its clone stays on disk; delete the directory if unwanted");
     Ok(())
@@ -512,6 +590,7 @@ fn stack_add(name: &str, repos: &[String]) -> Result<()> {
     let text = std::fs::read_to_string(ws.manifest_path())?;
     let updated = edit::add_stack(&text, name, repos)?;
     std::fs::write(ws.manifest_path(), updated)?;
+    record(&ws, "stack.add", Some(name), None, None);
     println!("added stack `{name}` ({} repos)", repos.len());
     Ok(())
 }
@@ -521,53 +600,87 @@ fn stack_remove(name: &str) -> Result<()> {
     let text = std::fs::read_to_string(ws.manifest_path())?;
     let updated = edit::remove_stack(&text, name)?;
     std::fs::write(ws.manifest_path(), updated)?;
+    record(&ws, "stack.remove", Some(name), None, None);
     println!("removed stack `{name}`");
     Ok(())
 }
 
-fn status(groups: &[String]) -> Result<()> {
+fn status_json(statuses: &[RepoStatus]) -> serde_json::Value {
+    json!({
+        "schema": "keel.status/1",
+        "repos": statuses.iter().map(|s| json!({
+            "name": s.name,
+            "path": s.path.to_string_lossy(),
+            "missing": s.missing,
+            "branch": s.branch,
+            "head": s.head,
+            "dirty": s.dirty,
+            "locked_rev": s.locked_rev,
+            "drift": s.drift,
+            "ahead_behind": s.ahead_behind.map(|(a, b)| json!({"ahead": a, "behind": b})),
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn status(groups: &[String], format: &str, verify: bool) -> Result<ExitCode> {
     let ws = open_workspace()?;
     let statuses = ws.status(groups, &ShellGit)?;
-    if statuses.is_empty() {
-        println!("no matching repos");
-        return Ok(());
-    }
-    let width = statuses.iter().map(|s| s.name.len()).max().unwrap_or(4);
-    println!(
-        "{:<width$}  {:<24} {:<10} {:<6} DRIFT",
-        "REPO", "BRANCH", "HEAD", "DIRTY"
-    );
-    for s in &statuses {
-        if s.missing {
-            println!("{:<width$}  (not cloned — run `keel sync`)", s.name);
-            continue;
+    let failing = statuses.iter().any(|s| s.missing || s.dirty || s.drift);
+
+    match format {
+        "json" => println!("{}", serde_json::to_string_pretty(&status_json(&statuses))?),
+        "text" => {
+            if statuses.is_empty() {
+                println!("no matching repos");
+            } else {
+                let width = statuses
+                    .iter()
+                    .map(|s| s.name.len())
+                    .max()
+                    .unwrap_or(4)
+                    .max(4);
+                println!(
+                    "{:<width$}  {:<24} {:<10} {:<6} DRIFT",
+                    "REPO", "BRANCH", "HEAD", "DIRTY"
+                );
+                for s in &statuses {
+                    if s.missing {
+                        println!("{:<width$}  (not cloned — run `keel sync`)", s.name);
+                        continue;
+                    }
+                    println!(
+                        "{:<width$}  {:<24} {:<10} {:<6} {}",
+                        s.name,
+                        s.branch.as_deref().unwrap_or("(detached)"),
+                        s.head
+                            .as_deref()
+                            .map(|h| &h[..8.min(h.len())])
+                            .unwrap_or("—"),
+                        if s.dirty { "yes" } else { "-" },
+                        if s.drift { "YES" } else { "-" },
+                    );
+                }
+            }
         }
-        println!(
-            "{:<width$}  {:<24} {:<10} {:<6} {}",
-            s.name,
-            s.branch.as_deref().unwrap_or("(detached)"),
-            s.head
-                .as_deref()
-                .map(|h| &h[..8.min(h.len())])
-                .unwrap_or("—"),
-            if s.dirty { "yes" } else { "-" },
-            if s.drift { "YES" } else { "-" },
-        );
+        other => bail!("unknown format `{other}` (use text or json)"),
     }
-    Ok(())
+    if verify && failing {
+        return Ok(ExitCode::from(3));
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn switch(stack: &str, jobs: Option<usize>) -> Result<()> {
     let ws = open_workspace()?;
     let stack = ws.pick_stack(Some(stack))?;
     ws.set_current_stack(&stack)?;
+    record(&ws, "switch", None, None, Some(&stack));
     println!("switched to stack `{stack}`");
     sync(Some(&stack), &[], &[], false, jobs)
 }
 
-fn graph(path: &Path, stack: Option<&str>, overlays: &[String]) -> Result<()> {
+fn tree(path: &Path, stack: Option<&str>, overlays: &[String], format: &str) -> Result<()> {
     let manifest = TomlLoader.load(path)?;
-
     let selected: Vec<String> = match stack {
         Some(name) => vec![name.to_string()],
         None => manifest.stacks.keys().cloned().collect(),
@@ -575,6 +688,30 @@ fn graph(path: &Path, stack: Option<&str>, overlays: &[String]) -> Result<()> {
     if selected.is_empty() {
         println!("no stacks defined in {}", path.display());
         return Ok(());
+    }
+
+    if format == "json" {
+        let mut stacks = Vec::with_capacity(selected.len());
+        for name in &selected {
+            let resolution = resolver::resolve(&manifest, name, overlays)?;
+            stacks.push(json!({
+                "name": name,
+                "repos": resolution.repos.iter().map(|r| json!({
+                    "name": r.name,
+                    "rev": r.rev,
+                    "url": r.url,
+                    "path": r.path.to_string_lossy(),
+                })).collect::<Vec<_>>(),
+            }));
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({"schema": "keel.tree/1", "stacks": stacks}))?
+        );
+        return Ok(());
+    }
+    if format != "text" {
+        bail!("unknown format `{format}` (use text or json)");
     }
 
     let c = Palette::new();
@@ -611,7 +748,7 @@ fn graph(path: &Path, stack: Option<&str>, overlays: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn forall(command: &str, groups: &[String], jobs: Option<usize>) -> Result<()> {
+fn run_across(command: &str, groups: &[String], jobs: Option<usize>) -> Result<()> {
     let ws = open_workspace()?;
     let backend = ShellGit;
     let repos: Vec<(String, PathBuf)> = match ws.read_lock()? {
@@ -642,6 +779,7 @@ fn forall(command: &str, groups: &[String], jobs: Option<usize>) -> Result<()> {
         (name.clone(), output)
     });
 
+    let total = results.len();
     let mut failures = 0usize;
     for (name, output) in results {
         println!("── {name} ──");
@@ -660,6 +798,7 @@ fn forall(command: &str, groups: &[String], jobs: Option<usize>) -> Result<()> {
             }
         }
     }
+    println!("ran in {}/{} repos", total - failures, total);
     if failures > 0 {
         bail!("command failed in {failures} repo(s)");
     }
@@ -685,9 +824,11 @@ fn change_start(
     repos: Option<&[String]>,
     branch: Option<&str>,
     skip_branch: bool,
+    labels: &[String],
 ) -> Result<()> {
     let ws = open_workspace()?;
-    let changeset = change::start(&ws, &ShellGit, id, repos, branch, skip_branch)?;
+    let changeset = change::start(&ws, &ShellGit, id, repos, branch, skip_branch, labels)?;
+    record(&ws, "change.start", None, None, Some(id));
     println!(
         "changeset `{}` started across {} repo(s):",
         changeset.id,
@@ -697,6 +838,15 @@ fn change_start(
         println!("  {}  -> {}", repo.name, repo.branch);
     }
     Ok(())
+}
+
+fn render_pr_state(state: PrState) -> &'static str {
+    match state {
+        PrState::Open => "open",
+        PrState::Draft => "draft",
+        PrState::Merged => "merged",
+        PrState::Closed => "closed",
+    }
 }
 
 fn change_status(id: &str) -> Result<()> {
@@ -730,18 +880,13 @@ fn change_status(id: &str) -> Result<()> {
     if changeset.repos.iter().any(|r| r.pr_number.is_some()) {
         println!();
         println!("PR/MRs:");
-        let tokens = keel_forge::Tokens::from_env();
-        for (name, status) in keel_forge::orchestrate::statuses(&ws, &tokens, id)? {
+        let tokens = Tokens::from_env();
+        for (name, status) in orchestrate::statuses(&ws, &tokens, id)? {
             match status {
                 None => println!("  {name}  (no PR — run `keel change request`)"),
                 Some(Ok(s)) => println!(
                     "  {name}  {}  approved: {}  ci: {}  {}",
-                    match s.state {
-                        keel_forge::PrState::Open => "open",
-                        keel_forge::PrState::Draft => "draft",
-                        keel_forge::PrState::Merged => "merged",
-                        keel_forge::PrState::Closed => "closed",
-                    },
+                    render_pr_state(s.state),
                     if s.approved { "yes" } else { "no" },
                     match s.ci_passing {
                         Some(true) => "passing",
@@ -761,12 +906,15 @@ fn change_status(id: &str) -> Result<()> {
 
 fn change_request(id: &str, base: Option<&str>) -> Result<()> {
     let ws = open_workspace()?;
-    let tokens = keel_forge::Tokens::from_env();
-    let outcomes = keel_forge::orchestrate::request(&ws, &ShellGit, &tokens, id, base)?;
+    let tokens = Tokens::from_env();
+    let outcomes = orchestrate::request(&ws, &ShellGit, &tokens, id, base, None)?;
     let mut failures = 0usize;
     for outcome in &outcomes {
         match &outcome.result {
-            Ok(url) => println!("  ✓ {}  {url}", outcome.name),
+            Ok(url) => {
+                record(&ws, "change.request", Some(&outcome.name), None, Some(url));
+                println!("  ✓ {}  {url}", outcome.name);
+            }
             Err(err) => {
                 failures += 1;
                 eprintln!("  ✗ {}  {err}", outcome.name);
@@ -785,12 +933,15 @@ fn change_request(id: &str, base: Option<&str>) -> Result<()> {
 
 fn change_land(id: &str) -> Result<()> {
     let ws = open_workspace()?;
-    let tokens = keel_forge::Tokens::from_env();
-    let outcomes = keel_forge::orchestrate::land(&ws, &tokens, id)?;
+    let tokens = Tokens::from_env();
+    let outcomes = orchestrate::land(&ws, &tokens, id)?;
     let mut failed = false;
     for outcome in &outcomes {
         match &outcome.result {
-            Ok(msg) => println!("  ✓ {}  {msg}", outcome.name),
+            Ok(msg) => {
+                record(&ws, "change.land", Some(&outcome.name), None, Some(id));
+                println!("  ✓ {}  {msg}", outcome.name);
+            }
             Err(err) => {
                 failed = true;
                 eprintln!("  ✗ {}  {err}", outcome.name);
@@ -851,7 +1002,8 @@ fn change_goto(id: &str, repo: Option<&str>) -> Result<()> {
 
 fn snapshot_save(name: &str) -> Result<()> {
     let ws = open_workspace()?;
-    let snap = keel_core::snapshot::save(&ws, &ShellGit, name)?;
+    let snap = snapshot::save(&ws, &ShellGit, name)?;
+    record(&ws, "snapshot.save", None, None, Some(name));
     println!("saved snapshot `{name}` ({} repos)", snap.repos.len());
     for repo in &snap.repos {
         println!(
@@ -866,16 +1018,17 @@ fn snapshot_save(name: &str) -> Result<()> {
 
 fn snapshot_restore(name: &str) -> Result<()> {
     let ws = open_workspace()?;
-    let snap = keel_core::snapshot::restore(&ws, &ShellGit, name)?;
+    let snap = snapshot::restore(&ws, &ShellGit, name)?;
+    record(&ws, "snapshot.restore", None, None, Some(name));
     println!("restored snapshot `{name}` ({} repos)", snap.repos.len());
     Ok(())
 }
 
 fn snapshot_list() -> Result<()> {
     let ws = open_workspace()?;
-    let names = keel_core::snapshot::Snapshot::list(&ws)?;
+    let names = snapshot::Snapshot::list(&ws)?;
     if names.is_empty() {
-        println!("no snapshots — save one with `keel snapshot save <name>`");
+        println!("no snapshots — save one with `keel change snapshot save <name>`");
         return Ok(());
     }
     for name in names {
@@ -897,24 +1050,295 @@ fn change_list() -> Result<()> {
     Ok(())
 }
 
-fn tui() -> Result<()> {
-    let ws = open_workspace()?;
-    keel_tui::run(move || {
+fn import_manifest(from: &Path) -> Result<()> {
+    let dest = PathBuf::from(MANIFEST_FILE);
+    if dest.exists() {
+        bail!("{MANIFEST_FILE} already exists here");
+    }
+    let manifest = import::import(from)?;
+    let text = toml::to_string_pretty(&manifest)?;
+    std::fs::write(&dest, text)?;
+    println!(
+        "imported {} repo(s) from {} into {MANIFEST_FILE}",
+        manifest.repos.len(),
+        from.display()
+    );
+    println!(
+        "one stack `{}` holds every repo — split it into real stacks as needed",
+        import::DEFAULT_STACK
+    );
+    println!("next: keel lock && keel sync");
+    Ok(())
+}
+
+/// TUI controller: adapts cockpit actions to `keel-core`/`keel-forge`.
+/// Runs on the TUI worker thread.
+struct CliController;
+
+impl CliController {
+    fn workspace(&self) -> std::io::Result<Workspace> {
+        let cwd = std::env::current_dir()?;
+        Workspace::open(cwd).map_err(std::io::Error::other)
+    }
+
+    fn sync_filtered(&self, stack: &str, repo: Option<&str>) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let backend = ShellGit;
+        let plan = ws
+            .plan_sync(stack, &[], &[], None, &backend)
+            .map_err(std::io::Error::other)?;
+        let tasks: Vec<_> = plan
+            .tasks
+            .into_iter()
+            .filter(|t| repo.is_none_or(|r| t.name == r))
+            .collect();
+        let results = fan_out(&tasks, default_jobs(None), |task| {
+            (task.name.clone(), sync_repo(task, &backend))
+        });
+        let failures: Vec<&str> = results
+            .iter()
+            .filter(|(_, r)| r.is_err())
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if failures.is_empty() {
+            Ok(format!("synced ({} repos)", results.len()))
+        } else {
+            Ok(format!("sync failed for: {}", failures.join(", ")))
+        }
+    }
+}
+
+fn render_changeset(
+    ws: &Workspace,
+    id: &str,
+    prs: Option<Vec<orchestrate::RepoPrStatus>>,
+) -> std::io::Result<keel_tui::ChangesetSummary> {
+    let statuses = change::status(ws, &ShellGit, id).map_err(std::io::Error::other)?;
+    let changeset = change::Changeset::load(ws, id).map_err(std::io::Error::other)?;
+    let repos = statuses
+        .into_iter()
+        .map(|s| {
+            let entry = changeset.repos.iter().find(|r| r.name == s.name);
+            let (pr, ci) = match &prs {
+                Some(list) => match list.iter().find(|(name, _)| name == &s.name) {
+                    Some((_, Some(Ok(status)))) => (
+                        format!(
+                            "#{} ● {}",
+                            entry.and_then(|e| e.pr_number).unwrap_or_default(),
+                            render_pr_state(status.state)
+                        ),
+                        match status.ci_passing {
+                            Some(true) => "✓ passed".to_string(),
+                            Some(false) => "✗ failed".to_string(),
+                            None => "⏳ pending".to_string(),
+                        },
+                    ),
+                    Some((_, Some(Err(_)))) => ("(error)".to_string(), "—".to_string()),
+                    _ => ("—".to_string(), "—".to_string()),
+                },
+                None => match entry.and_then(|e| e.pr_number) {
+                    Some(number) => (format!("#{number}"), "…".to_string()),
+                    None => ("—".to_string(), "—".to_string()),
+                },
+            };
+            keel_tui::ChangeRepoRow {
+                name: s.name,
+                branch: s.branch,
+                on_branch: s.on_branch,
+                dirty: s.dirty,
+                head: s.head,
+                pr,
+                ci,
+            }
+        })
+        .collect();
+    Ok(keel_tui::ChangesetSummary {
+        id: id.to_string(),
+        repos,
+    })
+}
+
+fn tree_text(ws: &Workspace) -> String {
+    let mut out = String::new();
+    for (i, (name, _)) in ws.manifest.stacks.iter().enumerate() {
+        let Ok(resolution) = resolver::resolve(&ws.manifest, name, &[]) else {
+            continue;
+        };
+        let last_stack = i == ws.manifest.stacks.len() - 1;
+        out.push_str(if last_stack { "└─ " } else { "├─ " });
+        out.push_str(name);
+        out.push('\n');
+        let stem = if last_stack { "   " } else { "│  " };
+        for (j, repo) in resolution.repos.iter().enumerate() {
+            let tee = if j == resolution.repos.len() - 1 {
+                "└─"
+            } else {
+                "├─"
+            };
+            out.push_str(&format!("{stem}{tee} {}  {}\n", repo.name, repo.rev));
+        }
+    }
+    out
+}
+
+impl keel_tui::Controller for CliController {
+    fn snapshot(&mut self) -> std::io::Result<keel_tui::Snapshot> {
+        let ws = self.workspace()?;
         let statuses = ws.status(&[], &ShellGit).map_err(std::io::Error::other)?;
-        let views: Vec<keel_tui::FleetView> = ws
+        let fleet = ws
             .manifest
             .stacks
             .iter()
-            .map(|(stack, spec)| keel_tui::FleetView {
-                stack: stack.clone(),
-                repos: statuses
-                    .iter()
-                    .filter(|s| spec.repos.contains(&s.name))
-                    .cloned()
-                    .collect(),
+            .map(|(stack, spec)| {
+                (
+                    stack.clone(),
+                    statuses
+                        .iter()
+                        .filter(|s| spec.repos.contains(&s.name))
+                        .cloned()
+                        .collect(),
+                )
             })
             .collect();
-        Ok(views)
-    })?;
+        let ids = change::Changeset::list(&ws).map_err(std::io::Error::other)?;
+        let mut changesets = Vec::with_capacity(ids.len());
+        for id in ids {
+            changesets.push(render_changeset(&ws, &id, None)?);
+        }
+        let paths = ws
+            .manifest
+            .repos
+            .iter()
+            .map(|(name, repo)| (name.clone(), ws.root.join(repo.checkout_path(name))))
+            .collect();
+        Ok(keel_tui::Snapshot {
+            root_label: ws.root.display().to_string(),
+            stacks: ws.manifest.stacks.keys().cloned().collect(),
+            current_stack: ws.current_stack(),
+            fleet,
+            changesets,
+            lock_present: ws.lock_path().exists(),
+            paths,
+            tree: tree_text(&ws),
+        })
+    }
+
+    fn changeset_prs(&mut self, id: &str) -> std::io::Result<keel_tui::ChangesetSummary> {
+        let ws = self.workspace()?;
+        let changeset = change::Changeset::load(&ws, id).map_err(std::io::Error::other)?;
+        let prs = if changeset.repos.iter().any(|r| r.pr_number.is_some()) {
+            let tokens = Tokens::from_env();
+            Some(orchestrate::statuses(&ws, &tokens, id).map_err(std::io::Error::other)?)
+        } else {
+            None
+        };
+        render_changeset(&ws, id, prs)
+    }
+
+    fn sync_stack(&mut self, stack: &str) -> std::io::Result<String> {
+        self.sync_filtered(stack, None)
+    }
+
+    fn sync_repo(&mut self, repo: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let stack = ws.pick_stack(None).map_err(std::io::Error::other)?;
+        self.sync_filtered(&stack, Some(repo))
+    }
+
+    fn switch(&mut self, stack: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        ws.set_current_stack(stack).map_err(std::io::Error::other)?;
+        let summary = self.sync_filtered(stack, None)?;
+        Ok(format!("switched to `{stack}` — {summary}"))
+    }
+
+    fn pin(&mut self) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let lockfile = ws.pin(&ShellGit).map_err(std::io::Error::other)?;
+        lockfile
+            .save(&ws.lock_path())
+            .map_err(std::io::Error::other)?;
+        Ok(format!("pinned keel.lock ({} repos)", lockfile.repos.len()))
+    }
+
+    fn lock(&mut self) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let lockfile = ws
+            .make_lock(&[], &ShellGit)
+            .map_err(std::io::Error::other)?;
+        lockfile
+            .save(&ws.lock_path())
+            .map_err(std::io::Error::other)?;
+        Ok(format!("wrote keel.lock ({} repos)", lockfile.repos.len()))
+    }
+
+    fn run_cmd(&mut self, cmd: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let backend = ShellGit;
+        let repos: Vec<(String, PathBuf)> = ws
+            .manifest
+            .repos
+            .iter()
+            .map(|(name, repo)| (name.clone(), ws.root.join(repo.checkout_path(name))))
+            .filter(|(_, path)| backend.is_repo(path))
+            .collect();
+        let results = fan_out(&repos, default_jobs(None), |(name, path)| {
+            let ok = shell_command(cmd)
+                .current_dir(path)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            (name.clone(), ok)
+        });
+        let failed: Vec<&str> = results
+            .iter()
+            .filter(|(_, ok)| !ok)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if failed.is_empty() {
+            Ok(format!("ran `{cmd}` in {} repos", results.len()))
+        } else {
+            Ok(format!("`{cmd}` failed in: {}", failed.join(", ")))
+        }
+    }
+
+    fn change_start(&mut self, id: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let changeset = change::start(&ws, &ShellGit, id, None, None, false, &[])
+            .map_err(std::io::Error::other)?;
+        Ok(format!(
+            "changeset `{id}` started across {} repos",
+            changeset.repos.len()
+        ))
+    }
+
+    fn change_request(&mut self, id: &str, only: Option<Vec<String>>) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let tokens = Tokens::from_env();
+        let outcomes = orchestrate::request(&ws, &ShellGit, &tokens, id, None, only.as_deref())
+            .map_err(std::io::Error::other)?;
+        let failed = outcomes.iter().filter(|o| o.result.is_err()).count();
+        Ok(match failed {
+            0 => format!("requested `{id}` ({} PR/MRs)", outcomes.len()),
+            n => format!("requested `{id}` — {n} repo(s) failed"),
+        })
+    }
+
+    fn change_land(&mut self, id: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let tokens = Tokens::from_env();
+        let outcomes = orchestrate::land(&ws, &tokens, id).map_err(std::io::Error::other)?;
+        match outcomes.iter().find(|o| o.result.is_err()) {
+            Some(outcome) => Ok(format!("landing stopped at `{}`", outcome.name)),
+            None => Ok(format!("landed `{id}` ({} repos)", outcomes.len())),
+        }
+    }
+}
+
+fn dash() -> Result<()> {
+    open_workspace()?;
+    if let Some(path) = keel_tui::run(Box::new(CliController))? {
+        println!("{}", path.display());
+    }
     Ok(())
 }

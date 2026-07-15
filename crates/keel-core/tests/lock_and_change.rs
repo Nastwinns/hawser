@@ -182,6 +182,9 @@ mod pin_tests {
         fn head_sha(&self, repo: &Path) -> Result<String, GitError> {
             Ok(self.heads[repo].0.clone())
         }
+        fn ahead_behind(&self, _repo: &Path) -> Result<Option<(u64, u64)>, GitError> {
+            Ok(None)
+        }
         fn current_branch(&self, repo: &Path) -> Result<Option<String>, GitError> {
             Ok(self.heads[repo].1.clone())
         }

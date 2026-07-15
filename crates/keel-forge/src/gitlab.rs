@@ -1,6 +1,8 @@
-//! GitLab [`Forge`] implementation over the REST v4 API (gitlab.com and
-//! self-hosted instances).
+//! GitLab [`Forge`] implementation over the REST v4 API via `reqwest`
+//! (gitlab.com and self-hosted instances).
 
+use reqwest::Method;
+use reqwest::blocking::Client;
 use serde_json::{Value, json};
 
 use crate::{Forge, ForgeError, PrHandle, PrSpec, PrState, PrStatus, repo_coords};
@@ -9,11 +11,15 @@ use crate::{Forge, ForgeError, PrHandle, PrSpec, PrState, PrStatus, repo_coords}
 #[derive(Debug, Clone)]
 pub struct GitLab {
     token: String,
+    http: Client,
 }
 
 impl GitLab {
     pub fn new(token: String) -> Self {
-        Self { token }
+        Self {
+            token,
+            http: Client::new(),
+        }
     }
 
     fn project_api(&self, repo_url: &str) -> Result<String, ForgeError> {
@@ -26,24 +32,27 @@ impl GitLab {
         ))
     }
 
-    fn call(&self, method: &str, url: &str, body: Option<Value>) -> Result<Value, ForgeError> {
-        let request = ureq::request(method, url).set("private-token", &self.token);
-        let response = match body {
-            Some(json) => request.send_json(json),
-            None => request.call(),
-        };
-        match response {
-            Ok(resp) => resp
-                .into_json()
-                .map_err(|err| ForgeError::Api(format!("invalid JSON from {url}: {err}"))),
-            Err(ureq::Error::Status(code, resp)) => {
-                let detail = resp.into_string().unwrap_or_default();
-                Err(ForgeError::Api(format!(
-                    "{method} {url} -> {code}: {detail}"
-                )))
-            }
-            Err(err) => Err(ForgeError::Api(format!("{method} {url}: {err}"))),
+    fn call(&self, method: Method, url: &str, body: Option<Value>) -> Result<Value, ForgeError> {
+        let mut request = self
+            .http
+            .request(method.clone(), url)
+            .header("PRIVATE-TOKEN", &self.token);
+        if let Some(json) = body {
+            request = request.json(&json);
         }
+        let response = request
+            .send()
+            .map_err(|err| ForgeError::Api(format!("{method} {url}: {err}")))?;
+        let status = response.status();
+        if !status.is_success() {
+            let detail = response.text().unwrap_or_default();
+            return Err(ForgeError::Api(format!(
+                "{method} {url} -> {status}: {detail}"
+            )));
+        }
+        response
+            .json()
+            .map_err(|err| ForgeError::Api(format!("invalid JSON from {url}: {err}")))
     }
 }
 
@@ -64,15 +73,19 @@ fn state_of(mr: &Value) -> PrState {
 impl Forge for GitLab {
     fn open_pr(&self, repo_url: &str, spec: &PrSpec) -> Result<PrHandle, ForgeError> {
         let api = self.project_api(repo_url)?;
+        let mut payload = json!({
+            "title": spec.title,
+            "description": spec.body,
+            "source_branch": spec.source_branch,
+            "target_branch": spec.target_branch,
+        });
+        if !spec.labels.is_empty() {
+            payload["labels"] = Value::String(spec.labels.join(","));
+        }
         let mr = self.call(
-            "POST",
+            Method::POST,
             &format!("{api}/merge_requests"),
-            Some(json!({
-                "title": spec.title,
-                "description": spec.body,
-                "source_branch": spec.source_branch,
-                "target_branch": spec.target_branch,
-            })),
+            Some(payload),
         )?;
         Ok(PrHandle {
             url: mr["web_url"].as_str().unwrap_or_default().to_string(),
@@ -82,10 +95,10 @@ impl Forge for GitLab {
 
     fn pr_status(&self, repo_url: &str, number: u64) -> Result<PrStatus, ForgeError> {
         let api = self.project_api(repo_url)?;
-        let mr = self.call("GET", &format!("{api}/merge_requests/{number}"), None)?;
+        let mr = self.call(Method::GET, &format!("{api}/merge_requests/{number}"), None)?;
 
         let approvals = self.call(
-            "GET",
+            Method::GET,
             &format!("{api}/merge_requests/{number}/approvals"),
             None,
         )?;
@@ -108,7 +121,7 @@ impl Forge for GitLab {
     fn merge_pr(&self, repo_url: &str, number: u64) -> Result<(), ForgeError> {
         let api = self.project_api(repo_url)?;
         self.call(
-            "PUT",
+            Method::PUT,
             &format!("{api}/merge_requests/{number}/merge"),
             Some(json!({})),
         )?;
@@ -118,7 +131,7 @@ impl Forge for GitLab {
     fn update_pr_body(&self, repo_url: &str, number: u64, body: &str) -> Result<(), ForgeError> {
         let api = self.project_api(repo_url)?;
         self.call(
-            "PUT",
+            Method::PUT,
             &format!("{api}/merge_requests/{number}"),
             Some(json!({ "description": body })),
         )?;

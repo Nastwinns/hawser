@@ -55,7 +55,7 @@ keel sync                       # clones every repo, writes keel.lock
 A typical session — compose, inspect, branch across repos:
 
 ```console
-$ keel graph
+$ keel tree
 keel.toml
 ├─ gateway
 │  ├─ kernel    v6.1.2       (git@gitlab.company.com:firmware/kernel.git)
@@ -66,7 +66,7 @@ keel.toml
    └─ hal     main           (git@gitlab.company.com:firmware/hal.git)
 
 $ keel status
-BRICK     BRANCH   HEAD      DIRTY  DRIFT
+REPO      BRANCH   HEAD      DIRTY  DRIFT
 kernel    v6.1.2   a1b2c3d4  -      -
 hal       main     9f8e7d6c  yes    -
 app-mqtt  release  4d5e6f7a  -      YES
@@ -81,8 +81,9 @@ changeset `FEAT-42` started across 2 repo(s):
 
 ## How it composes
 
-One manifest declares **repos** (repos) and **stacks** (named sets of repos). A repo is
-shared, never duplicated. A committed lockfile pins every repo to an exact SHA.
+One manifest declares **repos** (the Git repositories) and composes them into **stacks**
+(named sets of repos). A repo is shared, never duplicated. A committed lockfile pins every
+repo to an exact SHA.
 
 ```
               keel.toml  (intent)                 keel.lock  (pinned SHAs, committed)
@@ -221,22 +222,22 @@ rev = "main"                      # `keel sync --overlay dev`: kernel follows ma
 ## Command surface
 
 ```
-keel
+keel                             Open the TUI cockpit (no subcommand)
 ├── init <manifest-url|path>     Bootstrap a workspace from a manifest
-├── sync [--stack P]           Clone/pull repos to the state in keel.lock
+├── sync [--stack S]             Clone/pull repos to the state in keel.lock
 │                                (resolves + writes lock if absent)  [--shared]
 ├── lock                         Resolve every repo's rev to a SHA -> keel.lock
-├── freeze / unfreeze            Pin all revs to current SHAs / restore to manifest
-├── switch <stack>             Materialize a different stack in the workspace
+├── pin / unpin                  Pin lock to current checkouts / restore to manifest revs
+├── switch <stack>               Materialize a different stack in the workspace
 ├── status                       Aggregated fleet status (dirty/ahead/behind per repo)
-├── forall -c '<cmd>'            Run a command across repos, in parallel
-├── graph                        Print the stack -> repo tree
+├── run '<cmd>'                  Run a command across repos, in parallel
+├── tree                         Print the stack -> repo tree
 │
-├── repo   add|remove|list      Edit repos in the manifest
-├── stack add|remove|list      Edit stacks in the manifest
+├── repo   add|remove|list       Edit repos in the manifest
+├── stack  add|remove|list       Edit stacks in the manifest
 │
 ├── change                       Cross-repo feature ("changeset") workflow
-│   ├── start <id> [--repos ..] Create one branch across the affected repos
+│   ├── start <id> [--repos ..]  Create one branch across the affected repos
 │   │                            [--skip-branch] adopt each repo's current branch instead
 │   ├── status                   Per-repo branch + PR/MR review + CI dashboard
 │   ├── request                  Open linked PR/MR on GitHub/GitLab for each repo
@@ -250,29 +251,149 @@ keel
 │   └── cleanup                  Promote and remove temporary branches
 │
 ├── import --from <west.yml|default.xml>   Convert a west/repo manifest to keel.toml
-└── tui                          Launch the fleet dashboard (ratatui)
+└── dash                         Open the fleet dashboard (same as bare `keel`)
 ```
 
-Key differentiators vs the field: `lock`/`freeze` (reproducibility), `switch <stack>`
-(composition), parallel `forall` and `sync`, `change request` on **both** GitHub and
+Verbs are one guessable word each; old names (`graph`, `forall`, `freeze`, `tui`) stay as
+hidden aliases. Full lexicon: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md).
+
+Key differentiators vs the field: `lock`/`pin` (reproducibility), `switch <stack>`
+(composition), parallel `run` and `sync`, `change request` on **both** GitHub and
 GitLab from Rust, and a real fleet **TUI**.
 
 ---
 
-## The TUI
+## The TUI — a k9s-grade cockpit
 
-A `ratatui` dashboard, because multi-repo state is intrinsically 2-D (N repos × their
-state) and works over SSH — the right shape for embedded/CI users:
+The dashboard is a **first-class product, not an afterthought.** Target: the polish and flow
+of [`k9s`](https://k9scli.io) — keyboard-first, fast, discoverable, beautiful in a terminal.
+Multi-repo state is intrinsically 2-D (N repos × their state) and works over SSH, so a
+`ratatui` cockpit is the right shape for embedded/CI users.
 
-- left: stack → repo tree
-- right: per-repo detail (branch, SHA, dirty, ahead/behind, drift vs lock)
-- changeset view: the N branches of a feature, each with PR/MR review + CI status
-- keyboard actions: sync, status, switch, start/land a changeset
+Design bar (non-negotiable):
+- **Keyboard-first, modal, k9s-style.** `:` command bar, `/` filter, single-key actions,
+  a live-updating grid. Mouse optional, never required.
+- **Instant feedback.** Async refresh, spinners on long ops, no frozen frames.
+- **Legible at a glance.** Color-coded status (clean / dirty / drift / missing), consistent
+  glyphs, a help bar that always shows the next keystrokes.
+- **Themeable + `NO_COLOR`-aware.** Sane in light and dark terminals.
 
-A richer GUI is possible later via **Tauri**, reusing the exact same Rust core. TUI ships
-first: one binary, low cost, on-target.
+Views:
+- left: stack → repo tree; right: per-repo detail (branch, SHA, dirty, ahead/behind, drift).
+- changeset view: the N branches of a feature, each with PR/MR review + CI status.
+- actions: sync, switch, `pin`, start/land a changeset — all keyboard-driven.
+
+### Cockpit layout — fleet view
+
+```text
+ keel ▸ ~/work/gateway ───────────────────────── stack: gateway   lock: ✓   repos: 3/3
+────────────────────────────────────────────────────────────────────────────────────────
+ REPO        BRANCH        HEAD       DIRTY   DRIFT   AHEAD/BEHIND
+▸kernel      v6.1.2        a1b2c3d4     ·       ·        0 / 0
+ hal         main          9f8e7d6c    yes      ·        2 / 0
+ app-mqtt    release/2.x   4d5e6f7a     ·      DRIFT     0 / 5
+────────────────────────────────────────────────────────────────────────────────────────
+ hal  ›  path hal/   branch main (ahead 2)   dirty 3 files   locked 9f8e7d6c   grp firmware
+────────────────────────────────────────────────────────────────────────────────────────
+ [s]ync [S]witch [p]in [l]ock [t]ree [c]hange [r]un  [/]filter [:]cmd [?]help [q]uit    :█
+```
+
+Green = clean · yellow = dirty · red = drift · dim = not cloned. `▸` marks the cursor row;
+the bottom strip details it live.
+
+### Cockpit layout — changeset view
+
+```text
+ keel ▸ change FEAT-42 ───────────────────────────────── 2 repos   branch: change/FEAT-42
+────────────────────────────────────────────────────────────────────────────────────────
+ REPO        BRANCH          ON IT  DIRTY   HEAD       PR / MR        CI
+▸kernel      change/FEAT-42   yes     ·     a1b2c3d4   #128 ● open    ✓ passed
+ app-mqtt    change/FEAT-42   yes    yes    4d5e6f7a   !47  ◐ review   ⏳ running
+────────────────────────────────────────────────────────────────────────────────────────
+ [n]ew [␣]select [R]equest-PR [L]and [g]oto [b]ack  [/]filter [:]cmd [?]help [q]uit     :█
+```
+
+Keyboard-first, k9s-style: `:` opens a command bar mirroring the CLI verbs (`:sync`,
+`:stack sensor-node`, `:run git status`), `/` filters the grid, single keys act on the cursor
+row. Full keymap: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md#tui-keymap).
+
+Open it with a bare `keel` (or `keel dash`). A richer GUI is possible later via **Tauri**,
+reusing the exact same Rust core. The TUI ships first: one binary, low cost, on-target.
 
 ---
+
+## Cookbook — commands & output
+
+Illustrative output for the shipped commands (Phase 1). Colorized on a TTY, plain when piped.
+
+```console
+$ keel init keel.toml
+initialized workspace from keel.toml
+next: keel sync
+
+$ keel sync
+wrote keel.lock (3 repos pinned)
+  ✓ kernel    cloned
+  ✓ hal       cloned
+  ✓ app-mqtt  cloned
+synced stack `gateway` (3/3 repos)
+
+$ keel tree
+keel.toml
+└─ gateway
+   ├─ kernel    v6.1.2       (git@gitlab.company.com:firmware/kernel.git)
+   ├─ hal       main         (git@gitlab.company.com:firmware/hal.git)
+   └─ app-mqtt  release/2.x  (git@github.com:acme/app-mqtt.git)
+
+$ keel status
+REPO      BRANCH   HEAD      DIRTY  DRIFT
+kernel    v6.1.2   a1b2c3d4  -      -
+hal       main     9f8e7d6c  yes    -
+app-mqtt  release  4d5e6f7a  -      YES
+
+$ keel run 'git fetch --tags'
+── kernel ──
+── hal ──
+── app-mqtt ──
+ran in 3/3 repos
+
+$ keel lock
+wrote keel.lock (3 repos pinned)
+  kernel    a1b2c3d4e5f6  <- v6.1.2
+  hal       9f8e7d6c5b4a  <- main
+  app-mqtt  4d5e6f7a8b9c  <- release/2.x
+
+$ keel pin                       # snapshot current checkouts (no network)
+pinned keel.lock to current HEADs (3 repos)
+
+$ keel change start FEAT-42 --repos kernel,app-mqtt
+changeset `FEAT-42` started across 2 repo(s):
+  kernel    -> change/FEAT-42
+  app-mqtt  -> change/FEAT-42
+
+$ keel change status FEAT-42
+changeset `FEAT-42`
+REPO      BRANCH           ON IT  DIRTY  HEAD      PR
+kernel    change/FEAT-42   yes    -      a1b2c3d4  —
+app-mqtt  change/FEAT-42   yes    yes    4d5e6f7a  —
+(PR/MR state arrives with `change request` — Phase 3)
+```
+
+## Testing
+
+```bash
+cargo test --workspace        # unit + integration; 24 tests, all green
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Covered today: manifest parse + referential validation, TOML round-trip, resolver + overlay
+precedence, lockfile read/write, changeset start/status. Planned (see roadmap):
+
+- **Golden CLI-output tests** — snapshot `tree`/`status`/`lock` output so lexicon and format
+  changes are caught in review.
+- **Determinism tests** — assert `keel.lock` is byte-identical across Linux/macOS/Windows for
+  the same inputs (a hard requirement for certification evidence, [COMPLIANCE §8](docs/COMPLIANCE.md)).
 
 ## Status
 
@@ -284,6 +405,7 @@ changesets, read-only TUI, CI matrix. See the docs below for the plan and the ro
 | Doc | What |
 |-----|------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, data flows, phased implementation plan |
+| [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Tool qualification, SBOM/CRA, crypto/signing, GDPR, secure SDLC |
 | [docs/COMMERCIALIZATION.md](docs/COMMERCIALIZATION.md) | Editions, licensing, LTS, qualification kit, pricing, GTM |
 | [AGENTS.md](AGENTS.md) | Token-saving output rules for AI coding agents in this repo |

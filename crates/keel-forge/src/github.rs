@@ -1,47 +1,69 @@
-//! GitHub [`Forge`] implementation over the REST v3 API.
+//! GitHub [`Forge`] implementation over `octocrab` (REST v3), driven from a
+//! private current-thread tokio runtime so the trait stays synchronous.
 
 use serde_json::{Value, json};
 
 use crate::{Forge, ForgeError, PrHandle, PrSpec, PrState, PrStatus, repo_coords};
 
 /// GitHub client: github.com and GitHub Enterprise (`/api/v3`).
-#[derive(Debug, Clone)]
 pub struct GitHub {
     token: String,
+    runtime: tokio::runtime::Runtime,
 }
 
 impl GitHub {
-    pub fn new(token: String) -> Self {
-        Self { token }
+    pub fn new(token: String) -> Result<Self, ForgeError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|err| ForgeError::Api(format!("tokio runtime: {err}")))?;
+        Ok(Self { token, runtime })
     }
 
-    fn repo_api(&self, repo_url: &str) -> Result<String, ForgeError> {
+    fn client(&self, host: &str) -> Result<octocrab::Octocrab, ForgeError> {
+        let mut builder = octocrab::Octocrab::builder().personal_token(self.token.clone());
+        if host != "github.com" {
+            builder = builder
+                .base_uri(api_base(host))
+                .map_err(|err| ForgeError::Api(format!("invalid GitHub base uri: {err}")))?;
+        }
+        builder
+            .build()
+            .map_err(|err| ForgeError::Api(format!("GitHub client: {err}")))
+    }
+
+    fn split(&self, repo_url: &str) -> Result<(String, String), ForgeError> {
         let coords = repo_coords(repo_url)
             .ok_or_else(|| ForgeError::UnsupportedUrl(repo_url.to_string()))?;
-        Ok(format!("{}/repos/{}", api_base(&coords.host), coords.path))
+        Ok((coords.host, coords.path))
     }
 
-    fn call(&self, method: &str, url: &str, body: Option<Value>) -> Result<Value, ForgeError> {
-        let request = ureq::request(method, url)
-            .set("authorization", &format!("Bearer {}", self.token))
-            .set("accept", "application/vnd.github+json")
-            .set("user-agent", "keel");
-        let response = match body {
-            Some(json) => request.send_json(json),
-            None => request.call(),
-        };
-        match response {
-            Ok(resp) => resp
-                .into_json()
-                .map_err(|err| ForgeError::Api(format!("invalid JSON from {url}: {err}"))),
-            Err(ureq::Error::Status(code, resp)) => {
-                let detail = resp.into_string().unwrap_or_default();
-                Err(ForgeError::Api(format!(
-                    "{method} {url} -> {code}: {detail}"
-                )))
+    fn get(&self, host: &str, route: &str) -> Result<Value, ForgeError> {
+        let client = self.client(host)?;
+        self.runtime
+            .block_on(client.get::<Value, _, ()>(route, None))
+            .map_err(|err| ForgeError::Api(format!("GET {route}: {err}")))
+    }
+
+    fn send(
+        &self,
+        host: &str,
+        method: &str,
+        route: &str,
+        body: &Value,
+    ) -> Result<Value, ForgeError> {
+        let client = self.client(host)?;
+        let call = async {
+            match method {
+                "POST" => client.post(route, Some(body)).await,
+                "PATCH" => client.patch(route, Some(body)).await,
+                "PUT" => client.put(route, Some(body)).await,
+                other => unreachable!("unsupported method {other}"),
             }
-            Err(err) => Err(ForgeError::Api(format!("{method} {url}: {err}"))),
-        }
+        };
+        self.runtime
+            .block_on(call)
+            .map_err(|err| ForgeError::Api(format!("{method} {route}: {err}")))
     }
 }
 
@@ -68,35 +90,45 @@ fn state_of(pr: &Value) -> PrState {
 
 impl Forge for GitHub {
     fn open_pr(&self, repo_url: &str, spec: &PrSpec) -> Result<PrHandle, ForgeError> {
-        let api = self.repo_api(repo_url)?;
-        let pr = self.call(
+        let (host, path) = self.split(repo_url)?;
+        let pr = self.send(
+            &host,
             "POST",
-            &format!("{api}/pulls"),
-            Some(json!({
+            &format!("/repos/{path}/pulls"),
+            &json!({
                 "title": spec.title,
                 "body": spec.body,
                 "head": spec.source_branch,
                 "base": spec.target_branch,
-            })),
+            }),
         )?;
+        let number = pr["number"].as_u64().unwrap_or_default();
+        if !spec.labels.is_empty() {
+            self.send(
+                &host,
+                "POST",
+                &format!("/repos/{path}/issues/{number}/labels"),
+                &json!({ "labels": spec.labels }),
+            )?;
+        }
         Ok(PrHandle {
             url: pr["html_url"].as_str().unwrap_or_default().to_string(),
-            number: pr["number"].as_u64().unwrap_or_default(),
+            number,
         })
     }
 
     fn pr_status(&self, repo_url: &str, number: u64) -> Result<PrStatus, ForgeError> {
-        let api = self.repo_api(repo_url)?;
-        let pr = self.call("GET", &format!("{api}/pulls/{number}"), None)?;
+        let (host, path) = self.split(repo_url)?;
+        let pr = self.get(&host, &format!("/repos/{path}/pulls/{number}"))?;
 
-        let reviews = self.call("GET", &format!("{api}/pulls/{number}/reviews"), None)?;
+        let reviews = self.get(&host, &format!("/repos/{path}/pulls/{number}/reviews"))?;
         let approved = reviews
             .as_array()
             .is_some_and(|list| list.iter().any(|r| r["state"] == "APPROVED"));
 
         let ci_passing = match pr["head"]["sha"].as_str() {
             Some(sha) => {
-                let status = self.call("GET", &format!("{api}/commits/{sha}/status"), None)?;
+                let status = self.get(&host, &format!("/repos/{path}/commits/{sha}/status"))?;
                 match (
                     status["total_count"].as_u64().unwrap_or(0),
                     status["state"].as_str(),
@@ -118,21 +150,23 @@ impl Forge for GitHub {
     }
 
     fn merge_pr(&self, repo_url: &str, number: u64) -> Result<(), ForgeError> {
-        let api = self.repo_api(repo_url)?;
-        self.call(
+        let (host, path) = self.split(repo_url)?;
+        self.send(
+            &host,
             "PUT",
-            &format!("{api}/pulls/{number}/merge"),
-            Some(json!({})),
+            &format!("/repos/{path}/pulls/{number}/merge"),
+            &json!({}),
         )?;
         Ok(())
     }
 
     fn update_pr_body(&self, repo_url: &str, number: u64, body: &str) -> Result<(), ForgeError> {
-        let api = self.repo_api(repo_url)?;
-        self.call(
+        let (host, path) = self.split(repo_url)?;
+        self.send(
+            &host,
             "PATCH",
-            &format!("{api}/pulls/{number}"),
-            Some(json!({ "body": body })),
+            &format!("/repos/{path}/pulls/{number}"),
+            &json!({ "body": body }),
         )?;
         Ok(())
     }

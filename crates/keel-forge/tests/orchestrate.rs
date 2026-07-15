@@ -44,6 +44,9 @@ impl GitBackend for FakeGit {
     fn head_sha(&self, _repo: &Path) -> Result<String, GitError> {
         Ok("b".repeat(40))
     }
+    fn ahead_behind(&self, _repo: &Path) -> Result<Option<(u64, u64)>, GitError> {
+        Ok(None)
+    }
     fn current_branch(&self, _repo: &Path) -> Result<Option<String>, GitError> {
         Ok(Some("main".to_string()))
     }
@@ -123,7 +126,11 @@ struct FakeFactory {
 }
 
 impl ForgeFactory for FakeFactory {
-    fn client_for(&self, _url: &str) -> Result<Box<dyn Forge>, ForgeError> {
+    fn client_for(
+        &self,
+        _url: &str,
+        _hint: Option<keel_forge::ForgeKind>,
+    ) -> Result<Box<dyn Forge>, ForgeError> {
         Ok(Box::new(FakeForge {
             journal: Arc::clone(&self.journal),
             fail_merge_for: self.fail_merge_for.clone(),
@@ -146,6 +153,7 @@ fn workspace(dir: &Path) -> Workspace {
 fn seed_changeset(ws: &Workspace, with_prs: bool) {
     let changeset = Changeset {
         id: "FEAT-1".to_string(),
+        labels: Vec::new(),
         repos: vec![
             ChangeRepo {
                 name: "kernel".to_string(),
@@ -179,8 +187,15 @@ fn request_opens_and_cross_links_all_prs() {
     seed_changeset(&ws, false);
     let journal = Arc::new(Mutex::new(Journal::default()));
 
-    let outcomes =
-        orchestrate::request(&ws, &FakeGit, &journal_factory(&journal), "FEAT-1", None).unwrap();
+    let outcomes = orchestrate::request(
+        &ws,
+        &FakeGit,
+        &journal_factory(&journal),
+        "FEAT-1",
+        None,
+        None,
+    )
+    .unwrap();
     assert_eq!(outcomes.len(), 2);
     assert!(outcomes.iter().all(|o| o.result.is_ok()));
 
@@ -203,8 +218,15 @@ fn request_is_idempotent_for_already_opened_prs() {
     seed_changeset(&ws, true);
     let journal = Arc::new(Mutex::new(Journal::default()));
 
-    let outcomes =
-        orchestrate::request(&ws, &FakeGit, &journal_factory(&journal), "FEAT-1", None).unwrap();
+    let outcomes = orchestrate::request(
+        &ws,
+        &FakeGit,
+        &journal_factory(&journal),
+        "FEAT-1",
+        None,
+        None,
+    )
+    .unwrap();
     assert!(outcomes.iter().all(|o| o.result.is_ok()));
     assert!(
         journal.lock().unwrap().opened.is_empty(),
@@ -228,6 +250,29 @@ fn land_merges_in_order_and_stops_on_failure() {
     assert_eq!(outcomes.len(), 1, "stops at the first failure");
     assert!(matches!(outcomes[0].result, Err(RepoFailure::Forge(_))));
     assert!(journal.lock().unwrap().merged.is_empty());
+}
+
+#[test]
+fn land_follows_manifest_deps_topologically() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("keel.toml"),
+        "[repo.kernel]\nurl = \"/git/kernel\"\nrev = \"main\"\ndeps = [\"app\"]\n\n\
+         [repo.app]\nurl = \"/git/app\"\nrev = \"main\"\n\n\
+         [stack.s]\nrepos = [\"kernel\", \"app\"]\n",
+    )
+    .unwrap();
+    let ws = Workspace::open(dir.path()).unwrap();
+    seed_changeset(&ws, true);
+    let journal = Arc::new(Mutex::new(Journal::default()));
+
+    let outcomes = orchestrate::land(&ws, &journal_factory(&journal), "FEAT-1").unwrap();
+    assert!(outcomes.iter().all(|o| o.result.is_ok()));
+    assert_eq!(
+        journal.lock().unwrap().merged,
+        vec!["/git/app", "/git/kernel"],
+        "kernel deps on app, so app merges first"
+    );
 }
 
 #[test]

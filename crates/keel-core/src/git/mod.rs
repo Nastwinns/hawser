@@ -78,6 +78,8 @@ pub trait GitBackend: Sync {
     /// Push `branch` to origin (sets upstream on first push).
     fn push_branch(&self, repo: &Path, branch: &str) -> Result<(), GitError>;
     fn head_sha(&self, repo: &Path) -> Result<String, GitError>;
+    /// Commits ahead/behind the upstream branch; `None` without an upstream.
+    fn ahead_behind(&self, repo: &Path) -> Result<Option<(u64, u64)>, GitError>;
     /// `None` means detached HEAD.
     fn current_branch(&self, repo: &Path) -> Result<Option<String>, GitError>;
     fn is_dirty(&self, repo: &Path) -> Result<bool, GitError>;

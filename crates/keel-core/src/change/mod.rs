@@ -55,6 +55,9 @@ pub struct ChangeRepo {
 #[serde(deny_unknown_fields)]
 pub struct Changeset {
     pub id: String,
+    /// Labels forwarded to the PR/MRs at `change request`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
     #[serde(
         default,
         rename = "repo",
@@ -137,6 +140,7 @@ pub fn start(
     repos: Option<&[String]>,
     branch: Option<&str>,
     skip_branch: bool,
+    labels: &[String],
 ) -> Result<Changeset, ChangeError> {
     if changeset_path(ws, id).exists() {
         return Err(ChangeError::AlreadyExists(id.to_string()));
@@ -185,6 +189,7 @@ pub fn start(
 
     let changeset = Changeset {
         id: id.to_string(),
+        labels: labels.to_vec(),
         repos: entries,
     };
     changeset.save(ws)?;

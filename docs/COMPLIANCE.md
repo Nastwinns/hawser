@@ -93,7 +93,7 @@ standard; the *artifacts* Keelson must supply are largely shared (§2.6).
 The commercial and certification wedge. Keelson turns "trust our process" into "here is the
 signed, reproducible baseline".
 
-- **`keel.lock` = the configuration baseline.** Every brick pinned to an exact object id.
+- **`keel.lock` = the configuration baseline.** Every repo pinned to an exact object id.
   Committed, diff-reviewable, machine-verifiable.
 - **Deterministic resolution.** Documented, versioned resolution algorithm (see
   `resolver/mod.rs`); overlay precedence is total and stable.
@@ -120,7 +120,7 @@ Regulatory tailwind — increasingly mandatory, not optional.
 - **SBOM export** in both dominant formats: **CycloneDX** and **SPDX 2.3 (ISO/IEC 5962)**,
   SPDX 3.0 when stable. Include NTIA minimum elements (supplier, component, version, unique
   id, dependency relationship, author, timestamp).
-- Keelson emits an SBOM **of the composed product** (bricks + their pinned ids) *and* ships
+- Keelson emits an SBOM **of the composed product** (repos + their pinned ids) *and* ships
   an SBOM **of `keel` itself** (its Rust dependency tree) per release.
 - **EU Cyber Resilience Act (Regulation (EU) 2024/2847).** In force since Dec 2024; core
   obligations apply ~Dec 2027, vulnerability/incident reporting ~Sept 2026. Requires
@@ -142,7 +142,7 @@ crypto, be FIPS-swappable, be secret-hygienic.
 ### 5.1 Signature verification (source integrity)
 - Verify **commit/tag signatures** before checkout when the customer enables it: OpenPGP
   (GPG), **SSH signing**, and **Sigstore / gitsign** (keyless). Policy modes:
-  `off | warn | require`. `require` fails `sync` on any unsigned/unverified brick.
+  `off | warn | require`. `require` fails `sync` on any unsigned/unverified repo.
 - Trust anchors configured per workspace (allowed signer sets, keyrings, Fulcio roots).
 
 ### 5.2 Baseline integrity
@@ -241,7 +241,7 @@ development assurance.
   tree selection on Linux/macOS/Windows. No `Date.now`, no unordered iteration in
   serialization (use ordered maps — already `IndexMap`), canonical TOML emission for the lock.
 - **Structured audit log.** Every mutating operation records actor, operation, affected
-  brick, before/after object id, timestamp — machine-readable (JSON) for CI evidence capture.
+  repo, before/after object id, timestamp — machine-readable (JSON) for CI evidence capture.
 - **Machine-readable output.** `--format json` on status/verify/graph/evidence so pipelines
   can capture and diff cert evidence automatically. Stable, versioned schemas.
 - **Stable exit codes** so CI gates are reliable (0 ok, distinct non-zero for drift / verify

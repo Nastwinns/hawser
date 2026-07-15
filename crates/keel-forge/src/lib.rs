@@ -23,6 +23,8 @@ pub struct PrSpec {
     pub body: String,
     pub source_branch: String,
     pub target_branch: String,
+    /// Labels applied to the PR/MR (from `change start --label`).
+    pub labels: Vec<String>,
 }
 
 /// Handle to an opened PR/MR.
@@ -77,8 +79,19 @@ pub trait Forge {
 
 /// Turns a repo URL into a ready-to-call [`Forge`] client.
 /// The production impl is [`Tokens`]; tests substitute fakes.
+/// `hint` is the manifest's explicit `forge = "github" | "gitlab"` key on the
+/// repo's remote; it wins over URL detection.
 pub trait ForgeFactory: Sync {
-    fn client_for(&self, url: &str) -> Result<Box<dyn Forge>, ForgeError>;
+    fn client_for(&self, url: &str, hint: Option<ForgeKind>) -> Result<Box<dyn Forge>, ForgeError>;
+}
+
+/// Parse a manifest `forge =` value.
+pub fn kind_from_key(key: &str) -> Option<ForgeKind> {
+    match key {
+        "github" => Some(ForgeKind::GitHub),
+        "gitlab" => Some(ForgeKind::GitLab),
+        _ => None,
+    }
 }
 
 /// API tokens, usually read from the environment by the front-end.
@@ -104,14 +117,14 @@ impl Tokens {
 }
 
 impl ForgeFactory for Tokens {
-    fn client_for(&self, url: &str) -> Result<Box<dyn Forge>, ForgeError> {
-        match detect(url) {
+    fn client_for(&self, url: &str, hint: Option<ForgeKind>) -> Result<Box<dyn Forge>, ForgeError> {
+        match hint.unwrap_or_else(|| detect(url)) {
             ForgeKind::GitHub => {
                 let token = self.github.clone().ok_or(ForgeError::MissingToken(
                     "GitHub",
                     "KEEL_GITHUB_TOKEN or GITHUB_TOKEN",
                 ))?;
-                Ok(Box::new(github::GitHub::new(token)))
+                Ok(Box::new(github::GitHub::new(token)?))
             }
             ForgeKind::GitLab => {
                 let token = self.gitlab.clone().ok_or(ForgeError::MissingToken(

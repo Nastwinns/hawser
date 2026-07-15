@@ -19,6 +19,31 @@ Goal: a lexicon a new user understands without a glossary, and options that fix 
 Old spellings (`brick`, `product`, `bricks`, `--product`, `--bricks`) parse forever as
 aliases; serialization and docs use the new words only.
 
+## Verbs (commands)
+
+Rule: one guessable verb per action, git-adjacent, no jargon. Old names kept as hidden
+aliases so nothing breaks.
+
+| Verb | Does | Alias (accepted) |
+|------|------|------------------|
+| `keel init <path>` | bootstrap a workspace from a manifest | — |
+| `keel sync` | materialize the tree to `keel.lock` (writes lock if absent) | — |
+| `keel tree` | print the stack → repo tree | `graph` |
+| `keel status` | fleet status: branch, head, dirty, drift per repo | `st` |
+| `keel run '<cmd>'` | run a command in every repo, in parallel (positional) | `forall` (with `-c`) |
+| `keel lock` | resolve every repo's rev → SHA into `keel.lock` | — |
+| `keel pin` | pin `keel.lock` to current checkouts (no network) | `freeze` |
+| `keel unpin` | restore `keel.lock` to manifest revs | `unfreeze` |
+| `keel switch <stack>` | record a stack as current and sync it | — |
+| `keel repo add\|remove\|list` | edit the repos of the manifest | `brick` |
+| `keel stack add\|remove\|list` | edit the stacks of the manifest | `product` |
+| `keel change start\|status\|list` | cross-repo feature (changeset) workflow | — |
+| `keel` (no args) / `keel dash` | open the TUI cockpit | `tui` |
+
+`keel run` takes the command positionally (`keel run 'git fetch'`); `-c/--command` still works
+via the `forall` alias. Running `keel` with no subcommand opens the dashboard (like `htop`,
+`k9s`).
+
 ## Rev handling (user-friendly by default)
 
 - One field: `rev = "main" | "v6.1.2" | "<40-hex sha>"`. No `type =` key; the kind is
@@ -37,13 +62,57 @@ aliases; serialization and docs use the new words only.
 
 | Option | Commands | Note |
 |--------|----------|------|
-| `--stack <S>` | sync, graph | alias `--product`; default: last `switch`, else the only stack |
-| `--overlay <O>` | lock, sync*, graph | repeatable, later wins; *sync only when generating the lock |
-| `--group <G>` | sync, status, forall | repeatable |
+| `--stack <S>` | sync, tree | alias `--product`; default: last `switch`, else the only stack |
+| `--overlay <O>` | lock, sync*, tree | repeatable, later wins; *sync only when generating the lock |
+| `--group <G>` | sync, status, run | repeatable |
 | `--repos a,b` | change start | alias `--bricks` |
-| `-j, --jobs <N>` | sync, switch, forall | default min(cores, 8) |
+| `--slug <S>` | repo add | repo path under `--remote` (alias `--repo`); with `--remote`, not `--url` |
+| `-j, --jobs <N>` | sync, switch, run | default min(cores, 8) |
 | `--skip-branch` | change start | adopt current branches (RepoFleet) |
 | `--branch <B>` | change start | default `change/<id>` |
+
+## TUI keymap
+
+k9s-style, keyboard-first. Every action is a single key on the cursor row; `:` opens a
+command bar whose verbs mirror the CLI (learn one, know both).
+
+**Global**
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` or `k`/`j` | move cursor |
+| `enter` | drill in (stack → repos → repo detail) |
+| `esc` / `b` | back / up one level |
+| `/` | filter the grid (live) |
+| `:` | command bar (`:sync`, `:stack sensor-node`, `:run git status`, `:change FEAT-9`) |
+| `r` | run a command across repos (`:run …`) |
+| `?` | help overlay |
+| `q` / `ctrl-c` | quit |
+
+**Fleet view**
+
+| Key | Action |
+|-----|--------|
+| `s` | sync (cursor repo, or whole stack from the header) |
+| `S` | switch stack |
+| `p` | pin lock to current checkouts |
+| `l` | lock (resolve revs → SHA) |
+| `t` | tree view |
+| `c` | change menu (start / open a changeset) |
+| `g` | goto — drop to a shell in the cursor repo |
+
+**Changeset view**
+
+| Key | Action |
+|-----|--------|
+| `n` | new changeset |
+| `space` | select / deselect a repo |
+| `R` | request — open PR/MR for selected repos |
+| `L` | land — merge PR/MRs in dependency order |
+| `g` | goto the cursor repo |
+
+Command bar mirrors the verbs table above, so nothing new to learn. The bar echoes the exact
+CLI command it runs, so the TUI doubles as a way to discover the CLI.
 
 ## Planned (not yet implemented)
 
