@@ -353,6 +353,42 @@ export GITHUB_TOKEN=$(gh auth token)     # or any PAT, in your shell / CI secret
 Read-only composition (`sync`, `status`, `tree`, `verify`) needs no token at all — only
 the forge features do.
 
+## Extend haw with plugins
+
+`haw` is designed to become the **central hub** of your multi-repo workflow — you grow
+it without forking. It follows the git / cargo / kubectl pattern: any subcommand `haw`
+doesn't recognize is dispatched to a `haw-<name>` executable on your `PATH`.
+
+```bash
+haw jira sync          # runs haw-jira (any language), fed the fleet context
+haw bazel-graph        # runs haw-bazel-graph
+```
+
+Each plugin runs as a **separate process** — a broken or hanging plugin can never crash
+`haw`. It receives the current fleet as a `haw.plugin/1` JSON document (in `HAW_JSON`
+and on stdin), and its exit code becomes `haw`'s. A 20-line script is a valid plugin.
+
+Two ways to extend:
+
+- **New subcommands** — drop a `haw-<name>` binary on `PATH`; it's instantly a `haw`
+  command with full workspace context.
+- **Lifecycle hooks** — subscribe a plugin to workflow phases in the manifest, so it
+  fires automatically around fleet operations:
+
+  ```toml
+  [plugins]
+  sbom      = ["post-build", "pre-request"]   # generate an SBOM after builds
+  gate      = ["pre-request"]                 # block a PR that fails policy
+  provenance = ["post-land"]                  # sign + record what shipped
+  ```
+
+The governance features ship this way — `haw`'s own SBOM, signing/provenance, and
+secret-gate are plugins (`haw-compliance`, `haw-artifact`, `haw-git-gate`), so the
+extension model is the same one the core is built on.
+
+Write your own: **[docs/PLUGINS.md](docs/PLUGINS.md)** (the dispatch contract + the JSON
+schema) and **[docs/EXTENDING.md](docs/EXTENDING.md)**.
+
 ## Command surface
 
 ```
