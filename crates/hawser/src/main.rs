@@ -2450,6 +2450,30 @@ impl haw_tui::Controller for CliController {
         Ok(format!("approved {repo}#{number}"))
     }
 
+    fn pr_checkout(&mut self, repo: &str, number: u64) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let spec = ws.manifest.repos.get(repo).ok_or_else(|| {
+            std::io::Error::other(format!("repo `{repo}` is not in the manifest"))
+        })?;
+        let path = ws.root.join(spec.checkout_path(repo));
+        if !ShellGit.is_repo(&path) {
+            return Err(std::io::Error::other(format!(
+                "repo `{repo}` is not cloned at {}; run `haw sync` first",
+                path.display()
+            )));
+        }
+        // Pick the forge-specific pull ref: GitHub exposes `pull/N/head`,
+        // GitLab exposes `merge-requests/N/head`.
+        let pull_ref = match forge_label(&ws, repo).as_str() {
+            "gitlab" => format!("merge-requests/{number}/head"),
+            _ => format!("pull/{number}/head"),
+        };
+        let branch = format!("haw-pr-{number}");
+        run_git(&path, &["fetch", "origin", &format!("{pull_ref}:{branch}")])?;
+        run_git(&path, &["checkout", &branch])?;
+        Ok(format!("checked out {repo} PR #{number} → {branch}"))
+    }
+
     fn merge_cleanup(&mut self, repo: &str) -> std::io::Result<String> {
         let ws = self.workspace()?;
         let (name, path) = merge_repo(&ws, Some(repo)).map_err(std::io::Error::other)?;
@@ -2636,6 +2660,25 @@ fn forge_for_repo(
         .client_for(&url, hint)
         .map_err(std::io::Error::other)?;
     Ok((forge, url))
+}
+
+/// Run `git -C <path> <args...>`, mapping a non-zero exit or spawn failure to
+/// an `io::Error` carrying git's stderr. Used for write/exec git operations.
+fn run_git(path: &Path, args: &[&str]) -> std::io::Result<()> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(std::io::Error::other(format!(
+        "git {} failed: {}",
+        args.join(" "),
+        stderr.trim()
+    )))
 }
 
 /// Run `git -C <path> <args...>`, returning trimmed stdout or an error note.
@@ -2993,6 +3036,10 @@ impl haw_tui::Controller for DemoController {
 
     fn pr_approve(&mut self, repo: &str, number: u64) -> std::io::Result<String> {
         Ok(format!("approved {repo}#{number}"))
+    }
+
+    fn pr_checkout(&mut self, repo: &str, number: u64) -> std::io::Result<String> {
+        Ok(format!("checked out {repo} PR #{number} (demo)"))
     }
 
     fn merge_cleanup(&mut self, repo: &str) -> std::io::Result<String> {

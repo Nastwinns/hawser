@@ -74,32 +74,70 @@ via the `forall` alias. Running `haw` with no subcommand opens the dashboard (li
 ## TUI keymap
 
 k9s-style, keyboard-first. Every action is a single key on the cursor row; `:` opens a
-command bar whose verbs mirror the CLI (learn one, know both).
+command bar whose verbs mirror the CLI (learn one, know both). Data loads on a
+background worker — the UI never blocks. The fleet grid auto-refreshes every ~5s while
+idle (never while you're typing, in an overlay, a confirm, or a job is in flight);
+`F5` / `ctrl-r` refresh on demand.
 
 **Global**
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` or `k`/`j` | move cursor |
-| `enter` | drill in (stack → repos → repo detail) |
-| `esc` / `b` | back / up one level |
-| `/` | filter the grid (live) |
-| `:` | command bar (`:sync`, `:stack sensor-node`, `:run git status`, `:change FEAT-9`) |
-| `r` | run a command across repos (`:run …`) |
+| `↑`/`↓` or `k`/`j` | move cursor (in a drill-in: scroll one line) |
+| `PageUp` / `PageDown` | scroll a drill-in by a page |
+| `enter` | drill in (stack → fleet → repo/PR/CI detail) |
+| `esc` / `b` | clear an active filter, else go back one level |
+| `/` | fuzzy filter the grid (live, case-insensitive: `/knl` → `kernel`) |
+| `>` / `<` | move the active sort column right / left |
+| `.` | toggle sort direction (asc/desc); a `▲`/`▼` caret marks the column |
+| `:` | command bar (mirrors the CLI verbs, see below) |
 | `?` | help overlay |
+| `F5` / `ctrl-r` | refresh now |
 | `q` / `ctrl-c` | quit |
+
+Sorting (`<`/`>`/`.`) applies to the Fleet, PR/MR, and CI tables.
 
 **Fleet view**
 
 | Key | Action |
 |-----|--------|
-| `s` | sync (cursor repo, or whole stack from the header) |
+| `s` | sync — the marked repos if any, else the cursor repo, else the stack |
+| `space` | mark / unmark the cursor repo (shown as `◉`) |
+| `r` | run a command — across the marked repos if any, else the whole fleet |
 | `S` | switch stack |
 | `p` | pin lock to current checkouts |
 | `l` | lock (resolve revs → SHA) |
-| `t` | tree view |
-| `c` | change menu (start / open a changeset) |
-| `g` | goto — drop to a shell in the cursor repo |
+| `t` | tree view · `c` changesets |
+| `m` | fleet-wide open PR/MRs · `i` recent CI runs · `v` governance |
+| `g` | goto — quit and print the cursor repo's path (`cd "$(haw dash)"`) |
+| `enter` | drill into the cursor repo's git detail (branch, SHA, status, log, diffstat, remotes) |
+
+Marks persist across the Fleet and Changeset views; with marks set, both `s` (sync)
+and `r`/`:run` act on just the marked set.
+
+**Fleet PR/MR view (`m`) and CI view (`i`)**
+
+| Key | Action |
+|-----|--------|
+| `enter` | drill in — PR/MR: reviewers, checks, body, url · CI run: jobs, steps, conclusion |
+| `M` | merge the PR/MR on its forge (asks `y/n`) |
+| `A` | approve the PR/MR on its forge (asks `y/n`) |
+| `C` | checkout the PR/MR branch locally as `haw-pr-<n>` (asks `y/n`) |
+| `o` | open the cursor row in your browser |
+| `m` / `i` | refetch this view / jump to the sibling view |
+| `<` `>` `.` | sort the table |
+| `b` / `esc` | back |
+
+`M`/`A`/`C` are also available from within a PR/MR drill-in.
+
+**Governance view (`v`)**
+
+| Key | Action |
+|-----|--------|
+| `o` | open the cursor plugin's artifact (SBOM / provenance / …) |
+| `v` | refetch · `b` back |
+
+Lists registered plugins, their SBOM/provenance/signature artifacts, and findings.
 
 **Changeset view**
 
@@ -107,12 +145,34 @@ command bar whose verbs mirror the CLI (learn one, know both).
 |-----|--------|
 | `n` | new changeset |
 | `space` | select / deselect a repo |
-| `R` | request — open PR/MR for selected repos |
-| `L` | land — merge PR/MRs in dependency order |
+| `R` | request — open cross-linked PR/MRs (selected repos, or all if none; asks `y/n`) |
+| `L` | land — merge PR/MRs in dependency order (asks `y/n`) |
 | `g` | goto the cursor repo |
 
-Command bar mirrors the verbs table above, so nothing new to learn. The bar echoes the exact
-CLI command it runs, so the TUI doubles as a way to discover the CLI.
+**Command bar (`:`)**
+
+Verbs mirror the CLI, and the status line echoes the exact command each one runs, so
+the TUI doubles as a way to discover the CLI.
+
+| Command | Action |
+|---------|--------|
+| `:sync` | sync the current stack |
+| `:stack NAME` / `:switch NAME` | switch to a stack |
+| `:run CMD` | run a command (across marked repos in the Fleet, else the fleet) |
+| `:tree` | tree view |
+| `:prs` / `:ci` | fleet-wide PR/MR / CI views |
+| `:governance` / `:plugins` | governance view |
+| `:pin` / `:lock` | pin HEADs / commit the lock |
+| `:change [ID \| start ID \| land ID \| request ID]` | changeset workflow |
+| `:merge [cleanup <repo> \| abort <repo>]` | list / seal / abort in-progress merges |
+| `:theme [NAME]` | switch skin live (no arg lists the built-ins) |
+| `:help` | help overlay |
+
+**Themes / skins**
+
+Six built-in skins: `catppuccin` (default), `dracula`, `nord`, `gruvbox`,
+`solarized`, `monochrome`. `NO_COLOR` forces `monochrome`; `HAW_THEME=<name>` selects
+one at startup; `:theme <name>` switches live.
 
 ## Shipped since this design was written
 
@@ -127,9 +187,13 @@ CLI command it runs, so the TUI doubles as a way to discover the CLI.
   command positionally (`forall -c` still works).
 - TUI `g` (goto) quits and prints the repo path — `cd "$(haw dash)"` — instead of
   spawning a nested shell.
+- TUI: live idle auto-refresh (~5s), fuzzy `/` filter (nucleo), column sorting
+  (`<`/`>`/`.`), marks + bulk `s`/`r`, drill-ins for repos/PRs/CI runs, `M` merge /
+  `A` approve, fleet-wide governance (`v`) view, and six themes (`HAW_THEME`,
+  `NO_COLOR`, live `:theme`).
 
 ## Planned (not yet implemented)
 
 - Tag conveniences: `haw lock --as-of <tag>`; `haw status` marking `rev` kind (branch/tag/sha).
 - `haw auth login` — OAuth device flow + OS keychain (see ARCHITECTURE DR-14).
-- TUI: mouse support, themes beyond `NO_COLOR`, live ahead/behind refresh.
+- TUI: mouse support.

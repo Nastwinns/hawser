@@ -42,9 +42,10 @@ GitLab, and track review + CI state from one keyboard-driven cockpit.
   revs per variant without duplicating repo lists.
 - **Changesets.** One feature across N repos: one branch everywhere, N cross-linked
   PR/MRs, one aggregated status, `land` merges in dependency order.
-- **A k9s-grade TUI.** Bare `haw` opens the fleet cockpit: live grid, `/` filter,
-  `:` command bar, fleet-wide PR/MR (`m`) and CI (`i`) views, `o` opens the row in
-  your browser.
+- **A k9s-grade TUI.** Bare `haw` opens the fleet cockpit: live auto-refresh, fuzzy
+  `/` filter, column sort, marks + bulk actions, drill-ins that show a repo's git
+  detail / a PR's checks / a CI run's steps — then `M` merge, `A` approve, `C`
+  checkout, all from the keyboard. `:` command bar mirrors the CLI; six themes.
 - **Fast and native.** Reads go through [gitoxide](https://github.com/GitoxideLabs/gitoxide);
   only the heavy plumbing shells out to `git`. Parallel `sync`/`run`/`build`/`test`.
 - **CI-friendly.** `haw verify` exits 3 on drift, `--format json` where it matters,
@@ -274,27 +275,58 @@ stay as hidden aliases. Full lexicon: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md).
 
 ## The TUI cockpit
 
-Keyboard-first, modal, k9s-style. `:` opens a command bar mirroring the CLI verbs
-(`:sync`, `:stack sensor-node`, `:run git status`, `:prs`, `:ci`), `/` filters the
-grid, single keys act on the cursor row. Async refresh — the UI never freezes.
+Keyboard-first, modal, k9s-style — a genuine daily driver, not a status readout. The
+loop is **read → drill in → act**: see a repo's branch/SHA/status, inspect a PR's
+reviewers and CI checks, then merge or approve it — all without leaving the terminal.
+Everything runs on a background worker, so the UI never freezes.
 
 ```text
  haw ▸ ~/work/gateway ───────────────────────── stack: gateway   lock: ✓   repos: 3/3
 ──────────────────────────────────────────────────────────────────────────────────────
- REPO        BRANCH        HEAD       DIRTY   DRIFT   ↑ / ↓    MERGE
-▸kernel      v6.1.2        a1b2c3d4     ·       ·      0 / 0     —
- hal         main          9f8e7d6c    yes      ·      2 / 0     —
- app-mqtt    release/2.x   4d5e6f7a     ·      DRIFT   0 / 5     —
+ REPO        BRANCH ▲      HEAD       DIRTY   DRIFT   ↑ / ↓    MERGE
+ kernel      v6.1.2        a1b2c3d4     ·       ·      0 / 0     —
+◉hal         main          9f8e7d6c    yes      ·      2 / 0     —
+▸app-mqtt    release/2.x   4d5e6f7a     ·      DRIFT   0 / 5     —
 ──────────────────────────────────────────────────────────────────────────────────────
  hal  ›  path hal/   branch main (ahead 2)   dirty   locked 9f8e7d6c   grp firmware
 ──────────────────────────────────────────────────────────────────────────────────────
- [s]ync [S]witch [p]in [l]ock [m]PRs [i]CI [t]ree [c]hange [/]filter [:]cmd [?]help
+ [s]ync [space]mark [S]witch [m]PRs [i]CI [v]gov [/]filter [<>]sort [:]cmd [?]help
 ```
 
-Views: stacks → fleet grid → repo detail; changesets with per-repo PR/MR review + CI
-cells; fleet-wide **open PR/MRs** (`m`) and **recent CI runs** (`i`) across every
-repo, with `o` to open the row in your browser. Full keymap:
-[docs/CLI-DESIGN.md](docs/CLI-DESIGN.md#tui-keymap).
+**Live** — the fleet auto-refreshes (~5s when idle, on-demand `F5`/`ctrl-r`); the
+grid stays current hands-free without ever disturbing input, overlays, or in-flight
+work. Network views (PR/MR, CI, governance) stay strictly on-demand.
+
+**Find & order** — `/` is a fuzzy filter (nucleo-based, case-insensitive: `/knl`
+matches `kernel`). `>`/`<` move the active sort column and `.` toggles asc/desc; a
+`▲`/`▼` caret marks the sorted column on the Fleet, PR/MR, and CI tables.
+
+**Read → drill in (`Enter`)** — on a fleet repo, drill into a scrollable git detail
+(branch, short SHA, `status`, recent `log`, last-commit diffstat, remotes); on a
+PR/MR, its reviewers, CI checks, body, and url; on a CI run, its jobs, steps, and
+conclusion. Scroll with `j/k` and `PageUp`/`PageDown`, `b` to go back.
+
+**Act (confirm-gated, they reach the network)** — `M` merges a PR/MR, `A` approves
+it, `C` checks out its branch locally (`haw-pr-<n>`) to review the code. Cross-repo
+changesets `R` request and `L` land in dependency order. All ask a `y/n` first.
+
+**Marks + bulk** — `space` marks repos in the Fleet (shown as `◉`); with marks set,
+`s` syncs and `r` runs across just the marked set instead of the cursor row.
+
+**Views** — stacks → fleet grid → repo detail; changesets with per-repo PR/MR review
++ CI cells; fleet-wide **open PR/MRs** (`m`) and **recent CI runs** (`i`) across every
+repo; **governance** (`v`) — registered plugins, SBOM/provenance artifacts, findings;
+`o` opens the cursor row (PR / run / artifact) in your browser.
+
+**Command bar `:`** mirrors the CLI verbs, so learning one teaches the other:
+`:sync`, `:switch NAME`, `:run CMD`, `:tree`, `:prs`, `:ci`, `:governance`/`:plugins`,
+`:change …`, `:merge …`, `:help`.
+
+**Themes** — six built-in skins (`catppuccin` default, `dracula`, `nord`, `gruvbox`,
+`solarized`, `monochrome`). `NO_COLOR` forces `monochrome`; `HAW_THEME=<name>` picks
+one at startup; `:theme <name>` switches live.
+
+Full keymap: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md#tui-keymap).
 
 ## Why hawser exists
 
@@ -325,8 +357,9 @@ Covered: manifest parse + referential validation, TOML round-trip, resolver +
 overlay precedence, lockfile read/write and determinism (byte-identical, LF-only,
 cross-OS in CI), changeset lifecycle, the full collaborative merge against real git
 repos, golden CLI-output snapshots (`crates/hawser/tests/golden.rs`), forge
-orchestration against a fake forge, and the cockpit logic (filters, cursor,
-command bar, fleet PR/CI views).
+orchestration against a fake forge, and the cockpit logic (fuzzy filter, cursor,
+sorting, marks, command bar, drill-ins, theme selection, fleet PR/CI/governance
+views).
 
 Workspace layout:
 

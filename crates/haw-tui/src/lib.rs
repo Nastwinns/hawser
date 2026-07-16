@@ -352,6 +352,8 @@ pub trait Controller: Send {
     fn pr_merge(&mut self, repo: &str, number: u64) -> io::Result<String>;
     /// Approve one open PR/MR on its forge (fleet PR view / PR drill-in).
     fn pr_approve(&mut self, repo: &str, number: u64) -> io::Result<String>;
+    /// Fetch a PR/MR's branch into the repo worktree and check it out locally.
+    fn pr_checkout(&mut self, repo: &str, number: u64) -> io::Result<String>;
     /// Seal a fully-resolved merge plan for `repo` (see `haw merge cleanup`).
     fn merge_cleanup(&mut self, repo: &str) -> io::Result<String>;
     /// Abort a planned merge for `repo` (see `haw merge abort`).
@@ -421,6 +423,7 @@ enum ActionKind {
     ChangeLand(String),
     MergePr(String, u64),
     ApprovePr(String, u64),
+    CheckoutPr(String, u64),
     MergeCleanup(String),
     MergeAbort(String),
 }
@@ -863,6 +866,9 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                         ActionKind::ChangeLand(id) => controller.change_land(&id),
                         ActionKind::MergePr(repo, number) => controller.pr_merge(&repo, number),
                         ActionKind::ApprovePr(repo, number) => controller.pr_approve(&repo, number),
+                        ActionKind::CheckoutPr(repo, number) => {
+                            controller.pr_checkout(&repo, number)
+                        }
                         ActionKind::MergeCleanup(repo) => controller.merge_cleanup(&repo),
                         ActionKind::MergeAbort(repo) => controller.merge_abort(&repo),
                     };
@@ -897,10 +903,10 @@ fn open_changeset(app: &mut App, jobs: &Sender<Job>, id: &str) {
     app.changeset = Some(id.to_string());
     app.selected_repos.clear();
     app.goto_view(View::Changeset);
-    if app.busy.is_none() {
-        app.busy = Some("PR status");
-        let _ = jobs.send(Job::ChangesetPrs(id.to_string()));
-    }
+    // Always enqueue the read; the serial worker runs it after any in-flight
+    // job, so entering the view while busy still loads (never refused).
+    app.busy = Some("PR status");
+    let _ = jobs.send(Job::ChangesetPrs(id.to_string()));
 }
 
 /// Navigate into the shared scrollable detail view and fetch its report.
@@ -917,10 +923,10 @@ fn open_detail(
     app.detail_text = None;
     app.detail_scroll = 0;
     app.goto_view(view);
-    if app.busy.is_none() {
-        app.busy = Some(busy);
-        let _ = jobs.send(job);
-    }
+    // Always enqueue the read; the serial worker runs it after any in-flight
+    // job, so drilling in while busy still loads (never refused).
+    app.busy = Some(busy);
+    let _ = jobs.send(job);
 }
 
 /// Navigate into a repo's live git detail view and fetch its report.
@@ -964,9 +970,9 @@ fn open_ci_detail(app: &mut App, jobs: &Sender<Job>, repo: &str, run_id: u64, na
 /// Navigate to a fleet-wide network view (`m`/`i`) and (re)fetch its rows.
 fn open_fleet_view(app: &mut App, jobs: &Sender<Job>, view: View) {
     app.goto_view(view);
-    if app.busy.is_some() {
-        return;
-    }
+    // Read-only fetches always enqueue — the single worker runs them serially,
+    // so navigating while busy is never refused (it just queues behind the
+    // current job). `busy` only labels the spinner.
     match view {
         View::Prs => {
             app.busy = Some("PR/MRs");
@@ -1017,6 +1023,11 @@ enum Confirm {
         title: String,
     },
     ApprovePr {
+        repo: String,
+        number: u64,
+        title: String,
+    },
+    CheckoutPr {
         repo: String,
         number: u64,
         title: String,
@@ -1375,6 +1386,15 @@ fn event_loop(
                             ActionKind::ApprovePr(repo, number),
                         );
                     }
+                    Confirm::CheckoutPr { repo, number, .. } => {
+                        app.message = format!("→ haw checkout PR {repo}#{number}");
+                        dispatch(
+                            &mut app,
+                            jobs,
+                            "checkout PR",
+                            ActionKind::CheckoutPr(repo, number),
+                        );
+                    }
                     Confirm::MergeCleanup(repo) => {
                         app.message = format!("→ haw merge cleanup --repo {repo}");
                         dispatch(
@@ -1640,6 +1660,18 @@ fn event_loop(
                     None => app.message = "approve: put the cursor on a PR row".to_string(),
                 }
             }
+            KeyCode::Char('C') if app.view == View::Prs || app.view == View::PrDetail => {
+                match app.current_pr() {
+                    Some((repo, number, title)) => {
+                        app.pending_confirm = Some(Confirm::CheckoutPr {
+                            repo,
+                            number,
+                            title,
+                        });
+                    }
+                    None => app.message = "checkout: put the cursor on a PR row".to_string(),
+                }
+            }
             _ => {}
         }
     }
@@ -1723,6 +1755,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("enter", "detail"),
             ("M", "merge"),
             ("A", "approve"),
+            ("C", "checkout"),
             ("o", "open in browser"),
             ("m", "refetch"),
             ("i", "CI runs"),
@@ -1754,6 +1787,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("j/k", "scroll"),
             ("M", "merge"),
             ("A", "approve"),
+            ("C", "checkout"),
             ("b", "back"),
             ("q", "quit"),
         ],
@@ -1873,6 +1907,15 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
             format!("haw approve PR #{number} ({repo})"),
             "this reaches the network:",
             format!("approve the PR/MR on its forge — {title}"),
+        ),
+        Confirm::CheckoutPr {
+            repo,
+            number,
+            title,
+        } => (
+            format!("haw checkout PR #{number} ({repo})"),
+            "this fetches and switches the worktree:",
+            format!("check out the PR/MR branch locally as haw-pr-{number} — {title}"),
         ),
         Confirm::MergeCleanup(repo) => (
             format!("haw merge cleanup --repo {repo}"),
@@ -3079,6 +3122,7 @@ fn draw_help(frame: &mut Frame) {
         help_entry("o", "open the row's PR / run / artifact"),
         help_entry("< > .", "sort PR/CI columns (. toggles asc/desc)"),
         help_entry("M / A", "merge / approve the PR/MR (asks y/n)"),
+        help_entry("C", "check out the PR/MR branch locally (asks y/n)"),
         Line::raw(""),
         help_section("changeset"),
         help_entry("n", "new · space select repos"),
@@ -3304,7 +3348,7 @@ mod tests {
             "p" | "l" => matches!(view, View::Fleet | View::Stacks),
             "n" => matches!(view, View::Changesets | View::Changeset),
             "R" | "L" => view == View::Changeset,
-            "M" | "A" => matches!(view, View::Prs | View::PrDetail),
+            "M" | "A" | "C" => matches!(view, View::Prs | View::PrDetail),
             "o" => matches!(view, View::Prs | View::Ci | View::Governance),
             "<>" | "." => matches!(view, View::Fleet | View::Prs | View::Ci),
             _ => false,
@@ -3508,6 +3552,34 @@ mod tests {
     }
 
     #[test]
+    fn checkout_pr_confirm_then_dispatch() {
+        // Selecting a PR and asking to check it out arms the confirm gate...
+        let mut app = fleet_app();
+        app.prs = Some(vec![pr("kernel", "fix boot")]);
+        app.view = View::Prs;
+        app.cursor.select(Some(0));
+        let (repo, number, title) = app.current_pr().expect("a PR under the cursor");
+        app.pending_confirm = Some(Confirm::CheckoutPr {
+            repo: repo.clone(),
+            number,
+            title,
+        });
+        assert!(matches!(
+            app.pending_confirm,
+            Some(Confirm::CheckoutPr { .. })
+        ));
+        // ...and confirming dispatches the "checkout PR" action to the worker.
+        let (tx, rx) = channel();
+        dispatch(
+            &mut app,
+            &tx,
+            "checkout PR",
+            ActionKind::CheckoutPr(repo, number),
+        );
+        assert_eq!(drain(&rx), vec!["checkout PR"]);
+    }
+
+    #[test]
     fn open_pr_detail_stores_the_current_pr() {
         let mut app = fleet_app();
         let (tx, _rx) = channel();
@@ -3553,13 +3625,15 @@ mod tests {
     }
 
     #[test]
-    fn open_fleet_view_skips_fetch_while_busy() {
+    fn open_fleet_view_enqueues_fetch_even_while_busy() {
         let mut app = fleet_app();
         app.busy = Some("sync");
         let (tx, rx) = channel();
         open_fleet_view(&mut app, &tx, View::Prs);
         assert_eq!(app.view, View::Prs);
-        assert!(rx.try_recv().is_err());
+        // The read-only fetch still enqueues — the serial worker runs it after
+        // the in-flight job, so navigation is never refused.
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs)));
     }
 
     #[test]
@@ -3690,13 +3764,13 @@ mod tests {
     }
 
     #[test]
-    fn open_fleet_view_skips_governance_fetch_while_busy() {
+    fn open_fleet_view_enqueues_governance_fetch_even_while_busy() {
         let mut app = fleet_app();
         app.busy = Some("sync");
         let (tx, rx) = channel();
         open_fleet_view(&mut app, &tx, View::Governance);
         assert_eq!(app.view, View::Governance);
-        assert!(rx.try_recv().is_err());
+        assert!(matches!(rx.try_recv(), Ok(Job::Governance)));
     }
 
     #[test]
