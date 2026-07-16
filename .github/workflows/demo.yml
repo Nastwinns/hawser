@@ -33,8 +33,10 @@ jobs:
           sudo install "$(find vhs-dist -name vhs -type f | head -1)" /usr/local/bin/vhs
       - name: Render demos
         run: |
-          vhs demo/cli.tape
-          vhs demo/tui.tape
+          for tape in demo/*.tape; do
+            echo "── rendering $tape ──"
+            vhs "$tape"
+          done
       - name: Commit rendered GIFs
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
