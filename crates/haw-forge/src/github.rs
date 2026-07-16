@@ -441,7 +441,9 @@ impl Forge for GitHub {
             match self.get_text(
                 &host,
                 &format!("/repos/{path}/actions/jobs/{job_id}/logs"),
-                "text/plain",
+                // The logs endpoint 302-redirects to a blob; api.github.com rejects
+                // `Accept: text/plain` with 415, so use the standard GitHub media type.
+                "application/vnd.github+json",
             ) {
                 Ok(Some(log)) if !log.trim().is_empty() => {
                     // Keep the tail of each job (where failures land); cap per job
