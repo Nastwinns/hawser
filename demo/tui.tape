@@ -38,7 +38,25 @@ Sleep 1.5s
 Escape
 Sleep 800ms
 
-# Help overlay.
+# Fleet-wide open PR/MRs across every repo.
+Type "m"
+Sleep 2s
+Type "b"
+Sleep 600ms
+
+# Recent CI runs across every repo.
+Type "i"
+Sleep 2s
+Type "b"
+Sleep 600ms
+
+# Changesets view.
+Type "c"
+Sleep 2s
+Type "b"
+Sleep 600ms
+
+# Help overlay — the full keymap.
 Type "?"
 Sleep 2.5s
 Escape

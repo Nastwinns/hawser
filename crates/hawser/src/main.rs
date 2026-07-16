@@ -1327,6 +1327,30 @@ fn render_pr_state(state: PrState) -> &'static str {
     }
 }
 
+fn render_ci_status(status: haw_forge::CiStatus) -> &'static str {
+    match status {
+        haw_forge::CiStatus::Passed => "passed",
+        haw_forge::CiStatus::Failed => "failed",
+        haw_forge::CiStatus::Running => "running",
+        haw_forge::CiStatus::Queued => "queued",
+        haw_forge::CiStatus::Cancelled => "cancelled",
+    }
+}
+
+/// `github`/`gitlab`/`—` for a manifest repo, from its remote URL.
+fn forge_label(ws: &Workspace, name: &str) -> String {
+    ws.manifest
+        .repos
+        .get(name)
+        .and_then(|repo| repo.clone_url(&ws.manifest.remotes))
+        .map(|url| match haw_forge::detect(&url) {
+            haw_forge::ForgeKind::GitHub => "github".to_string(),
+            haw_forge::ForgeKind::GitLab => "gitlab".to_string(),
+            haw_forge::ForgeKind::Unknown => "—".to_string(),
+        })
+        .unwrap_or_else(|| "—".to_string())
+}
+
 fn change_status(id: &str) -> Result<()> {
     let ws = open_workspace()?;
     let statuses = change::status(&ws, &ShellGit, id)?;
@@ -2046,17 +2070,7 @@ fn render_changeset(
                     None => ("—".to_string(), "—".to_string()),
                 },
             };
-            let forge = ws
-                .manifest
-                .repos
-                .get(&s.name)
-                .and_then(|repo| repo.clone_url(&ws.manifest.remotes))
-                .map(|url| match haw_forge::detect(&url) {
-                    haw_forge::ForgeKind::GitHub => "github".to_string(),
-                    haw_forge::ForgeKind::GitLab => "gitlab".to_string(),
-                    haw_forge::ForgeKind::Unknown => "—".to_string(),
-                })
-                .unwrap_or_else(|| "—".to_string());
+            let forge = forge_label(ws, &s.name);
             haw_tui::ChangeRepoRow {
                 name: s.name,
                 branch: s.branch,
@@ -2304,6 +2318,65 @@ impl haw_tui::Controller for CliController {
             &report.merge_sha[..8.min(report.merge_sha.len())],
             report.integration
         ))
+    }
+
+    fn fleet_prs(&mut self) -> std::io::Result<Vec<haw_tui::FleetPr>> {
+        let ws = self.workspace()?;
+        let tokens = Tokens::from_env();
+        let mut out = Vec::new();
+        let mut failed = Vec::new();
+        for (name, result) in orchestrate::fleet_open_prs(&ws, &tokens) {
+            match result {
+                Ok(prs) => {
+                    let forge = forge_label(&ws, &name);
+                    out.extend(prs.into_iter().map(|pr| haw_tui::FleetPr {
+                        repo: name.clone(),
+                        forge: forge.clone(),
+                        number: pr.number,
+                        title: pr.title,
+                        url: pr.url,
+                        state: render_pr_state(pr.state).to_string(),
+                        approved: pr.approved,
+                        ci: pr.ci_passing,
+                    }));
+                }
+                Err(_) => failed.push(name),
+            }
+        }
+        if out.is_empty() && !failed.is_empty() {
+            return Err(std::io::Error::other(format!(
+                "PR/MR fetch failed for: {}",
+                failed.join(", ")
+            )));
+        }
+        Ok(out)
+    }
+
+    fn fleet_ci(&mut self) -> std::io::Result<Vec<haw_tui::FleetCiRun>> {
+        let ws = self.workspace()?;
+        let tokens = Tokens::from_env();
+        let mut out = Vec::new();
+        let mut failed = Vec::new();
+        for (name, result) in orchestrate::fleet_ci_runs(&ws, &tokens) {
+            match result {
+                Ok(runs) => out.extend(runs.into_iter().map(|run| haw_tui::FleetCiRun {
+                    repo: name.clone(),
+                    name: run.name,
+                    branch: run.branch,
+                    event: run.event,
+                    status: render_ci_status(run.status).to_string(),
+                    url: run.url,
+                })),
+                Err(_) => failed.push(name),
+            }
+        }
+        if out.is_empty() && !failed.is_empty() {
+            return Err(std::io::Error::other(format!(
+                "CI fetch failed for: {}",
+                failed.join(", ")
+            )));
+        }
+        Ok(out)
     }
 
     fn merge_abort(&mut self, repo: &str) -> std::io::Result<String> {

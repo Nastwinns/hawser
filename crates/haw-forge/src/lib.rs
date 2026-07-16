@@ -70,6 +70,34 @@ pub struct OpenPr {
 /// count bounded on repos with a long history of open PRs.
 pub const OPEN_PRS_LIMIT: usize = 25;
 
+/// Rendered status of a CI run/pipeline, forge-neutral.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CiStatus {
+    Passed,
+    Failed,
+    Running,
+    Queued,
+    Cancelled,
+}
+
+/// One CI run (GitHub Actions) or pipeline (GitLab), for the fleet-wide
+/// CI view.
+#[derive(Debug, Clone)]
+pub struct CiRun {
+    /// Workflow name (GitHub) or `#<pipeline id>` (GitLab).
+    pub name: String,
+    /// Branch (or ref) the run executed on.
+    pub branch: String,
+    /// Trigger: `push`, `pull_request`, `schedule`, ... (GitLab: `source`).
+    pub event: String,
+    pub status: CiStatus,
+    pub url: String,
+}
+
+/// Hard cap on CI runs fetched per repo — keeps the fleet-wide view's
+/// request count bounded on busy repos.
+pub const CI_RUNS_LIMIT: usize = 15;
+
 /// Errors from a forge implementation.
 #[derive(Debug, thiserror::Error)]
 pub enum ForgeError {
@@ -95,6 +123,9 @@ pub trait Forge {
     /// Every open PR/MR on the repo, capped at [`OPEN_PRS_LIMIT`] (fleet-wide
     /// PR/MR view — independent of any changeset).
     fn list_open_prs(&self, repo_url: &str) -> Result<Vec<OpenPr>, ForgeError>;
+    /// Recent CI runs/pipelines on the repo, newest first, capped at
+    /// [`CI_RUNS_LIMIT`] (fleet-wide CI view).
+    fn list_ci_runs(&self, repo_url: &str) -> Result<Vec<CiRun>, ForgeError>;
 }
 
 /// Turns a repo URL into a ready-to-call [`Forge`] client.

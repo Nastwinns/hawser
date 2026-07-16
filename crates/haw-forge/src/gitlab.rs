@@ -173,6 +173,37 @@ impl Forge for GitLab {
         }
         Ok(out)
     }
+
+    fn list_ci_runs(&self, repo_url: &str) -> Result<Vec<crate::CiRun>, ForgeError> {
+        let api = self.project_api(repo_url)?;
+        let list = self.call(
+            Method::GET,
+            &format!("{api}/pipelines?per_page={}", crate::CI_RUNS_LIMIT),
+            None,
+        )?;
+        let pipelines = list.as_array().cloned().unwrap_or_default();
+        Ok(pipelines.iter().map(run_of).collect())
+    }
+}
+
+/// Map a GitLab pipeline object to the forge-neutral [`crate::CiRun`].
+fn run_of(pipeline: &Value) -> crate::CiRun {
+    let status = match pipeline["status"].as_str() {
+        Some("success") => crate::CiStatus::Passed,
+        Some("failed") => crate::CiStatus::Failed,
+        Some("canceled" | "skipped") => crate::CiStatus::Cancelled,
+        Some("created" | "pending" | "waiting_for_resource" | "preparing" | "scheduled") => {
+            crate::CiStatus::Queued
+        }
+        _ => crate::CiStatus::Running,
+    };
+    crate::CiRun {
+        name: format!("#{}", pipeline["id"].as_u64().unwrap_or_default()),
+        branch: pipeline["ref"].as_str().unwrap_or_default().to_string(),
+        event: pipeline["source"].as_str().unwrap_or_default().to_string(),
+        status,
+        url: pipeline["web_url"].as_str().unwrap_or_default().to_string(),
+    }
 }
 
 #[cfg(test)]

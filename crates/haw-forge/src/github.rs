@@ -212,6 +212,40 @@ impl Forge for GitHub {
         }
         Ok(out)
     }
+
+    fn list_ci_runs(&self, repo_url: &str) -> Result<Vec<crate::CiRun>, ForgeError> {
+        let (host, path) = self.split(repo_url)?;
+        let list = self.get(
+            &host,
+            &format!(
+                "/repos/{path}/actions/runs?per_page={}",
+                crate::CI_RUNS_LIMIT
+            ),
+        )?;
+        let runs = list["workflow_runs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        Ok(runs.iter().map(run_of).collect())
+    }
+}
+
+/// Map a GitHub Actions run object to the forge-neutral [`crate::CiRun`].
+fn run_of(run: &Value) -> crate::CiRun {
+    let status = match (run["status"].as_str(), run["conclusion"].as_str()) {
+        (Some("completed"), Some("success")) => crate::CiStatus::Passed,
+        (Some("completed"), Some("cancelled")) => crate::CiStatus::Cancelled,
+        (Some("completed"), _) => crate::CiStatus::Failed,
+        (Some("queued" | "pending" | "waiting" | "requested"), _) => crate::CiStatus::Queued,
+        _ => crate::CiStatus::Running,
+    };
+    crate::CiRun {
+        name: run["name"].as_str().unwrap_or_default().to_string(),
+        branch: run["head_branch"].as_str().unwrap_or_default().to_string(),
+        event: run["event"].as_str().unwrap_or_default().to_string(),
+        status,
+        url: run["html_url"].as_str().unwrap_or_default().to_string(),
+    }
 }
 
 #[cfg(test)]

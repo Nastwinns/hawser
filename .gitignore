@@ -1,6 +1,7 @@
 /target
 /site/target
 /site/dist
+/docs/book
 
 # local AI tooling (BMAD install + generated skills)
 /_bmad/

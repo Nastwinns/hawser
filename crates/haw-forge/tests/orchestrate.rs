@@ -117,8 +117,24 @@ impl Forge for FakeForge {
             .push((repo_url.to_string(), body.to_string()));
         Ok(())
     }
-    fn list_open_prs(&self, _repo_url: &str) -> Result<Vec<haw_forge::OpenPr>, ForgeError> {
-        Ok(Vec::new())
+    fn list_open_prs(&self, repo_url: &str) -> Result<Vec<haw_forge::OpenPr>, ForgeError> {
+        Ok(vec![haw_forge::OpenPr {
+            number: 7,
+            title: format!("fix {repo_url}"),
+            url: format!("https://forge.example{repo_url}/pull/7"),
+            state: PrState::Open,
+            approved: false,
+            ci_passing: Some(true),
+        }])
+    }
+    fn list_ci_runs(&self, repo_url: &str) -> Result<Vec<haw_forge::CiRun>, ForgeError> {
+        Ok(vec![haw_forge::CiRun {
+            name: "build".to_string(),
+            branch: "main".to_string(),
+            event: "push".to_string(),
+            status: haw_forge::CiStatus::Passed,
+            url: format!("https://forge.example{repo_url}/runs/1"),
+        }])
     }
 }
 
@@ -298,4 +314,51 @@ fn land_skips_already_merged_and_finishes() {
         vec!["/git/app"],
         "only the unmerged repo is merged"
     );
+}
+
+fn github_workspace(dir: &Path) -> Workspace {
+    std::fs::write(
+        dir.join("haw.toml"),
+        "[repo.kernel]\nurl = \"https://github.com/acme/kernel.git\"\nrev = \"main\"\n\n\
+         [repo.app]\nurl = \"https://github.com/acme/app.git\"\nrev = \"main\"\n\n\
+         [repo.local]\nurl = \"/git/local\"\nrev = \"main\"\n\n\
+         [stack.s]\nrepos = [\"kernel\", \"app\", \"local\"]\n",
+    )
+    .unwrap();
+    Workspace::open(dir).unwrap()
+}
+
+#[test]
+fn fleet_open_prs_covers_forge_repos_and_skips_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let ws = github_workspace(dir.path());
+    let journal = Arc::new(Mutex::new(Journal::default()));
+
+    let results = orchestrate::fleet_open_prs(&ws, &journal_factory(&journal));
+    let names: Vec<&str> = results.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["kernel", "app"],
+        "manifest order, `local` skipped"
+    );
+    for (_, result) in &results {
+        let prs = result.as_ref().unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].number, 7);
+    }
+}
+
+#[test]
+fn fleet_ci_runs_covers_forge_repos_and_skips_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let ws = github_workspace(dir.path());
+    let journal = Arc::new(Mutex::new(Journal::default()));
+
+    let results = orchestrate::fleet_ci_runs(&ws, &journal_factory(&journal));
+    assert_eq!(results.len(), 2);
+    for (_, result) in &results {
+        let runs = result.as_ref().unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, haw_forge::CiStatus::Passed);
+    }
 }

@@ -1,62 +1,58 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
-```
-██╗  ██╗███████╗███████╗██╗     ███████╗ ██████╗ ███╗   ██╗
-██║ ██╔╝██╔════╝██╔════╝██║     ██╔════╝██╔═══██╗████╗  ██║
-█████╔╝ █████╗  █████╗  ██║     ███████╗██║   ██║██╔██╗ ██║
-██╔═██╗ ██╔══╝  ██╔══╝  ██║     ╚════██║██║   ██║██║╚██╗██║
-██║  ██╗███████╗███████╗███████╗███████║╚██████╔╝██║ ╚████║
-╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝
-      ⚓  the beam that binds the repos  ⚓
-```
+<img src="docs/assets/hawser-comic.jpeg" alt="hawser — the beam that binds the repos" width="720">
 
-**Reproducible multi-repo stack composition + cross-repo MR orchestration. In Rust.**
+# hawser
 
-[![build](https://img.shields.io/badge/CI-Linux%20%7C%20macOS%20%7C%20Windows-brightgreen?logo=github)](.github/workflows/ci.yml)
-[![crates.io](https://img.shields.io/badge/crates.io-hawser-orange?logo=rust)](https://crates.io)
+**Reproducible multi-repo stacks + cross-repo PR/MR orchestration. One binary, one TUI. In Rust.**
+
+[![CI](https://img.shields.io/badge/CI-Linux%20%7C%20macOS%20%7C%20Windows-brightgreen?logo=github)](.github/workflows/ci.yml)
 [![rust](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![unsafe](https://img.shields.io/badge/unsafe-forbidden-success.svg)](#)
-[![platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-blueviolet)](#)
+[![unsafe](https://img.shields.io/badge/unsafe-forbidden-success.svg)](Cargo.toml)
+[![docs](https://img.shields.io/badge/docs-github%20pages-8A2BE2)](https://nastwinns.github.io/keelson/docs/)
+
+[Install](#install) · [Quick start](#quick-start) · [Demos](#demos) ·
+[Docs](https://nastwinns.github.io/keelson/docs/) ·
+[Try the TUI in your browser](https://nastwinns.github.io/keelson/)
 
 </div>
 
 ---
 
-`haw` is a command-line tool (with a TUI) for assembling a software stack out of
-many independent Git repositories — without submodules, without detached HEADs, and
-without a Python runtime. A single declarative manifest describes your **stacks** and
-the **repos** (repositories) they are composed of; a committed **lockfile** pins every
-repo to an exact revision so any teammate or CI machine reproduces the exact same tree.
+`haw` assembles a software stack out of many independent Git repositories — without
+submodules, without detached HEADs, without a Python runtime. A declarative manifest
+(`haw.toml`) describes **stacks** and the **repos** they are composed of; a committed
+lockfile (`haw.lock`) pins every repo to an exact revision, so any teammate or CI
+machine reproduces the exact same tree.
 
-On top of composition, Keelson orchestrates the day-to-day multi-repo workflow: create a
-feature branch across all affected repos at once, open the matching Pull/Merge Requests
-on GitHub and GitLab, and track their review + CI state from one screen.
+On top of composition, `haw` drives the day-to-day multi-repo workflow: branch a
+feature across all affected repos at once, open the linked PRs/MRs on GitHub **and**
+GitLab, and track review + CI state from one keyboard-driven cockpit.
 
-Keelson runs natively on **Linux, macOS and Windows**. It uses [`gitoxide`](https://github.com/GitoxideLabs/gitoxide)
-for fast native introspection and shells out to `git` only for the heavy plumbing.
+## Highlights
 
----
-
-## Quick start
-
-```bash
-# install (any of)
-cargo install hawser          # from crates.io
-brew install keelson            # macOS / Linuxbrew
-scoop install keelson           # Windows
-
-# bootstrap a workspace from a manifest, then materialize a stack
-haw init haw.toml
-haw sync                       # clones every repo, writes haw.lock
-```
+- **Reproducible.** `haw.lock` pins every repo to a SHA — byte-identical run-to-run,
+  cross-OS (a real argument in automotive/avionics audits).
+- **No magic on disk.** Repos are plain, autonomous clones. No symlinks, no detached
+  HEAD — works on Windows where `repo` struggled.
+- **Stacks compose.** Named sets of repos share the same clones; overlays override
+  revs per variant without duplicating repo lists.
+- **Changesets.** One feature across N repos: one branch everywhere, N cross-linked
+  PR/MRs, one aggregated status, `land` merges in dependency order.
+- **A k9s-grade TUI.** Bare `haw` opens the fleet cockpit: live grid, `/` filter,
+  `:` command bar, fleet-wide PR/MR (`m`) and CI (`i`) views, `o` opens the row in
+  your browser.
+- **Fast and native.** Reads go through [gitoxide](https://github.com/GitoxideLabs/gitoxide);
+  only the heavy plumbing shells out to `git`. Parallel `sync`/`run`/`build`/`test`.
+- **CI-friendly.** `haw verify` exits 3 on drift, `--format json` where it matters,
+  `NO_COLOR`/`CLICOLOR_FORCE` honored like `bat`, `eza`, `ripgrep`.
 
 ## Demos
 
 Rendered with [VHS](https://github.com/charmbracelet/vhs) from the tapes in
 [`demo/`](demo/) — CI re-renders them on every CLI/TUI change, so they never lie.
-Regenerate locally: `cargo build --release -p hawser && vhs demo/cli.tape`.
 
 **The CLI** — `sync`, `tree`, `status`, cross-repo changesets, in full color:
 
@@ -66,15 +62,27 @@ Regenerate locally: `cargo build --release -p hawser && vhs demo/cli.tape`.
 
 ![haw TUI demo](demo/haw-tui.gif)
 
-**[Try the cockpit in your browser →](https://nastwinns.github.io/keelson/)** — a scripted
-fleet, rendered live with real ratatui widgets over [Ratzilla](https://github.com/ratatui/ratzilla)
-(Rust compiled to WASM, no server). Source: [`site/`](site/); rebuilds on every push via
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+**[Try the cockpit in your browser →](https://nastwinns.github.io/keelson/)** — real
+ratatui widgets over [Ratzilla](https://github.com/ratatui/ratzilla), Rust compiled
+to WASM, no server. Source: [`site/`](site/).
 
-Output follows the conventions of the modern Rust CLI family (`bat`, `eza`, `ripgrep`):
-color on a TTY, plain when piped, `NO_COLOR` honored, `CLICOLOR_FORCE=1` to force color
-into pipes. One shared scheme everywhere — **cyan** repo/stack names, **yellow** revs and
-branches, dim SHAs and chrome, **green** ✓ / clean, **yellow** dirty, **red** drift.
+## Install
+
+```bash
+cargo install --git https://github.com/Nastwinns/keelson hawser   # from source (today)
+cargo install hawser                                              # from crates.io (soon)
+```
+
+Prebuilt archives land in [`dist/`](dist/) per release; Homebrew/Scoop are on the
+[roadmap](docs/COMMERCIALIZATION.md).
+
+## Quick start
+
+```bash
+haw init haw.toml     # bootstrap a workspace from a manifest
+haw sync              # clone every repo, write haw.lock
+haw                   # open the TUI cockpit
+```
 
 A typical session — compose, inspect, branch across repos:
 
@@ -101,13 +109,15 @@ changeset `FEAT-42` started across 2 repo(s):
   app-mqtt  -> change/FEAT-42
 ```
 
-> Output is colorized on a terminal, plain when piped. Honors `NO_COLOR`.
+Color on a TTY, plain when piped, `NO_COLOR` honored — one shared scheme everywhere:
+**cyan** repo/stack names, **yellow** revs and branches, dim SHAs, **green** ✓ clean,
+**yellow** dirty, **red** drift.
 
 ## How it composes
 
-One manifest declares **repos** (the Git repositories) and composes them into **stacks**
-(named sets of repos). A repo is shared, never duplicated. A committed lockfile pins every
-repo to an exact SHA.
+One manifest declares **repos** (the Git repositories) and composes them into
+**stacks** (named sets of repos). A repo is shared, never duplicated. A committed
+lockfile pins every repo to an exact SHA.
 
 ```
               haw.toml  (intent)                 haw.lock  (pinned SHAs, committed)
@@ -127,87 +137,25 @@ repo to an exact SHA.
  └─────────────┘  └──────────────────┘
 ```
 
----
-
-## Why Keelson exists
-
-Splitting a stack into many repositories is common in embedded/automotive/avionics
-(shared BSW, HAL, MCAL repos reused across ECUs) and in microservice backends. The
-existing tooling each solves one slice of the problem:
-
-- **Google `repo` / `west`** give you a manifest, but no lockfile, a Python runtime,
-  detached HEADs, and (for `repo`) symlink-based layouts that fight Windows.
-- **RepoFleet** (Go) nails the *issue → branches across repos → PR/MR* workflow, but has
-  no notion of stack composition or a reproducible pinned manifest.
-- **mergetopus** (Rust) brilliantly parallelizes one big risky merge, but is single-repo.
-
-Keelson is the union that nobody ships: **reproducible stack composition** (the `repo`
-job, done properly with a lockfile) **+ cross-repo MR orchestration** (the RepoFleet job,
-in Rust) **+ optional parallel collaborative merge** (the mergetopus idea), behind one
-binary and one TUI.
-
-### What Keelson is not
-
-Keelson orchestrates Git and the GitHub/GitLab APIs. It does **not** reimplement Git's
-merge engine, replace a forge, or replace domain toolchains (AUTOSAR generators, DO-178C
-traceability tools). It is the orchestration layer those toolchains sit on top of.
-
----
-
-## Core concepts
-
-**Repo** — one Git repository, cloned as a full autonomous repo (its own `.git`, its own
-branches, no detached HEAD). A repo can be shared by several stacks.
-
-**Stack** — a named composition: a set of repos at chosen revisions. Checking out a
-stack materializes the union of its repos at the paths the manifest declares.
-
-**Manifest** (`haw.toml`) — human-authored intent: remotes, repos, stacks, overlays.
-TOML, for the same reasons Cargo uses it: no indentation traps, no YAML type coercion
-("Norway problem"), stable serde ecosystem, clean diffs in review.
-
-**Lockfile** (`haw.lock`) — machine-generated, committed: every repo resolved to an
-exact SHA. This is the reproducibility + audit guarantee (a real argument in
-automotive/avionics) that `repo` and `west` lack.
-
-**Overlay** — a named set of per-repo overrides (rev, path) applied on top of the
-manifest, so variants (dev, bleeding-edge, customer builds) never duplicate repo lists.
-
-**Changeset** — a feature spanning several repos: one logical branch created across N
-repos, with N linked PR/MRs and an aggregated status.
-
----
-
-## Layout on disk (no symlinks, ever)
+On disk — no symlinks, ever:
 
 ```
 mystack/
-├── haw.toml           # manifest (intent)
-├── haw.lock           # lockfile (resolved SHAs, committed)
+├── haw.toml            # manifest (intent)
+├── haw.lock            # lockfile (resolved SHAs, committed)
 ├── kernel/             # real, complete git repo
 ├── hal/                # real, complete git repo
 └── app-mqtt/           # real, complete git repo
 ```
 
-Repos are plain clones at their final path — exactly what west does, and the reason it
-works on Windows where `repo` struggled. Object sharing across stacks on one machine is
-available as an **opt-in optimization** via git's native `alternates`
-(`git clone --reference`), which writes a text file, not a symlink. Keelson uses three
-text-based indirections git already provides (`alternates`, the `.git: gitdir:` file, and
-its own lockfile) to replace everything `repo` did with symlinks.
-
----
+Object sharing across stacks on one machine is an **opt-in optimization** via git's
+native `alternates` (`git clone --reference`) — a text file, not a symlink.
 
 ## Manifest example
 
 ```toml
 [remote.internal]
 url = "git@gitlab.company.com:firmware"
-
-[remote.github]
-url = "git@github.com:acme"
-
-# --- repos ---------------------------------------------------------------
 
 [repo.kernel]
 remote = "internal"
@@ -219,39 +167,29 @@ groups = ["firmware"]
 remote = "internal"
 repo   = "hal.git"
 rev    = "main"          # branch => follows head, until locked
-groups = ["firmware"]
 
 [repo.app-mqtt]
-remote = "github"
-repo   = "app-mqtt.git"
+url    = "git@github.com:acme/app-mqtt.git"
 rev    = "release/2.x"
 path   = "apps/mqtt"     # optional; defaults to the repo name
-
-# --- stacks -------------------------------------------------------------
 
 [stack.gateway]
 repos = ["kernel", "hal", "app-mqtt"]
 
 [stack.sensor-node]
-repos = ["kernel", "hal"]        # shares kernel + hal, no duplication
-
-# --- overlays -------------------------------------------------------------
+repos = ["kernel", "hal"]         # shares kernel + hal, no duplication
 
 [overlay.dev.repo.kernel]
 rev = "main"                      # `haw sync --overlay dev`: kernel follows main
 ```
-
----
 
 ## Command surface
 
 ```
 haw                              Open the TUI cockpit (no subcommand)
 ├── init <manifest-url|path>     Bootstrap a workspace from a manifest
-├── sync [--stack S]             Clone/pull repos to the state in haw.lock
-│                                (resolves + writes lock if absent)  [--shared]
-├── lock                         Resolve every repo's rev to a SHA -> haw.lock
-├── pin / unpin                  Pin lock to current checkouts / restore to manifest revs
+├── sync [--stack S] [--shared]  Clone/pull repos to the state in haw.lock
+├── lock / pin / unpin           Resolve revs -> haw.lock / pin to checkouts / restore
 ├── switch <stack>               Materialize a different stack in the workspace
 ├── status                       Aggregated fleet status (dirty/ahead/behind per repo)
 ├── run '<cmd>'                  Run a command across repos, in parallel
@@ -267,190 +205,106 @@ haw                              Open the TUI cockpit (no subcommand)
 │
 ├── change                       Cross-repo feature ("changeset") workflow
 │   ├── start <id> [--repos ..]  Create one branch across the affected repos
-│   │                            [--skip-branch] adopt each repo's current branch instead
 │   ├── status                   Per-repo branch + PR/MR review + CI dashboard
-│   ├── request                  Open linked PR/MR on GitHub/GitLab for each repo
+│   ├── request                  Open linked PR/MRs on GitHub/GitLab for each repo
 │   ├── goto                     Interactive picker; cd into a repo
 │   ├── snapshot save|restore    Save/restore the multi-repo state of a changeset
 │   └── land                     Merge PR/MRs in dependency order
 │
-├── merge                        Parallel collaborative merge (mergetopus-style)
+├── merge                        Parallel collaborative merge
 │   ├── plan <source>            Slice a big merge into per-directory conflict units
 │   ├── resolve <slice>          Resolve one slice (--take ours|theirs, or by hand)
-│   ├── status                   Show slices and their resolution state
-│   ├── cleanup                  Seal the merge; fast-forward target; drop temp branches
-│   └── abort                    Undo the planned merge, restore the target branch
+│   └── status / cleanup / abort Track, seal, or undo the planned merge
 │
 ├── import --from <west.yml|default.xml>   Convert a west/repo manifest to haw.toml
 └── dash                         Open the fleet dashboard (same as bare `haw`)
 ```
 
-Verbs are one guessable word each; old names (`graph`, `forall`, `freeze`, `tui`) stay as
-hidden aliases. Full lexicon: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md).
+Verbs are one guessable word each; old names (`graph`, `forall`, `freeze`, `tui`)
+stay as hidden aliases. Full lexicon: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md).
 
-Key differentiators vs the field: `lock`/`pin` (reproducibility), `switch <stack>`
-(composition), parallel `run` and `sync`, `change request` on **both** GitHub and
-GitLab from Rust, and a real fleet **TUI**.
+## The TUI cockpit
 
----
-
-## The TUI — a k9s-grade cockpit
-
-The dashboard is a **first-class product, not an afterthought.** Target: the polish and flow
-of [`k9s`](https://k9scli.io) — keyboard-first, fast, discoverable, beautiful in a terminal.
-Multi-repo state is intrinsically 2-D (N repos × their state) and works over SSH, so a
-`ratatui` cockpit is the right shape for embedded/CI users.
-
-Design bar (non-negotiable):
-- **Keyboard-first, modal, k9s-style.** `:` command bar, `/` filter, single-key actions,
-  a live-updating grid. Mouse optional, never required.
-- **Instant feedback.** Async refresh, spinners on long ops, no frozen frames.
-- **Legible at a glance.** Color-coded status (clean / dirty / drift / missing), consistent
-  glyphs, a help bar that always shows the next keystrokes.
-- **Themeable + `NO_COLOR`-aware.** Sane in light and dark terminals.
-
-Views:
-- left: stack → repo tree; right: per-repo detail (branch, SHA, dirty, ahead/behind, drift).
-- changeset view: the N branches of a feature, each with PR/MR review + CI status.
-- actions: sync, switch, `pin`, start/land a changeset — all keyboard-driven.
-
-### Cockpit layout — fleet view
+Keyboard-first, modal, k9s-style. `:` opens a command bar mirroring the CLI verbs
+(`:sync`, `:stack sensor-node`, `:run git status`, `:prs`, `:ci`), `/` filters the
+grid, single keys act on the cursor row. Async refresh — the UI never freezes.
 
 ```text
  haw ▸ ~/work/gateway ───────────────────────── stack: gateway   lock: ✓   repos: 3/3
-────────────────────────────────────────────────────────────────────────────────────────
- REPO        BRANCH        HEAD       DIRTY   DRIFT   AHEAD/BEHIND
-▸kernel      v6.1.2        a1b2c3d4     ·       ·        0 / 0
- hal         main          9f8e7d6c    yes      ·        2 / 0
- app-mqtt    release/2.x   4d5e6f7a     ·      DRIFT     0 / 5
-────────────────────────────────────────────────────────────────────────────────────────
- hal  ›  path hal/   branch main (ahead 2)   dirty 3 files   locked 9f8e7d6c   grp firmware
-────────────────────────────────────────────────────────────────────────────────────────
- [s]ync [S]witch [p]in [l]ock [t]ree [c]hange [r]un  [/]filter [:]cmd [?]help [q]uit    :█
+──────────────────────────────────────────────────────────────────────────────────────
+ REPO        BRANCH        HEAD       DIRTY   DRIFT   ↑ / ↓    MERGE
+▸kernel      v6.1.2        a1b2c3d4     ·       ·      0 / 0     —
+ hal         main          9f8e7d6c    yes      ·      2 / 0     —
+ app-mqtt    release/2.x   4d5e6f7a     ·      DRIFT   0 / 5     —
+──────────────────────────────────────────────────────────────────────────────────────
+ hal  ›  path hal/   branch main (ahead 2)   dirty   locked 9f8e7d6c   grp firmware
+──────────────────────────────────────────────────────────────────────────────────────
+ [s]ync [S]witch [p]in [l]ock [m]PRs [i]CI [t]ree [c]hange [/]filter [:]cmd [?]help
 ```
 
-Green = clean · yellow = dirty · red = drift · dim = not cloned. `▸` marks the cursor row;
-the bottom strip details it live.
+Views: stacks → fleet grid → repo detail; changesets with per-repo PR/MR review + CI
+cells; fleet-wide **open PR/MRs** (`m`) and **recent CI runs** (`i`) across every
+repo, with `o` to open the row in your browser. Full keymap:
+[docs/CLI-DESIGN.md](docs/CLI-DESIGN.md#tui-keymap).
 
-### Cockpit layout — changeset view
+## Why hawser exists
 
-```text
- haw ▸ change FEAT-42 ───────────────────────────────── 2 repos   branch: change/FEAT-42
-────────────────────────────────────────────────────────────────────────────────────────
- REPO        BRANCH          ON IT  DIRTY   HEAD       PR / MR        CI
-▸kernel      change/FEAT-42   yes     ·     a1b2c3d4   #128 ● open    ✓ passed
- app-mqtt    change/FEAT-42   yes    yes    4d5e6f7a   !47  ◐ review   ⏳ running
-────────────────────────────────────────────────────────────────────────────────────────
- [n]ew [␣]select [R]equest-PR [L]and [g]oto [b]ack  [/]filter [:]cmd [?]help [q]uit     :█
-```
+Splitting a stack across repositories is routine in embedded/automotive/avionics
+(shared BSW/HAL/MCAL repos reused across ECUs) and microservice backends. Existing
+tools each solve one slice:
 
-Keyboard-first, k9s-style: `:` opens a command bar mirroring the CLI verbs (`:sync`,
-`:stack sensor-node`, `:run git status`), `/` filters the grid, single keys act on the cursor
-row. Full keymap: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md#tui-keymap).
+| Tool | Gives you | Misses |
+|------|-----------|--------|
+| Google `repo` / `west` | manifests | lockfile; Python runtime; detached HEADs; symlinks vs Windows |
+| RepoFleet (Go) | issue → branches → PR/MR flow | stack composition; reproducible pinning |
+| mergetopus (Rust) | parallel single-repo merges | multi-repo anything |
 
-Open it with a bare `haw` (or `haw dash`). A richer GUI is possible later via **Tauri**,
-reusing the exact same Rust core. The TUI ships first: one binary, low cost, on-target.
+`haw` is the union nobody ships: **reproducible stack composition** + **cross-repo
+MR orchestration** + **optional parallel collaborative merge**, behind one binary
+and one TUI. It orchestrates Git and the forge APIs — it does **not** reimplement
+Git's merge engine, replace a forge, or replace domain toolchains.
 
----
-
-## Cookbook — commands & output
-
-Illustrative output for the shipped commands (Phase 1). Colorized on a TTY, plain when piped.
-
-```console
-$ haw init haw.toml
-initialized workspace from haw.toml
-next: haw sync
-
-$ haw sync
-wrote haw.lock (3 repos pinned)
-  ✓ kernel    cloned
-  ✓ hal       cloned
-  ✓ app-mqtt  cloned
-synced stack `gateway` (3/3 repos)
-
-$ haw tree
-haw.toml
-└─ gateway
-   ├─ kernel    v6.1.2       (git@gitlab.company.com:firmware/kernel.git)
-   ├─ hal       main         (git@gitlab.company.com:firmware/hal.git)
-   └─ app-mqtt  release/2.x  (git@github.com:acme/app-mqtt.git)
-
-$ haw status
-REPO      BRANCH   HEAD      DIRTY  DRIFT
-kernel    v6.1.2   a1b2c3d4  -      -
-hal       main     9f8e7d6c  yes    -
-app-mqtt  release  4d5e6f7a  -      YES
-
-$ haw run 'git fetch --tags'
-── kernel ──
-── hal ──
-── app-mqtt ──
-ran in 3/3 repos
-
-$ haw lock
-wrote haw.lock (3 repos pinned)
-  kernel    a1b2c3d4e5f6  <- v6.1.2
-  hal       9f8e7d6c5b4a  <- main
-  app-mqtt  4d5e6f7a8b9c  <- release/2.x
-
-$ haw pin                       # snapshot current checkouts (no network)
-pinned haw.lock to current HEADs (3 repos)
-
-$ haw change start FEAT-42 --repos kernel,app-mqtt
-changeset `FEAT-42` started across 2 repo(s):
-  kernel    -> change/FEAT-42
-  app-mqtt  -> change/FEAT-42
-
-$ haw change status FEAT-42
-changeset `FEAT-42`
-REPO      BRANCH           ON IT  DIRTY  HEAD      PR
-kernel    change/FEAT-42   yes    -      a1b2c3d4  —
-app-mqtt  change/FEAT-42   yes    yes    4d5e6f7a  —
-(no PR/MRs yet — open them with `haw change request FEAT-42`)
-```
-
-## Testing
+## Development
 
 ```bash
-cargo test --workspace        # unit + integration; 72 tests, all green
+cargo test --workspace                                # 79 tests, all green
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Covered today: manifest parse + referential validation, TOML round-trip, resolver + overlay
-precedence, lockfile read/write, changeset start/status, the full collaborative-merge
-lifecycle against real git repos, plus:
+Covered: manifest parse + referential validation, TOML round-trip, resolver +
+overlay precedence, lockfile read/write and determinism (byte-identical, LF-only,
+cross-OS in CI), changeset lifecycle, the full collaborative merge against real git
+repos, golden CLI-output snapshots (`crates/hawser/tests/golden.rs`), forge
+orchestration against a fake forge, and the cockpit logic (filters, cursor,
+command bar, fleet PR/CI views).
 
-- **Golden CLI-output tests** (`crates/hawser/tests/golden.rs`) — drive the real `haw`
-  binary and snapshot `tree`/`status`/`sync` output, the `--format json` schema, and the
-  `--verify` exit-3 CI gate.
-- **Determinism tests** — `haw.lock` is byte-identical run-to-run and LF-only; the CI
-  matrix makes that a cross-OS guarantee (certification evidence, [COMPLIANCE §8](docs/COMPLIANCE.md)).
-- **Cockpit logic tests** (`crates/haw-tui`) — filter-by-name-or-group, cursor clamping,
-  view navigation, and the command bar (incl. the `:change status` non-mutation guard).
+Workspace layout:
 
-## Status
-
-All phases 0-6 of [the plan](docs/ARCHITECTURE.md#6-implementation-plan-phased) are
-implemented: composition (`sync`/`lock`/`pin`/`switch`, overlays, `--shared`), the full
-changeset lifecycle (`start`/`request`/`land`/`goto`, snapshots) on GitHub **and** GitLab,
-the interactive TUI cockpit, `import` from west/repo manifests, CI gates (`verify`,
-`--locked`, `--format json`), lifecycle hooks, plugins, packaging, and the Phase 6
-collaborative merge (`merge plan`/`resolve`/`cleanup`/`abort`) that slices one big
-conflict-heavy merge into reviewable units and seals it as a single clean merge commit.
+| Crate | Role |
+|-------|------|
+| [`haw-core`](crates/haw-core) | Manifest, lockfile, resolver, workspace, changesets — all domain logic |
+| [`haw-git`](crates/haw-git) | Git backend: gitoxide reads, `git` shell-outs for plumbing |
+| [`haw-forge`](crates/haw-forge) | GitHub/GitLab behind one `Forge` trait; changeset + fleet orchestration |
+| [`haw-merge`](crates/haw-merge) | Collaborative merge: plan/resolve/cleanup/abort |
+| [`haw-tui`](crates/haw-tui) | The ratatui cockpit — renders and dispatches, nothing more |
+| [`hawser`](crates/hawser) | The `haw` binary: clap CLI, thin glue |
 
 ## Documentation
+
+Published at **[nastwinns.github.io/keelson/docs](https://nastwinns.github.io/keelson/docs/)**
+(mdBook, rebuilt on every push). Sources:
 
 | Doc | What |
 |-----|------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, data flows, phased implementation plan |
+| [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md) | Full CLI lexicon + TUI keymap |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
-| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Tool qualification, SBOM/CRA, crypto/signing, GDPR, secure SDLC |
-| [docs/COMMERCIALIZATION.md](docs/COMMERCIALIZATION.md) | Editions, licensing, LTS, qualification kit, pricing, GTM |
-| [docs/LAUNCH.md](docs/LAUNCH.md) | Reddit/HN launch playbook: timing gate, media assets, copy-ready post drafts |
-| [AGENTS.md](AGENTS.md) | Token-saving output rules for AI coding agents in this repo |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Tool qualification, SBOM/CRA, crypto/signing, GDPR |
+| [docs/COMMERCIALIZATION.md](docs/COMMERCIALIZATION.md) | Editions, licensing, LTS, pricing, GTM |
+| [docs/LAUNCH.md](docs/LAUNCH.md) | Launch playbook |
+| [AGENTS.md](AGENTS.md) | Output rules for AI coding agents in this repo |
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0, at your option.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

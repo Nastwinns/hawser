@@ -299,3 +299,50 @@ pub fn land(
     }
     Ok(outcomes)
 }
+
+/// One manifest repo's fleet-wide fetch result. Repos without a resolvable
+/// clone URL or a recognized forge are skipped, not reported.
+pub type FleetRepoResult<T> = (String, Result<Vec<T>, RepoFailure>);
+
+/// Run `fetch` against every manifest repo that has a recognized forge,
+/// in manifest order. Per-repo failures are reported per repo.
+fn for_each_forge_repo<T>(
+    ws: &Workspace,
+    forges: &dyn ForgeFactory,
+    fetch: impl Fn(&dyn crate::Forge, &str) -> Result<Vec<T>, ForgeError>,
+) -> Vec<FleetRepoResult<T>> {
+    let mut out = Vec::new();
+    for name in ws.manifest.repos.keys() {
+        let Ok(url) = clone_url(ws, name) else {
+            continue;
+        };
+        let hint = forge_hint(ws, name);
+        if hint.unwrap_or_else(|| crate::detect(&url)) == ForgeKind::Unknown {
+            continue;
+        }
+        let result = forges
+            .client_for(&url, hint)
+            .and_then(|forge| fetch(forge.as_ref(), &url))
+            .map_err(RepoFailure::from);
+        out.push((name.clone(), result));
+    }
+    out
+}
+
+/// Every open PR/MR across the fleet, in manifest repo order
+/// (fleet-wide PR/MR view).
+pub fn fleet_open_prs(
+    ws: &Workspace,
+    forges: &dyn ForgeFactory,
+) -> Vec<FleetRepoResult<crate::OpenPr>> {
+    for_each_forge_repo(ws, forges, |forge, url| forge.list_open_prs(url))
+}
+
+/// Recent CI runs/pipelines across the fleet, in manifest repo order
+/// (fleet-wide CI view).
+pub fn fleet_ci_runs(
+    ws: &Workspace,
+    forges: &dyn ForgeFactory,
+) -> Vec<FleetRepoResult<crate::CiRun>> {
+    for_each_forge_repo(ws, forges, |forge, url| forge.list_ci_runs(url))
+}

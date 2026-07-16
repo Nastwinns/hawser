@@ -92,6 +92,34 @@ pub struct MergeBadge {
     pub total: usize,
 }
 
+/// One open PR/MR for the fleet-wide PR/MR view (`m`).
+#[derive(Debug, Clone)]
+pub struct FleetPr {
+    pub repo: String,
+    /// `github`/`gitlab`.
+    pub forge: String,
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    /// Rendered state: `open`/`draft`/`merged`/`closed`.
+    pub state: String,
+    pub approved: bool,
+    /// `None` while CI is pending or absent.
+    pub ci: Option<bool>,
+}
+
+/// One CI run/pipeline for the fleet-wide CI view (`i`).
+#[derive(Debug, Clone)]
+pub struct FleetCiRun {
+    pub repo: String,
+    pub name: String,
+    pub branch: String,
+    pub event: String,
+    /// Rendered status: `passed`/`failed`/`running`/`queued`/`cancelled`.
+    pub status: String,
+    pub url: String,
+}
+
 /// Everything the cockpit can ask the application to do. Implementations run
 /// on a worker thread, so they must be `Send`.
 pub trait Controller: Send {
@@ -111,6 +139,10 @@ pub trait Controller: Send {
     fn merge_cleanup(&mut self, repo: &str) -> io::Result<String>;
     /// Abort a planned merge for `repo` (see `haw merge abort`).
     fn merge_abort(&mut self, repo: &str) -> io::Result<String>;
+    /// Every open PR/MR across the fleet (network; fetched on entering `m`).
+    fn fleet_prs(&mut self) -> io::Result<Vec<FleetPr>>;
+    /// Recent CI runs/pipelines across the fleet (network; fetched on `i`).
+    fn fleet_ci(&mut self) -> io::Result<Vec<FleetCiRun>>;
 }
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -122,6 +154,8 @@ enum View {
     Changesets,
     Changeset,
     Tree,
+    Prs,
+    Ci,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -135,6 +169,8 @@ enum InputMode {
 enum Job {
     Refresh,
     ChangesetPrs(String),
+    FleetPrs,
+    FleetCi,
     Action(&'static str, ActionKind),
 }
 
@@ -155,6 +191,8 @@ enum ActionKind {
 enum Outcome {
     Snapshot(Box<io::Result<Snapshot>>),
     ChangesetPrs(Box<io::Result<ChangesetSummary>>),
+    FleetPrs(Box<io::Result<Vec<FleetPr>>>),
+    FleetCi(Box<io::Result<Vec<FleetCiRun>>>),
     Action(&'static str, io::Result<String>),
 }
 
@@ -179,6 +217,10 @@ struct App {
     pending_confirm: Option<Confirm>,
     /// Full multi-repo output from the last `r`/`:run`, shown as a dismissable overlay.
     output: Option<String>,
+    /// Fleet-wide open PR/MRs; `None` until first fetched (`m` view).
+    prs: Option<Vec<FleetPr>>,
+    /// Fleet-wide recent CI runs; `None` until first fetched (`i` view).
+    ci: Option<Vec<FleetCiRun>>,
 }
 
 /// A repo matches a filter if its name or any of its groups contains it.
@@ -235,6 +277,33 @@ impl App {
             .unwrap_or_default()
     }
 
+    fn pr_rows(&self) -> Vec<&FleetPr> {
+        self.prs
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|p| {
+                self.filter.is_empty()
+                    || p.repo.contains(&self.filter)
+                    || p.title.contains(&self.filter)
+            })
+            .collect()
+    }
+
+    fn ci_rows(&self) -> Vec<&FleetCiRun> {
+        self.ci
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|r| {
+                self.filter.is_empty()
+                    || r.repo.contains(&self.filter)
+                    || r.branch.contains(&self.filter)
+                    || r.name.contains(&self.filter)
+            })
+            .collect()
+    }
+
     fn rows_len(&self) -> usize {
         match self.view {
             View::Stacks => self.stack_rows().len(),
@@ -242,6 +311,18 @@ impl App {
             View::Changesets => self.changeset_rows().len(),
             View::Changeset => self.change_repo_rows().len(),
             View::Tree => 0,
+            View::Prs => self.pr_rows().len(),
+            View::Ci => self.ci_rows().len(),
+        }
+    }
+
+    /// URL under the cursor in the PR/CI views, for `o` (open in browser).
+    fn cursor_url(&self) -> Option<String> {
+        let index = self.cursor.selected()?;
+        match self.view {
+            View::Prs => self.pr_rows().get(index).map(|p| p.url.clone()),
+            View::Ci => self.ci_rows().get(index).map(|r| r.url.clone()),
+            _ => None,
         }
     }
 
@@ -316,6 +397,8 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                 Job::ChangesetPrs(id) => {
                     Outcome::ChangesetPrs(Box::new(controller.changeset_prs(&id)))
                 }
+                Job::FleetPrs => Outcome::FleetPrs(Box::new(controller.fleet_prs())),
+                Job::FleetCi => Outcome::FleetCi(Box::new(controller.fleet_ci())),
                 Job::Action(label, kind) => {
                     let result = match kind {
                         ActionKind::SyncStack(stack) => controller.sync_stack(&stack),
@@ -365,6 +448,46 @@ fn open_changeset(app: &mut App, jobs: &Sender<Job>, id: &str) {
         app.busy = Some("PR status");
         let _ = jobs.send(Job::ChangesetPrs(id.to_string()));
     }
+}
+
+/// Navigate to a fleet-wide network view (`m`/`i`) and (re)fetch its rows.
+fn open_fleet_view(app: &mut App, jobs: &Sender<Job>, view: View) {
+    app.goto_view(view);
+    if app.busy.is_some() {
+        return;
+    }
+    match view {
+        View::Prs => {
+            app.busy = Some("PR/MRs");
+            let _ = jobs.send(Job::FleetPrs);
+        }
+        View::Ci => {
+            app.busy = Some("CI runs");
+            let _ = jobs.send(Job::FleetCi);
+        }
+        _ => {}
+    }
+}
+
+/// Open `url` with the platform's default browser, detached (best effort).
+fn open_in_browser(url: &str) -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "start", ""]);
+        command
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let mut command = std::process::Command::new("xdg-open");
+    command
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
 }
 
 /// A confirmation gate for actions with real side effects (opens/merges PRs).
@@ -426,6 +549,8 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
             dispatch(app, jobs, "lock", ActionKind::Lock);
         }
         ("tree", "") => app.goto_view(View::Tree),
+        ("prs", "") => open_fleet_view(app, jobs, View::Prs),
+        ("ci", "") => open_fleet_view(app, jobs, View::Ci),
         ("merge", "") => {
             app.message = match app.snapshot.merges.len() {
                 0 => "no merges in progress".to_string(),
@@ -483,6 +608,8 @@ fn event_loop(
         goto: None,
         pending_confirm: None,
         output: None,
+        prs: None,
+        ci: None,
     };
     app.cursor.select(Some(0));
     request_refresh(&mut app, jobs);
@@ -524,6 +651,29 @@ fn event_loop(
                             app.message = "PR/MR status refreshed".to_string();
                         }
                         Err(err) => app.message = format!("PR status failed: {err}"),
+                    }
+                }
+                Outcome::FleetPrs(result) => {
+                    app.busy = None;
+                    match *result {
+                        Ok(prs) => {
+                            app.message = format!("{} open PR/MR(s) across the fleet", prs.len());
+                            app.prs = Some(prs);
+                            app.clamp_cursor();
+                        }
+                        Err(err) => app.message = format!("PR/MR fetch failed: {err}"),
+                    }
+                }
+                Outcome::FleetCi(result) => {
+                    app.busy = None;
+                    match *result {
+                        Ok(runs) => {
+                            app.message =
+                                format!("{} recent CI run(s) across the fleet", runs.len());
+                            app.ci = Some(runs);
+                            app.clamp_cursor();
+                        }
+                        Err(err) => app.message = format!("CI fetch failed: {err}"),
                     }
                 }
                 Outcome::Action(label, result) => {
@@ -677,6 +827,17 @@ fn event_loop(
             }
             KeyCode::Char('t') => app.goto_view(View::Tree),
             KeyCode::Char('c') => app.goto_view(View::Changesets),
+            KeyCode::Char('m') => open_fleet_view(&mut app, jobs, View::Prs),
+            KeyCode::Char('i') => open_fleet_view(&mut app, jobs, View::Ci),
+            KeyCode::Char('o') if app.view == View::Prs || app.view == View::Ci => {
+                match app.cursor_url() {
+                    Some(url) if !url.is_empty() => match open_in_browser(&url) {
+                        Ok(()) => app.message = format!("→ opened {url}"),
+                        Err(err) => app.message = format!("open failed: {err}"),
+                    },
+                    _ => app.message = "open: put the cursor on a row".to_string(),
+                }
+            }
             KeyCode::Char('g') => {
                 if let Some(repo) = app.cursor_repo()
                     && let Some(path) = app.repo_path(&repo)
@@ -779,6 +940,8 @@ fn view_name(app: &App, view: View) -> String {
         View::Changesets => "changesets".to_string(),
         View::Changeset => format!("change {}", app.changeset.as_deref().unwrap_or("—")),
         View::Tree => "tree".to_string(),
+        View::Prs => "pr/mr".to_string(),
+        View::Ci => "ci".to_string(),
     }
 }
 
@@ -823,6 +986,22 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("b", "back"),
         ],
         View::Tree => &[("b", "back"), ("q", "quit")],
+        View::Prs => &[
+            ("o", "open in browser"),
+            ("m", "refetch"),
+            ("i", "CI runs"),
+            ("b", "back"),
+            ("/", "filter"),
+            ("?", "help"),
+        ],
+        View::Ci => &[
+            ("o", "open in browser"),
+            ("i", "refetch"),
+            ("m", "PR/MRs"),
+            ("b", "back"),
+            ("/", "filter"),
+            ("?", "help"),
+        ],
     }
 }
 
@@ -844,6 +1023,8 @@ fn draw(frame: &mut Frame, app: &mut App) {
         View::Changesets => draw_changesets(frame, app, zones[1]),
         View::Changeset => draw_changeset(frame, app, zones[1]),
         View::Tree => draw_tree(frame, app, zones[1]),
+        View::Prs => draw_prs(frame, app, zones[1]),
+        View::Ci => draw_ci(frame, app, zones[1]),
     }
     draw_status(frame, app, zones[2]);
     draw_crumbs(frame, app, zones[3]);
@@ -1435,7 +1616,11 @@ fn ci_span(text: &str) -> Span<'static> {
         theme::GREEN
     } else if lower.contains("fail") || text.contains('✗') {
         theme::RED
-    } else if lower.contains("run") || lower.contains("pend") || text.contains('⏳') {
+    } else if lower.contains("run")
+        || lower.contains("pend")
+        || lower.contains("queue")
+        || text.contains('⏳')
+    {
         theme::YELLOW
     } else {
         theme::DIM
@@ -1522,6 +1707,172 @@ fn draw_changeset(frame: &mut Frame, app: &mut App, area: Rect) {
     let mut state = TableState::default();
     state.select(app.cursor.selected());
     frame.render_stateful_widget(table, area, &mut state);
+}
+
+fn forge_span(forge: &str) -> Span<'static> {
+    let color = match forge {
+        "github" => theme::ACCENT,
+        "gitlab" => theme::PEACH,
+        _ => theme::DIM,
+    };
+    Span::styled(forge.to_string(), Style::default().fg(color))
+}
+
+fn draw_prs(frame: &mut Frame, app: &mut App, area: Rect) {
+    let fetched = app.prs.is_some();
+    let rows: Vec<Row> = app
+        .pr_rows()
+        .iter()
+        .map(|pr| {
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    pr.repo.clone(),
+                    Style::default()
+                        .fg(theme::TEXT)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Cell::from(forge_span(&pr.forge)),
+                Cell::from(Span::styled(
+                    format!("#{}", pr.number),
+                    Style::default().fg(theme::YELLOW),
+                )),
+                Cell::from(Span::styled(
+                    pr.title.clone(),
+                    Style::default().fg(theme::TEXT),
+                )),
+                Cell::from(pr_span(&pr.state)),
+                Cell::from(if pr.approved {
+                    Span::styled("✓", Style::default().fg(theme::GREEN))
+                } else {
+                    Span::styled("·", Style::default().fg(theme::DIM))
+                }),
+                Cell::from(ci_span(match pr.ci {
+                    Some(true) => "✓ passed",
+                    Some(false) => "✗ failed",
+                    None => "—",
+                })),
+            ])
+        })
+        .collect();
+
+    let count = rows.len();
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Min(10),
+            Constraint::Length(7),
+            Constraint::Length(6),
+            Constraint::Min(24),
+            Constraint::Length(7),
+            Constraint::Length(5),
+            Constraint::Length(9),
+        ],
+    )
+    .header(header_row(&[
+        "REPO", "FORGE", "#", "TITLE", "STATE", "APPR", "CI",
+    ]))
+    .block(panel(format!("open PR/MRs({count})")))
+    .row_highlight_style(cursor_style())
+    .highlight_symbol(Span::styled("▍", Style::default().fg(theme::ACCENT)));
+
+    let mut state = TableState::default();
+    state.select(app.cursor.selected());
+    frame.render_stateful_widget(table, area, &mut state);
+
+    if count == 0 {
+        draw_empty_hint(
+            frame,
+            area,
+            if fetched {
+                "no open PR/MRs across the fleet"
+            } else {
+                "fetching PR/MRs…"
+            },
+        );
+    }
+}
+
+fn draw_ci(frame: &mut Frame, app: &mut App, area: Rect) {
+    let fetched = app.ci.is_some();
+    let rows: Vec<Row> = app
+        .ci_rows()
+        .iter()
+        .map(|run| {
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    run.repo.clone(),
+                    Style::default()
+                        .fg(theme::TEXT)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Cell::from(Span::styled(
+                    run.name.clone(),
+                    Style::default().fg(theme::TEXT),
+                )),
+                Cell::from(Span::styled(
+                    run.branch.clone(),
+                    Style::default().fg(theme::YELLOW),
+                )),
+                Cell::from(Span::styled(
+                    run.event.clone(),
+                    Style::default().fg(theme::TEAL),
+                )),
+                Cell::from(ci_span(&run.status)),
+            ])
+        })
+        .collect();
+
+    let count = rows.len();
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Min(10),
+            Constraint::Min(18),
+            Constraint::Min(14),
+            Constraint::Length(13),
+            Constraint::Length(11),
+        ],
+    )
+    .header(header_row(&[
+        "REPO", "WORKFLOW", "BRANCH", "EVENT", "STATUS",
+    ]))
+    .block(panel(format!("CI runs({count})")))
+    .row_highlight_style(cursor_style())
+    .highlight_symbol(Span::styled("▍", Style::default().fg(theme::ACCENT)));
+
+    let mut state = TableState::default();
+    state.select(app.cursor.selected());
+    frame.render_stateful_widget(table, area, &mut state);
+
+    if count == 0 {
+        draw_empty_hint(
+            frame,
+            area,
+            if fetched {
+                "no recent CI runs across the fleet"
+            } else {
+                "fetching CI runs…"
+            },
+        );
+    }
+}
+
+/// Centered dim hint inside an empty table body.
+fn draw_empty_hint(frame: &mut Frame, area: Rect, hint: &str) {
+    let body = Rect {
+        x: area.x + 1,
+        y: area.y + 2,
+        width: area.width.saturating_sub(2),
+        height: 1,
+    };
+    frame.render_widget(
+        Paragraph::new(Line::styled(
+            hint.to_string(),
+            Style::default().fg(theme::DIM),
+        ))
+        .alignment(Alignment::Center),
+        body,
+    );
 }
 
 fn draw_tree(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -1652,7 +2003,7 @@ fn help_section(title: &'static str) -> Line<'static> {
 fn draw_help(frame: &mut Frame) {
     let area = frame.area();
     let width = area.width.min(60);
-    let height = area.height.min(24);
+    let height = area.height.min(29);
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + (area.height.saturating_sub(height)) / 2,
@@ -1671,13 +2022,18 @@ fn draw_help(frame: &mut Frame) {
         help_entry("t", "tree · c changesets · r run · g goto"),
         help_entry("/", "filter by name or group — reopens with your text"),
         Line::raw(""),
+        help_section("fleet-wide (network)"),
+        help_entry("m", "open PR/MRs across every repo"),
+        help_entry("i", "recent CI runs across every repo"),
+        help_entry("o", "open the row's PR or run in the browser"),
+        Line::raw(""),
         help_section("changeset"),
         help_entry("n", "new · space select repos"),
         help_entry("R", "request PR/MRs (cross-linked, asks y/n)"),
         help_entry("L", "land in dependency order (asks y/n)"),
         Line::raw(""),
         help_section("command bar"),
-        help_entry(":sync", "· :stack NAME · :run CMD · :tree"),
+        help_entry(":sync", "· :stack NAME · :run CMD · :tree · :prs · :ci"),
         help_entry(":change", "[ID | start ID | land ID | request ID]"),
         Line::raw(""),
         Line::styled(" press any key to close", Style::default().fg(theme::DIM)),
@@ -1742,6 +2098,8 @@ mod tests {
             goto: None,
             pending_confirm: None,
             output: None,
+            prs: None,
+            ci: None,
         }
     }
 
@@ -1837,6 +2195,8 @@ mod tests {
             View::Changesets,
             View::Changeset,
             View::Tree,
+            View::Prs,
+            View::Ci,
         ] {
             assert!(!view_name(&app, v).is_empty());
             assert!(!key_hints(v).is_empty());
@@ -1941,6 +2301,102 @@ mod tests {
         run_command_bar(&mut app, &tx, "merge cleanup hal");
         assert!(app.pending_confirm.is_none());
         assert!(app.message.contains("no merge planned"));
+    }
+
+    fn pr(repo: &str, title: &str) -> FleetPr {
+        FleetPr {
+            repo: repo.to_string(),
+            forge: "github".to_string(),
+            number: 1,
+            title: title.to_string(),
+            url: format!("https://github.com/acme/{repo}/pull/1"),
+            state: "open".to_string(),
+            approved: false,
+            ci: None,
+        }
+    }
+
+    fn ci_run(repo: &str, name: &str, branch: &str) -> FleetCiRun {
+        FleetCiRun {
+            repo: repo.to_string(),
+            name: name.to_string(),
+            branch: branch.to_string(),
+            event: "push".to_string(),
+            status: "passed".to_string(),
+            url: format!("https://github.com/acme/{repo}/actions/runs/1"),
+        }
+    }
+
+    #[test]
+    fn pr_rows_filter_by_repo_and_title() {
+        let mut app = fleet_app();
+        app.prs = Some(vec![pr("kernel", "fix boot"), pr("hal", "add driver")]);
+        assert_eq!(app.pr_rows().len(), 2);
+        app.filter = "kern".to_string();
+        assert_eq!(app.pr_rows().len(), 1);
+        app.filter = "driver".to_string();
+        assert_eq!(app.pr_rows().len(), 1);
+        app.filter = "zzz".to_string();
+        assert!(app.pr_rows().is_empty());
+    }
+
+    #[test]
+    fn ci_rows_filter_by_repo_branch_and_name() {
+        let mut app = fleet_app();
+        app.ci = Some(vec![
+            ci_run("kernel", "build", "main"),
+            ci_run("hal", "test", "feature/x"),
+        ]);
+        assert_eq!(app.ci_rows().len(), 2);
+        app.filter = "hal".to_string();
+        assert_eq!(app.ci_rows().len(), 1);
+        app.filter = "feature".to_string();
+        assert_eq!(app.ci_rows().len(), 1);
+        app.filter = "build".to_string();
+        assert_eq!(app.ci_rows().len(), 1);
+    }
+
+    #[test]
+    fn cursor_url_follows_the_active_view() {
+        let mut app = fleet_app();
+        app.prs = Some(vec![pr("kernel", "fix boot")]);
+        app.ci = Some(vec![ci_run("hal", "build", "main")]);
+        assert_eq!(app.cursor_url(), None);
+        app.view = View::Prs;
+        assert_eq!(
+            app.cursor_url().as_deref(),
+            Some("https://github.com/acme/kernel/pull/1")
+        );
+        app.view = View::Ci;
+        assert_eq!(
+            app.cursor_url().as_deref(),
+            Some("https://github.com/acme/hal/actions/runs/1")
+        );
+        app.cursor.select(Some(5));
+        assert_eq!(app.cursor_url(), None);
+    }
+
+    #[test]
+    fn prs_and_ci_commands_open_the_views() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        run_command_bar(&mut app, &tx, "prs");
+        assert_eq!(app.view, View::Prs);
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs)));
+        app.busy = None;
+        run_command_bar(&mut app, &tx, "ci");
+        assert_eq!(app.view, View::Ci);
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetCi)));
+    }
+
+    #[test]
+    fn open_fleet_view_skips_fetch_while_busy() {
+        let mut app = fleet_app();
+        app.busy = Some("sync");
+        let (tx, rx) = channel();
+        open_fleet_view(&mut app, &tx, View::Prs);
+        assert_eq!(app.view, View::Prs);
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
