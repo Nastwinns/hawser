@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in haw misbehaves
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report. Please fill in what you can — reproduction steps matter most.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you run, and what went wrong?
+      placeholder: "`haw sync --stack gateway` panicked with ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal haw.toml + the commands you ran, if possible.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: haw version
+      description: Output of `haw --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [Linux, macOS, Windows]
+    validations:
+      required: true

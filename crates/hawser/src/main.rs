@@ -353,7 +353,11 @@ Run `haw merge <subcommand> --help` for that subcommand's own examples.")]
 Examples:
   $ haw dash       open the cockpit (identical to running bare `haw`)"
     )]
-    Dash,
+    Dash {
+        /// Drive the cockpit with canned, in-memory data (no workspace/network).
+        #[arg(long, hide = true)]
+        demo: bool,
+    },
     /// Anything else runs a `haw-<name>` plugin from PATH.
     #[command(external_subcommand)]
     Plugin(Vec<String>),
@@ -615,7 +619,7 @@ fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
     let _ = MANIFEST_ARG.set(cli.manifest.clone());
     let Some(command) = cli.command else {
-        dash()?;
+        dash(false)?;
         return Ok(ExitCode::SUCCESS);
     };
     match command {
@@ -718,7 +722,7 @@ fn run() -> Result<ExitCode> {
             }
             MergeCommand::Abort { repo } => merge_abort(repo.as_deref())?,
         },
-        Command::Dash => dash()?,
+        Command::Dash { demo } => dash(demo)?,
         Command::Plugin(args) => return plugin(&args),
     }
     Ok(ExitCode::SUCCESS)
@@ -2391,10 +2395,434 @@ impl haw_tui::Controller for CliController {
     }
 }
 
-fn dash() -> Result<()> {
-    open_workspace()?;
-    if let Some(path) = haw_tui::run(Box::new(CliController))? {
+fn dash(demo: bool) -> Result<()> {
+    let controller: Box<dyn haw_tui::Controller> = if demo {
+        Box::new(DemoController)
+    } else {
+        open_workspace()?;
+        Box::new(CliController)
+    };
+    if let Some(path) = haw_tui::run(controller)? {
         println!("{}", path.display());
     }
     Ok(())
+}
+
+/// A cockpit controller backed entirely by canned, in-memory data. It reaches
+/// no workspace, git, or network, so `haw dash --demo` renders every view —
+/// fleet, PR/MRs, CI, changesets, merges — deterministically for recordings.
+struct DemoController;
+
+impl DemoController {
+    #[allow(clippy::too_many_arguments)]
+    fn repo(
+        name: &str,
+        groups: &[&str],
+        branch: Option<&str>,
+        head: Option<&str>,
+        dirty: bool,
+        drift: bool,
+        locked_rev: Option<&str>,
+        ahead_behind: Option<(u64, u64)>,
+        missing: bool,
+    ) -> RepoStatus {
+        RepoStatus {
+            name: name.to_string(),
+            path: PathBuf::from("repos").join(name),
+            missing,
+            branch: branch.map(str::to_string),
+            head: head.map(str::to_string),
+            dirty,
+            locked_rev: locked_rev.map(str::to_string),
+            drift,
+            ahead_behind,
+            groups: groups.iter().map(|g| g.to_string()).collect(),
+        }
+    }
+
+    fn gateway_fleet() -> Vec<RepoStatus> {
+        vec![
+            Self::repo(
+                "kernel",
+                &["firmware"],
+                Some("release/6.1"),
+                Some("a1c9f4e2b7d80516"),
+                false,
+                false,
+                Some("a1c9f4e2b7d80516"),
+                Some((0, 0)),
+                false,
+            ),
+            Self::repo(
+                "hal",
+                &["firmware"],
+                Some("feature/i2c-dma"),
+                Some("7f3b21d0e5a4c9b6"),
+                true,
+                false,
+                Some("7f3b21d0e5a4c9b6"),
+                Some((3, 1)),
+                false,
+            ),
+            Self::repo(
+                "app-mqtt",
+                &["ci", "apps"],
+                Some("main"),
+                Some("d4e88a1c60b3f279"),
+                false,
+                true,
+                Some("22aa77bc11ee9930"),
+                Some((0, 4)),
+                false,
+            ),
+            Self::repo(
+                "telemetry",
+                &["apps"],
+                None,
+                None,
+                false,
+                false,
+                Some("55cc33ee11aa8842"),
+                None,
+                true,
+            ),
+        ]
+    }
+
+    fn sensor_fleet() -> Vec<RepoStatus> {
+        vec![
+            Self::repo(
+                "kernel",
+                &["firmware"],
+                Some("release/6.1"),
+                Some("a1c9f4e2b7d80516"),
+                false,
+                false,
+                Some("a1c9f4e2b7d80516"),
+                Some((0, 0)),
+                false,
+            ),
+            Self::repo(
+                "sensor-drv",
+                &["firmware", "ci"],
+                Some("main"),
+                Some("9b0a1c2d3e4f5061"),
+                false,
+                false,
+                Some("9b0a1c2d3e4f5061"),
+                Some((0, 0)),
+                false,
+            ),
+        ]
+    }
+}
+
+impl haw_tui::Controller for DemoController {
+    fn snapshot(&mut self) -> std::io::Result<haw_tui::Snapshot> {
+        let paths = [
+            "kernel",
+            "hal",
+            "app-mqtt",
+            "telemetry",
+            "sensor-drv",
+            "edge-daemon",
+        ]
+        .iter()
+        .map(|name| {
+            (
+                name.to_string(),
+                PathBuf::from("/home/you/work/gateway").join(name),
+            )
+        })
+        .collect();
+
+        let changesets = vec![
+            haw_tui::ChangesetSummary {
+                id: "FEAT-42".to_string(),
+                repos: vec![
+                    haw_tui::ChangeRepoRow {
+                        name: "kernel".to_string(),
+                        branch: "change/FEAT-42".to_string(),
+                        on_branch: true,
+                        dirty: false,
+                        head: Some("a1c9f4e2b7d80516".to_string()),
+                        forge: "github".to_string(),
+                        pr: "#128 ● open".to_string(),
+                        ci: "✓ passed".to_string(),
+                    },
+                    haw_tui::ChangeRepoRow {
+                        name: "hal".to_string(),
+                        branch: "change/FEAT-42".to_string(),
+                        on_branch: true,
+                        dirty: true,
+                        head: Some("7f3b21d0e5a4c9b6".to_string()),
+                        forge: "gitlab".to_string(),
+                        pr: "!47 ◐ review".to_string(),
+                        ci: "⏳ running".to_string(),
+                    },
+                    haw_tui::ChangeRepoRow {
+                        name: "app-mqtt".to_string(),
+                        branch: "change/FEAT-42".to_string(),
+                        on_branch: false,
+                        dirty: false,
+                        head: Some("d4e88a1c60b3f279".to_string()),
+                        forge: "github".to_string(),
+                        pr: "—".to_string(),
+                        ci: "—".to_string(),
+                    },
+                ],
+            },
+            haw_tui::ChangesetSummary {
+                id: "BUG-1187".to_string(),
+                repos: vec![
+                    haw_tui::ChangeRepoRow {
+                        name: "sensor-drv".to_string(),
+                        branch: "change/BUG-1187".to_string(),
+                        on_branch: true,
+                        dirty: false,
+                        head: Some("9b0a1c2d3e4f5061".to_string()),
+                        forge: "github".to_string(),
+                        pr: "#91 ● merged".to_string(),
+                        ci: "✓ passed".to_string(),
+                    },
+                    haw_tui::ChangeRepoRow {
+                        name: "telemetry".to_string(),
+                        branch: "change/BUG-1187".to_string(),
+                        on_branch: true,
+                        dirty: false,
+                        head: Some("c0ffee1234567890".to_string()),
+                        forge: "gitlab".to_string(),
+                        pr: "!12 ✗ closed".to_string(),
+                        ci: "✗ failed".to_string(),
+                    },
+                ],
+            },
+        ];
+
+        let tree = "\
+└─ gateway
+   ├─ kernel      release/6.1
+   ├─ hal         feature/i2c-dma
+   ├─ app-mqtt    main
+   └─ telemetry   main
+├─ sensor-node
+   ├─ kernel      release/6.1
+   └─ sensor-drv  main"
+            .to_string();
+
+        Ok(haw_tui::Snapshot {
+            root_label: "~/work/gateway".to_string(),
+            stacks: vec!["gateway".to_string(), "sensor-node".to_string()],
+            current_stack: Some("gateway".to_string()),
+            fleet: vec![
+                ("gateway".to_string(), Self::gateway_fleet()),
+                ("sensor-node".to_string(), Self::sensor_fleet()),
+            ],
+            changesets,
+            lock_present: true,
+            paths,
+            tree,
+            merges: vec![(
+                "hal".to_string(),
+                haw_tui::MergeBadge {
+                    source: "origin/feature/i2c-dma".to_string(),
+                    resolved: 2,
+                    total: 3,
+                },
+            )],
+        })
+    }
+
+    fn changeset_prs(&mut self, id: &str) -> std::io::Result<haw_tui::ChangesetSummary> {
+        self.snapshot()?
+            .changesets
+            .into_iter()
+            .find(|c| c.id == id)
+            .ok_or_else(|| std::io::Error::other(format!("no changeset `{id}`")))
+    }
+
+    fn sync_stack(&mut self, stack: &str) -> std::io::Result<String> {
+        Ok(format!("synced stack `{stack}` (4 repos, 0 failed)"))
+    }
+
+    fn sync_repo(&mut self, repo: &str) -> std::io::Result<String> {
+        Ok(format!("synced `{repo}` — up to date"))
+    }
+
+    fn switch(&mut self, stack: &str) -> std::io::Result<String> {
+        Ok(format!("switched to `{stack}` — synced (4 repos)"))
+    }
+
+    fn pin(&mut self) -> std::io::Result<String> {
+        Ok("pinned haw.lock to current HEADs (6 repos)".to_string())
+    }
+
+    fn lock(&mut self) -> std::io::Result<String> {
+        Ok("wrote haw.lock (6 repos pinned)".to_string())
+    }
+
+    fn run_cmd(&mut self, cmd: &str) -> std::io::Result<String> {
+        Ok(format!(
+            "$ {cmd}\n── kernel ──\nOK\n── hal ──\nOK\n── app-mqtt ──\nOK\nran in 3/3 repos"
+        ))
+    }
+
+    fn change_start(&mut self, id: &str) -> std::io::Result<String> {
+        Ok(format!("changeset `{id}` started across 3 repos"))
+    }
+
+    fn change_request(&mut self, id: &str, only: Option<Vec<String>>) -> std::io::Result<String> {
+        let count = only.map_or(3, |repos| repos.len());
+        Ok(format!("requested `{id}` ({count} PR/MRs, cross-linked)"))
+    }
+
+    fn change_land(&mut self, id: &str) -> std::io::Result<String> {
+        Ok(format!("landed `{id}` (3 repos)"))
+    }
+
+    fn merge_cleanup(&mut self, repo: &str) -> std::io::Result<String> {
+        Ok(format!(
+            "merged 3 slice(s) into `main` on `{repo}` (e91f0a4c); dropped haw/merge branch"
+        ))
+    }
+
+    fn merge_abort(&mut self, repo: &str) -> std::io::Result<String> {
+        Ok(format!("aborted merge of `{repo}`; back on `main`"))
+    }
+
+    fn fleet_prs(&mut self) -> std::io::Result<Vec<haw_tui::FleetPr>> {
+        let pr = |repo: &str,
+                  forge: &str,
+                  number: u64,
+                  title: &str,
+                  state: &str,
+                  approved: bool,
+                  ci: Option<bool>| haw_tui::FleetPr {
+            repo: repo.to_string(),
+            forge: forge.to_string(),
+            number,
+            title: title.to_string(),
+            url: format!("https://{forge}.com/acme/{repo}/pull/{number}"),
+            state: state.to_string(),
+            approved,
+            ci,
+        };
+        Ok(vec![
+            pr(
+                "kernel",
+                "github",
+                128,
+                "i2c: add DMA-backed transfers",
+                "open",
+                true,
+                Some(true),
+            ),
+            pr(
+                "hal",
+                "gitlab",
+                47,
+                "hal: wire i2c DMA descriptors",
+                "draft",
+                false,
+                Some(false),
+            ),
+            pr(
+                "app-mqtt",
+                "github",
+                214,
+                "mqtt: reconnect backoff + jitter",
+                "open",
+                false,
+                None,
+            ),
+            pr(
+                "sensor-drv",
+                "github",
+                91,
+                "drv: calibrate on cold boot",
+                "merged",
+                true,
+                Some(true),
+            ),
+            pr(
+                "telemetry",
+                "gitlab",
+                12,
+                "telemetry: batch OTLP exports",
+                "open",
+                true,
+                Some(true),
+            ),
+            pr(
+                "edge-daemon",
+                "github",
+                8,
+                "edge: graceful shutdown on SIGTERM",
+                "draft",
+                false,
+                None,
+            ),
+        ])
+    }
+
+    fn fleet_ci(&mut self) -> std::io::Result<Vec<haw_tui::FleetCiRun>> {
+        let run =
+            |repo: &str, name: &str, branch: &str, event: &str, status: &str| haw_tui::FleetCiRun {
+                repo: repo.to_string(),
+                name: name.to_string(),
+                branch: branch.to_string(),
+                event: event.to_string(),
+                status: status.to_string(),
+                url: format!("https://github.com/acme/{repo}/actions"),
+            };
+        Ok(vec![
+            run("kernel", "build-and-test", "release/6.1", "push", "passed"),
+            run(
+                "hal",
+                "firmware-ci",
+                "feature/i2c-dma",
+                "pull_request",
+                "running",
+            ),
+            run("app-mqtt", "integration", "main", "push", "failed"),
+            run("telemetry", "lint", "main", "pull_request", "queued"),
+            run("sensor-drv", "nightly", "main", "schedule", "cancelled"),
+            run("edge-daemon", "build", "main", "push", "passed"),
+        ])
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod demo_controller_tests {
+    use super::*;
+    use haw_tui::Controller;
+
+    #[test]
+    fn snapshot_has_expected_shape() {
+        let mut controller = DemoController;
+        let snapshot = controller.snapshot().expect("demo snapshot");
+        assert_eq!(snapshot.stacks.len(), 2);
+        assert_eq!(snapshot.fleet.len(), 2);
+        let gateway = &snapshot
+            .fleet
+            .iter()
+            .find(|(name, _)| name == "gateway")
+            .expect("gateway stack")
+            .1;
+        assert_eq!(gateway.len(), 4);
+        assert!(gateway.iter().any(|r| r.missing));
+        assert!(gateway.iter().any(|r| r.drift));
+        assert!(gateway.iter().any(|r| r.dirty));
+        assert_eq!(snapshot.changesets.len(), 2);
+        assert_eq!(snapshot.merges.len(), 1);
+        assert!(snapshot.lock_present);
+    }
+
+    #[test]
+    fn fleet_views_are_populated() {
+        let mut controller = DemoController;
+        assert!(!controller.fleet_prs().expect("prs").is_empty());
+        assert!(!controller.fleet_ci().expect("ci").is_empty());
+    }
 }

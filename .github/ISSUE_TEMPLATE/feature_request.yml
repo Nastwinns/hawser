@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement or a new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that haw makes hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like haw to do? A command sketch helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / prior art
+      description: Other tools (repo, west, RepoFleet, ...) or workarounds you tried.
+  - type: markdown
+    attributes:
+      value: >
+        The core stays small. If this is forge-, tracker-, or toolchain-specific,
+        consider a [plugin](../blob/main/docs/PLUGINS.md) — we're happy to help design it.

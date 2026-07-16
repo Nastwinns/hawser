@@ -8,14 +8,38 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 fn main() -> Result<()> {
-    let task = std::env::args().nth(1).unwrap_or_default();
+    let mut args = std::env::args().skip(1);
+    let task = args.next().unwrap_or_default();
     match task.as_str() {
-        "dist" => dist(),
+        "dist" => {
+            let target = parse_target(args)?;
+            dist(target)
+        }
         _ => {
-            eprintln!("tasks:\n  dist  build a release archive under dist/");
+            eprintln!("tasks:\n  dist [--target <triple>]  build a release archive under dist/");
             Ok(())
         }
     }
+}
+
+fn parse_target(mut args: impl Iterator<Item = String>) -> Result<Option<String>> {
+    let mut target = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--target" => {
+                let value = args.next().context("--target requires a triple argument")?;
+                target = Some(value);
+            }
+            other => {
+                if let Some(value) = other.strip_prefix("--target=") {
+                    target = Some(value.to_string());
+                } else {
+                    bail!("unknown argument: {other}");
+                }
+            }
+        }
+    }
+    Ok(target)
 }
 
 fn workspace_root() -> Result<PathBuf> {
@@ -69,28 +93,36 @@ fn sha256(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-fn dist() -> Result<()> {
+fn dist(target: Option<String>) -> Result<()> {
     let root = workspace_root()?;
     let version = env!("CARGO_PKG_VERSION");
-    let triple = host_triple()?;
+    let triple = match target {
+        Some(t) => t,
+        None => host_triple()?,
+    };
 
     println!("building haw {version} ({triple})…");
     run(
         Command::new("cargo")
-            .args(["build", "--release", "-p", "hawser"])
+            .args(["build", "--release", "-p", "hawser", "--target", &triple])
             .current_dir(&root),
         "cargo build --release",
     )?;
 
-    let binary = if cfg!(windows) { "haw.exe" } else { "haw" };
-    let built = root.join("target").join("release").join(binary);
+    let binary = if triple.contains("windows") {
+        "haw.exe"
+    } else {
+        "haw"
+    };
+    let release_dir = root.join("target").join(&triple).join("release");
+    let built = release_dir.join(binary);
     if !built.exists() {
         bail!("release binary missing at {}", built.display());
     }
 
     let dist = root.join("dist");
     std::fs::create_dir_all(&dist)?;
-    let archive = dist.join(if cfg!(windows) {
+    let archive = dist.join(if triple.contains("windows") {
         format!("haw-{version}-{triple}.zip")
     } else {
         format!("haw-{version}-{triple}.tar.gz")
@@ -98,23 +130,34 @@ fn dist() -> Result<()> {
     let _ = std::fs::remove_file(&archive);
 
     let mut tar = Command::new("tar");
-    if cfg!(windows) {
+    if triple.contains("windows") {
         tar.arg("-a").arg("-c").arg("-f");
     } else {
         tar.arg("-czf");
     }
     run(
-        tar.arg(&archive)
-            .arg(binary)
-            .current_dir(root.join("target").join("release")),
+        tar.arg(&archive).arg(binary).current_dir(&release_dir),
         "tar",
     )?;
 
     println!("wrote {}", archive.display());
     match sha256(&archive) {
         Some(digest) => {
+            let sidecar = archive.with_file_name(format!(
+                "{}.sha256",
+                archive
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .context("archive path has no file name")?
+            ));
+            std::fs::write(&sidecar, format!("{digest}\n"))?;
+            println!("wrote {}", sidecar.display());
             println!("sha256  {digest}");
-            println!("update packaging/homebrew/keelson.rb and packaging/scoop/keelson.json");
+            println!(
+                "render manifests: python3 packaging/render.py {version} \
+                 <sha_macos_arm64> <sha_macos_x64> <sha_linux_x64> <sha_windows_x64>"
+            );
+            println!("  -> writes dist/hawser.rb (Homebrew) and dist/hawser.json (Scoop)");
         }
         None => println!("(no shasum/certutil found — compute the sha256 yourself)"),
     }

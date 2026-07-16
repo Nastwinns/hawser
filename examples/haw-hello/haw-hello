@@ -1,0 +1,52 @@
+#!/usr/bin/env sh
+# haw-hello — a minimal haw subcommand plugin.
+#
+# haw dispatches `haw hello ...` to this script (named `haw-hello`) when it is
+# on PATH. haw passes the workspace context as `haw.plugin/1` JSON both in the
+# HAW_JSON environment variable and on stdin. This script:
+#   - prints a friendly greeting for humans,
+#   - supports --help,
+#   - emits valid haw.plugin/1 JSON on stdout under --format json.
+
+set -eu
+
+for arg in "$@"; do
+	case "$arg" in
+	-h | --help)
+		cat <<'EOF'
+haw-hello — example haw subcommand plugin
+
+USAGE:
+    haw hello [OPTIONS]
+
+OPTIONS:
+    -h, --help       Print this help
+        --format json
+                     Print a haw.plugin/1 JSON document on stdout
+
+haw runs this as `haw-hello` from PATH and passes the workspace context
+as haw.plugin/1 JSON in $HAW_JSON and on stdin.
+EOF
+		exit 0
+		;;
+	--format=json)
+		set -- --format json
+		;;
+	esac
+done
+
+# --format json: echo a haw.plugin/1 document on stdout for machine consumers.
+if [ "${1:-}" = "--format" ] && [ "${2:-}" = "json" ]; then
+	# Report the workspace root haw handed us (empty when run outside a workspace).
+	root=$(printf '%s' "${HAW_JSON:-}" | sed -n 's/.*"root":"\([^"]*\)".*/\1/p')
+	printf '{"schema":"haw.plugin/1","plugin":"hello","greeting":"hello from haw-hello","root":"%s"}\n' "$root"
+	exit 0
+fi
+
+# Human path: a friendly greeting. Mention the workspace root if haw gave us one.
+if printf '%s' "${HAW_JSON:-}" | grep -q '"root"'; then
+	root=$(printf '%s' "${HAW_JSON:-}" | sed -n 's/.*"root":"\([^"]*\)".*/\1/p')
+	printf 'hello from haw-hello — workspace at %s\n' "$root"
+else
+	printf 'hello from haw-hello (no workspace here — try inside a haw workspace)\n'
+fi

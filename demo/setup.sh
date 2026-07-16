@@ -40,4 +40,22 @@ repos = ["kernel", "hal", "app-mqtt"]
 [stack.sensor-node]
 repos = ["kernel", "hal"]
 MANIFEST
+
+# Optional helper for the merge demo (demo/cli-merge.tape). Not run by default,
+# so the kernel/hal/app-mqtt + gateway lab used by cli.tape/tui.tape is untouched.
+# Call it AFTER `haw sync` from the gateway workspace to seed a real conflict:
+# `main` and `feature/tweak` both edit src/driver.c, so `haw merge plan` slices it.
+haw_demo_setup_merge() {
+    ( cd kernel || exit 1
+      mkdir -p src
+      printf 'line1\nline2\n' > src/driver.c
+      git add src/driver.c && git commit -qm 'add driver'
+      git checkout -q -b feature/tweak
+      printf 'line1-FEATURE\nline2\n' > src/driver.c
+      git commit -qam 'feature: tweak driver'
+      git checkout -q main
+      printf 'line1-MAIN\nline2\n' > src/driver.c
+      git commit -qam 'main: tweak driver' )
+}
+
 clear

@@ -66,6 +66,20 @@ Rendered with [VHS](https://github.com/charmbracelet/vhs) from the tapes in
 ratatui widgets over [Ratzilla](https://github.com/ratatui/ratzilla), Rust compiled
 to WASM, no server. Source: [`site/`](site/).
 
+### Guided walkthroughs
+
+Feature-by-feature tapes, paced to read along ([`demo/`](demo/)):
+
+| Tape | Teaches |
+|------|---------|
+| [`cli-compose`](demo/cli-compose.gif) | `tree` → `sync` → `status` → `lock` → `pin` → `switch` — the composition lifecycle |
+| [`cli-changeset`](demo/cli-changeset.gif) | `change start` / `status` across repos; where `request` / `land` open PR/MRs |
+| [`cli-run-verify`](demo/cli-run-verify.gif) | parallel `run`, and `verify` as a CI drift gate (exit 3) |
+| [`cli-merge`](demo/cli-merge.gif) | the collaborative merge: `plan` → `resolve` → `cleanup` |
+
+The TUI demo above runs against a built-in demo controller (`haw dash --demo`) — no
+workspace, git, or network — so the fleet PR/MR and CI views are always populated.
+
 ## Install
 
 ```bash
@@ -300,6 +314,7 @@ Published at **[nastwinns.github.io/keelson/docs](https://nastwinns.github.io/ke
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, data flows, phased implementation plan |
 | [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md) | Full CLI lexicon + TUI keymap |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
+| [docs/PLUGINS.md](docs/PLUGINS.md) | Writing subcommand plugins — `haw <name>` runs `haw-<name>` from PATH |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Tool qualification, SBOM/CRA, crypto/signing, GDPR |
 | [docs/COMMERCIALIZATION.md](docs/COMMERCIALIZATION.md) | Editions, licensing, LTS, pricing, GTM |
 | [docs/LAUNCH.md](docs/LAUNCH.md) | Launch playbook |

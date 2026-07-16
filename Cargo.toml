@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/balin/keelson"
+repository = "https://github.com/Nastwinns/keelson"
 
 [workspace.dependencies]
 haw-core = { path = "crates/haw-core", version = "0.1.0" }

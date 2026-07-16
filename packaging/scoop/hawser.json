@@ -1,0 +1,23 @@
+{
+    "version": "@VERSION@",
+    "description": "Reproducible multi-repo stack composition + cross-repo MR orchestration",
+    "homepage": "https://github.com/Nastwinns/keelson",
+    "license": "MIT OR Apache-2.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/Nastwinns/keelson/releases/download/v@VERSION@/haw-@VERSION@-x86_64-pc-windows-msvc.zip",
+            "hash": "@SHA_WINDOWS_X64@"
+        }
+    },
+    "bin": "haw.exe",
+    "checkver": {
+        "github": "https://github.com/Nastwinns/keelson"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/Nastwinns/keelson/releases/download/v$version/haw-$version-x86_64-pc-windows-msvc.zip"
+            }
+        }
+    }
+}

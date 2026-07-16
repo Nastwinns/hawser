@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/Nastwinns/keelson/discussions
+    about: Ask questions, share workflows, propose plugins.
+  - name: Security report
+    url: https://github.com/Nastwinns/keelson/security/advisories/new
+    about: Report a vulnerability privately (do not open a public issue).
