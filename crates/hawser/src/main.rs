@@ -256,6 +256,22 @@ Examples:
         #[arg(long, short = 'j')]
         jobs: Option<usize>,
     },
+    /// Grep across every cloned repo (or one stack) with `git grep`.
+    #[command(after_help = "\
+Examples:
+  $ haw grep TODO                    search every cloned repo for TODO
+  $ haw grep 'fn main' --stack gateway   only the `gateway` stack's repos
+  $ haw grep panic --json             machine-readable (array of {repo,path,line,text})")]
+    Grep {
+        /// The pattern passed to `git grep -e`.
+        pattern: String,
+        /// Limit to one stack's repos (default: the whole fleet).
+        #[arg(long = "stack", alias = "product")]
+        stack: Option<String>,
+        /// Emit JSON instead of grouped text.
+        #[arg(long)]
+        json: bool,
+    },
     /// Cross-repo feature (changeset) workflow.
     #[command(after_help = "\
 Examples:
@@ -711,6 +727,11 @@ fn run() -> Result<ExitCode> {
                 .context("pass the command: haw run 'git fetch'")?;
             run_across(&cmd, &groups, jobs)?;
         }
+        Command::Grep {
+            pattern,
+            stack,
+            json,
+        } => grep_across(&pattern, stack.as_deref(), json)?,
         Command::Change { command } => match command {
             ChangeCommand::Start {
                 id,
@@ -1304,6 +1325,72 @@ fn run_across(command: &str, groups: &[String], jobs: Option<usize>) -> Result<(
     if failures > 0 {
         bail!("command failed in {failures} repo(s)");
     }
+    Ok(())
+}
+
+fn grep_across(pattern: &str, stack: Option<&str>, json: bool) -> Result<()> {
+    let ws = open_workspace()?;
+    let repos = fleet_repos(&ws, stack)?;
+    if repos.is_empty() {
+        bail!("no cloned repos — run `haw sync` first");
+    }
+    let results = fan_out(&repos, default_jobs(None), |(name, path)| {
+        (name.clone(), git_grep(path, pattern))
+    });
+
+    let mut hits: Vec<haw_tui::GrepHit> = Vec::new();
+    for (name, out) in &results {
+        for line in out.lines() {
+            if let Some(hit) = haw_tui::parse_grep_line(name, line) {
+                hits.push(hit);
+            }
+        }
+    }
+
+    if json {
+        let value = json!({
+            "schema": "haw.grep/1",
+            "pattern": pattern,
+            "hits": hits.iter().map(|h| json!({
+                "repo": h.repo,
+                "path": h.path,
+                "line": h.line,
+                "text": h.text,
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
+
+    let c = Palette::new();
+    let mut total = 0usize;
+    for (name, _) in &results {
+        let repo_hits: Vec<&haw_tui::GrepHit> = hits.iter().filter(|h| &h.repo == name).collect();
+        if repo_hits.is_empty() {
+            continue;
+        }
+        total += repo_hits.len();
+        println!(
+            "{} {}",
+            c.name(name),
+            c.dim(&format!("({} hit(s))", repo_hits.len()))
+        );
+        for hit in repo_hits {
+            println!(
+                "  {}:{}:{}",
+                c.dim(&hit.path),
+                c.rev(&hit.line.to_string()),
+                hit.text.trim_end()
+            );
+        }
+    }
+    println!(
+        "{}",
+        c.bold(&format!(
+            "{total} hit(s) in {} repo(s) for `{pattern}`",
+            results.len()
+        ))
+    );
     Ok(())
 }
 
@@ -2435,6 +2522,47 @@ impl haw_tui::Controller for CliController {
         self.run_cmd_filtered(cmd, Some(repos))
     }
 
+    fn grep(
+        &mut self,
+        pattern: &str,
+        stack: Option<&str>,
+    ) -> std::io::Result<Vec<haw_tui::GrepHit>> {
+        let ws = self.workspace()?;
+        let repos = fleet_repos(&ws, stack)?;
+        let results = fan_out(&repos, default_jobs(None), |(name, path)| {
+            (name.clone(), git_grep(path, pattern))
+        });
+        let mut hits = Vec::new();
+        for (name, out) in results {
+            for line in out.lines() {
+                if let Some(hit) = haw_tui::parse_grep_line(&name, line) {
+                    hits.push(hit);
+                }
+            }
+        }
+        Ok(hits)
+    }
+
+    fn repo_fetch(&mut self, repo: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let path = repo_root(&ws, repo)?;
+        run_git(&path, &["fetch", "--all", "--prune"])?;
+        Ok(format!("fetched {repo}"))
+    }
+
+    fn exec_in(&mut self, repo: &str, cmd: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let path = repo_root(&ws, repo)?;
+        let output = shell_command(cmd).current_dir(&path).output()?;
+        let mut report = format!("$ {cmd}\n@ {}\n\n", path.display());
+        report.push_str(&String::from_utf8_lossy(&output.stdout));
+        report.push_str(&String::from_utf8_lossy(&output.stderr));
+        if !output.status.success() {
+            report.push_str(&format!("\n(exit: {})\n", output.status));
+        }
+        Ok(report)
+    }
+
     fn change_start(&mut self, id: &str) -> std::io::Result<String> {
         let ws = self.workspace()?;
         let changeset = change::start(&ws, &ShellGit, id, None, None, false, &[])
@@ -2828,6 +2956,54 @@ fn forge_for_repo(
     Ok((forge, url))
 }
 
+/// The cloned repos of `stack` (or the whole fleet when `stack` is `None`) as
+/// `(name, absolute path)`, honoring haw.lock when present, else the manifest.
+/// Skips repos that aren't cloned so cross-repo grep never errors on them.
+fn fleet_repos(ws: &Workspace, stack: Option<&str>) -> std::io::Result<Vec<(String, PathBuf)>> {
+    let backend = ShellGit;
+    let allowed: Option<Vec<String>> = match stack {
+        Some(name) => {
+            let spec = ws.manifest.stacks.get(name).ok_or_else(|| {
+                std::io::Error::other(format!("stack `{name}` is not in the manifest"))
+            })?;
+            Some(spec.repos.clone())
+        }
+        None => None,
+    };
+    let repos: Vec<(String, PathBuf)> = match ws.read_lock().map_err(std::io::Error::other)? {
+        Some(lock) => lock
+            .repos
+            .iter()
+            .map(|r| (r.name.clone(), ws.root.join(&r.path)))
+            .collect(),
+        None => ws
+            .manifest
+            .repos
+            .iter()
+            .map(|(name, repo)| (name.clone(), ws.root.join(repo.checkout_path(name))))
+            .collect(),
+    };
+    Ok(repos
+        .into_iter()
+        .filter(|(name, _)| allowed.as_ref().is_none_or(|set| set.contains(name)))
+        .filter(|(_, path)| backend.is_repo(path))
+        .collect())
+}
+
+/// Run `git grep -n --no-color -e <pattern>` in `path`, returning stdout. Exit
+/// code 1 is git-grep's "no match" — treated as empty, not an error.
+fn git_grep(path: &Path, pattern: &str) -> String {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["grep", "-n", "--no-color", "-e", pattern])
+        .output();
+    match output {
+        Ok(out) => String::from_utf8_lossy(&out.stdout).into_owned(),
+        Err(_) => String::new(),
+    }
+}
+
 /// Run `git -C <path> <args...>`, mapping a non-zero exit or spawn failure to
 /// an `io::Error` carrying git's stderr. Used for write/exec git operations.
 fn run_git(path: &Path, args: &[&str]) -> std::io::Result<()> {
@@ -3210,6 +3386,49 @@ impl haw_tui::Controller for DemoController {
         }
         report.push_str(&format!("ran in {}/{} repos", repos.len(), repos.len()));
         Ok(report)
+    }
+
+    fn grep(
+        &mut self,
+        pattern: &str,
+        _stack: Option<&str>,
+    ) -> std::io::Result<Vec<haw_tui::GrepHit>> {
+        let hit = |repo: &str, path: &str, line: u32, text: &str| haw_tui::GrepHit {
+            repo: repo.to_string(),
+            path: path.to_string(),
+            line,
+            text: text.to_string(),
+        };
+        Ok(vec![
+            hit(
+                "kernel",
+                "drivers/i2c/dma.c",
+                42,
+                &format!("    /* {pattern}: DMA-backed transfer path */"),
+            ),
+            hit(
+                "hal",
+                "src/i2c.rs",
+                17,
+                &format!("fn {pattern}_xfer(bus: &mut Bus) {{"),
+            ),
+            hit(
+                "app-mqtt",
+                "src/main.rs",
+                88,
+                &format!("// TODO({pattern}): reconnect backoff"),
+            ),
+        ])
+    }
+
+    fn repo_fetch(&mut self, repo: &str) -> std::io::Result<String> {
+        Ok(format!("fetched {repo} (demo)"))
+    }
+
+    fn exec_in(&mut self, repo: &str, cmd: &str) -> std::io::Result<String> {
+        Ok(format!(
+            "$ {cmd}\n@ /home/you/work/gateway/{repo}\n\n(demo) OK\n"
+        ))
     }
 
     fn change_start(&mut self, id: &str) -> std::io::Result<String> {

@@ -1,323 +1,301 @@
-# hawser — Architecture & Implementation Plan
+# hawser Architecture
 
-## 1. Crate architecture (Cargo workspace)
+`hawser` is a multi-repo workspace manager. It pins a fleet of git repositories
+to exact commits, drives their PR/MR lifecycle across GitHub and GitLab, and
+presents the whole fleet through a keyboard-first ratatui cockpit (the `haw`
+binary). This document describes how the code is actually organized — the crate
+boundaries, the concurrency model, and the invariants that keep it testable.
 
-A workspace of small crates so the core stays reusable by the CLI, the TUI, and later a
-Tauri GUI. The golden rule: **all business logic lives in `haw-core`; the CLI and TUI are
-thin front-ends.** Formats and forges sit behind traits so a format or API change is an
-impl swap, not a rewrite.
+The design goal that shapes everything below: **domain logic never does I/O it
+can't fake.** Git side effects cross the `GitBackend` trait, forge calls cross
+the `Forge` trait, and the TUI's side effects cross the `Controller` trait. Each
+seam has a production impl and a test fake, so the bulk of the code is unit-tested
+without a network or a real git.
 
-```
-hawser/
-├── Cargo.toml                     # [workspace]
-├── crates/
-│   ├── haw-core/                 # domain logic, no I/O opinions leaked
-│   │   ├── manifest/              # serde structs + `ManifestLoader` trait
-│   │   │   ├── model.rs           #   Manifest, Repo, Stack, Remote, Overlay
-│   │   │   ├── toml_loader.rs     #   default loader
-│   │   │   └── import/            #   west.yml + repo default.xml -> model
-│   │   ├── lock/                  # haw.lock read/write, resolve, drift detection
-│   │   ├── workspace/             # on-disk layout, stack materialization
-│   │   ├── resolver/              # manifest + overlays -> concrete repo set
-│   │   └── change/                # changeset model (feature across repos)
-│   │
-│   ├── haw-git/                  # git operations abstraction
-│   │   ├── introspect.rs          #   gitoxide: status, ahead/behind, current SHA
-│   │   ├── ops.rs                 #   shell-out: clone, fetch, checkout, --reference
-│   │   └── parallel.rs            #   tokio-driven fan-out across repos
-│   │
-│   ├── haw-forge/                # PR/MR orchestration
-│   │   ├── mod.rs                 #   `Forge` trait: open_pr, pr_status, merge_pr
-│   │   ├── github.rs              #   octocrab
-│   │   ├── gitlab.rs              #   gitlab crate / REST
-│   │   └── detect.rs              #   remote URL -> which forge
-│   │
-│   ├── haw-merge/                # optional: mergetopus-style slicing (later phase)
-│   │
-│   ├── hawser/                  # clap-based binary `haw` (thin over core)
-│   └── haw-tui/                  # ratatui dashboard (thin over core)
-└── xtask/                         # release/packaging automation
-```
+## 1. Overview
 
-### Why these boundaries
-
-- **`haw-core` knows nothing about clap, ratatui, or a terminal.** It exposes an API
-  (`Workspace::sync`, `Changeset::start`, …). This is what lets the TUI and a future Tauri
-  GUI reuse everything.
-- **`ManifestLoader` trait** — TOML is the reference format, but `import` produces the same
-  in-memory model from west/repo files. Supporting another format later = new impl.
-- **`Forge` trait** — GitHub and GitLab differ enough (PR vs MR, review APIs) that a common
-  trait with two impls keeps `change` logic forge-agnostic.
-- **`haw-git` splits introspect (gitoxide) from ops (shell-out).** gitoxide is fast and
-  native for reads; heavy/rare mutating operations shell out to the user's `git` for
-  correctness and to avoid gitoxide's still-maturing high-level clone/push APIs.
-
-## 2. Key dependencies
-
-| Concern            | Crate                    | Note                                            |
-|--------------------|--------------------------|--------------------------------------------------|
-| Git introspection  | `gix` (gitoxide)         | status, refs, ahead/behind, SHA — fast, native  |
-| Git heavy ops      | shell-out to `git`       | clone `--reference`, fetch, checkout, merge     |
-| Async fan-out      | `tokio`                  | parallel sync/forall across repos              |
-| Manifest/lock      | `serde` + `toml`         | typed structs; lock is generated TOML           |
-| CLI                | `clap` (derive)          | subcommand tree                                 |
-| TUI                | `ratatui` + `crossterm`  | fleet dashboard, cross-platform                 |
-| GitHub API         | `octocrab`               | PRs, reviews, checks                            |
-| GitLab API         | `gitlab` or `reqwest`    | MRs, approvals, pipelines                       |
-| Errors             | `thiserror` + `anyhow`   | typed in core, contextual at edges              |
-| Config/paths       | `directories`            | cross-platform cache dir for `--reference`      |
-
-## 3. Cross-platform discipline (Linux + Windows + macOS)
-
-- `PathBuf` everywhere, never a hard-coded `/`.
-- **No symlinks in the workspace layout.** Object sharing uses git `alternates` via
-  `--reference` (a text file). This is the single most important design choice for Windows.
-- Handle `core.autocrlf`; do not assume LF.
-- Assume `git` is on PATH (reasonable on Windows); gitoxide covers the read side natively.
-- CI matrix builds all three OSes from day one (like mergetopus does).
-
-## 4. Data flow: `haw sync`
+The workspace (`Cargo.toml`, `resolver = "3"`, edition 2024, `unsafe_code = "forbid"`
+workspace-wide) is a set of small crates. `haw-core` holds the domain model and
+depends on nothing but serialization crates. Everything else fans out from it.
+The binary `hawser` (shipping as `haw`) is the only crate that wires the pieces
+together and the only place `anyhow` is allowed.
 
 ```
-read haw.toml ──▶ resolver (apply overlays, pick stack)
-                        │
-                        ▼
-              does haw.lock exist?
-                 │              │
-                yes             no
-                 │              │
-    for each repo:      resolve each rev ──▶ SHA
-    target = lock SHA          │
-                 │             ▼
-                 │        write haw.lock
-                 └──────┬───────┘
-                        ▼
-        tokio fan-out over repos (parallel):
-          not cloned?  -> git clone [--reference cache] to declared path
-          cloned?      -> git fetch + checkout target (NOT detached: real branch)
-                        ▼
-              gitoxide: verify each repo SHA == target
-              report drift (local SHA != lock)
+                    +----------------------+
+                    | haw-tui              |   depends ONLY on
+                    | (ratatui cockpit)    |   ratatui + nucleo + haw-core types
+                    +----------+-----------+   — no git, no network.
+                               | Controller trait (side-effect seam)
+                               v
++---------+   +----------+   +----------+   +-----------+   +-----------+
+| hawser  |-->| haw-core |   | haw-git  |   | haw-forge |   | haw-merge |
+| (bin)   |   | (domain) |<--| ShellGit |   | Forge     |   | slice/seal|
++----+----+   +----------+   +----------+   +-----------+   +-----------+
+     |            ^   ^            (impl of        (octocrab /
+     |            |   |         GitBackend)         reqwest)
+     +---> haw-git, haw-forge, haw-merge, haw-tui  (binary wires them all)
+
+haw-plugin ....... SDK for out-of-process `haw-<name>` plugin binaries
+haw-artifact ..... plugin: SLSA/in-toto provenance + signing
+haw-compliance ... plugin: CycloneDX 1.5 + SPDX 2.3 SBOM
+haw-git-gate ..... plugin: secret/hygiene gate (gitleaks or heuristic)
+xtask ............ release/packaging automation (`cargo xtask dist`)
 ```
 
-## 5. Data flow: `haw change` (the RepoFleet-beating part)
+`haw-core` has zero dependency on `haw-git`, `haw-forge`, or `haw-tui`: it
+declares the `GitBackend` trait (`haw-core/src/git/mod.rs`) and lets callers
+inject an implementation. `haw-git` depends on `haw-core` and implements that
+trait; the arrow points from the impl to the trait.
 
+## 2. Crate responsibilities
+
+| Crate | Responsibility | Key public types |
+|-------|----------------|------------------|
+| `haw-core` | Domain model, no I/O opinions. Manifest → lock → workspace state, resolution, snapshots, audit log, plugin dispatch. | `manifest::Manifest`, `lock::Lockfile` / `LockedRepo`, `workspace::Workspace` / `RepoStatus` / `SyncPlan` / `RepoTask`, `resolver::ResolvedRepo`, `git::GitBackend` (trait) |
+| `haw-git` | Production `GitBackend`: shells out to the user's `git`. Bounded fan-out helper. | `ShellGit`, `parallel::fan_out` |
+| `haw-forge` | PR/MR + CI orchestration behind the `Forge` trait; forge-agnostic changeset lifecycle. | `Forge` (trait), `github::GitHub`, `gitlab::GitLab`, `ForgeFactory` / `Tokens`, `ForgeError`, `OpenPr` / `CiRun` / `PrStatus` |
+| `haw-merge` | Optional mergetopus-style collaborative merge: slice a conflict-heavy merge by top-level path, resolve piecewise, seal into one commit on an integration branch. | `MergeBackend` (trait), `git::GitMerge` |
+| `haw-tui` | The `haw` cockpit. Renders and dispatches; knows nothing about git or the network. | `Controller` (trait), `run`, `Snapshot`, `FleetPr` / `FleetCiRun`, `Exit` |
+| `haw-plugin` | SDK for authoring out-of-process `haw-<name>` plugin binaries (`haw.plugin/1` context in/`haw.plugin.report/1` out). | `run`, `Report` |
+| `hawser` | The `haw` binary. Clap CLI, wires core+git+forge+merge+tui, owns `anyhow` and the actionable error surface. | `CliController`, `DemoController`, `main` |
+| `xtask` | Release/packaging: build a release binary, archive under `dist/`, print SHA-256 for the Homebrew formula / Scoop manifest. | `main` |
+
+## 3. The Controller boundary
+
+`haw-tui`'s dependencies are `ratatui`, `nucleo-matcher`, and `haw-core` (for the
+plain data types it renders). It has **no** dependency on `haw-git`, `haw-forge`,
+or `tokio`. Every side effect the cockpit needs — refreshing status, fetching
+PRs, merging, checking out a branch, reading a file tree — is a method on
+`Controller` (`haw-tui/src/lib.rs:351`):
+
+```rust
+pub trait Controller: Send {
+    fn snapshot(&mut self) -> io::Result<Snapshot>;
+    fn fleet_prs(&mut self) -> io::Result<Vec<FleetPr>>;
+    fn pr_merge(&mut self, repo: &str, number: u64) -> io::Result<String>;
+    fn pr_checkout(&mut self, repo: &str, number: u64) -> io::Result<String>;
+    fn repo_tree(&mut self, repo: &str, subpath: &str, remote: bool) -> io::Result<Vec<FileEntry>>;
+    fn file_content(&mut self, repo: &str, path: &str, remote: bool) -> io::Result<String>;
+    // ~25 verbs total; all return io::Result and all are Send.
+}
 ```
-change start FEAT-123 --repos kernel,app-mqtt
-        │
-        ▼  haw-core/change: create branch feat/123 in each listed repo (real branch)
-        ▼  record changeset (which repos, which branch) in workspace state
 
-change request
-        │
-        ▼  haw-forge/detect: per repo, GitHub or GitLab?
-        ▼  Forge::open_pr on each -> collect PR/MR URLs, cross-link them in descriptions
+This is a deliberate dependency inversion. The TUI is the top of the graph and
+depends only on an abstraction; the binary supplies the concrete implementation:
 
-change status
-        │
-        ▼  Forge::pr_status per repo (review state + CI/pipeline) -> aggregated table/TUI
+- **`CliController`** (`hawser/src/main.rs:2295`) is the production impl. Each
+  method opens a `Workspace`, builds a `ShellGit` backend and/or a `Forge`
+  client, and runs the same code paths the CLI subcommands use (e.g.
+  `sync_filtered` reuses `Workspace::plan_sync` + `fan_out`).
+- **`DemoController`** (`hawser/src/main.rs:3052`) returns canned in-memory data
+  and reaches no workspace, git, or network. `haw dash --demo` renders every
+  view deterministically for GIF recordings and, crucially, for tests.
 
-change land
-        │
-        ▼  topological order from stack->repo graph
-        ▼  Forge::merge_pr in order; stop on failure
+Because the seam is a trait object (`Box<dyn Controller>` passed to
+`haw_tui::run`), the 59 unit tests in `haw-tui` construct `App` fixtures and
+assert on rendered spans and on the `Job`s dispatched to the worker channel —
+no terminal, no git, no sockets. The cockpit's logic is exercised headlessly.
+
+## 4. Concurrency model
+
+The cockpit is single-threaded for rendering and drives all blocking work on one
+dedicated worker thread. There is no async in the UI at all.
+
+**Why not full async.** The forge clients and git shell-outs are inherently
+blocking; making the whole UI async would buy nothing but a runtime and colored
+functions. Instead the render loop stays synchronous and offloads blocking work
+to a thread, communicating over two `std::sync::mpsc` channels.
+
+**The worker.** `haw_tui::run` (`haw-tui/src/lib.rs:886`) creates a `Job` channel
+and an `Outcome` channel, then `spawn_worker` (`:914`) moves the `Box<dyn
+Controller>` onto a `std::thread::spawn`. The worker is a serial loop:
+`while let Ok(job) = jobs.recv()`, matching each `Job` to a `Controller` call and
+sending back an `Outcome`. Serialization is a feature: entering a view while a
+job is in flight still enqueues the read; the worker runs it after the current
+one (comments at `:1005`, `:1144`), so navigation is never refused.
+
+**The channel enums** (`:426`, `:463`):
+
+```rust
+enum Job {
+    Refresh, ChangesetPrs(String), FleetPrs, FleetCi, Governance,
+    RepoDetail(String), PrDetail(String, u64), CiDetail(String, u64),
+    PrDiff(String, u64), CiLogs(String, u64),
+    RepoTree(String, String, bool), FileContent(String, String, bool, String),
+    Action(&'static str, ActionKind),   // side-effecting verbs (sync, land, merge, ...)
+}
+
+enum Outcome {
+    Snapshot(Box<io::Result<Snapshot>>), FleetPrs(Box<io::Result<Vec<FleetPr>>>),
+    Detail(String, Box<io::Result<String>>),   // shared drill-in (repo git / PR / CI)
+    Tree(Box<io::Result<Vec<FileEntry>>>),
+    Action(&'static str, io::Result<String>),
+    // ...
+}
 ```
 
-## 6. Implementation plan (phased)
+Results are boxed to keep the enum small despite carrying large payloads
+(snapshots, diffs). The `&'static str` label on `Action` flows through unchanged
+so the outcome handler knows what completed.
 
-Two design decisions shape this plan:
+**Staying responsive.** The event loop (`event_loop`, `:1345`) never blocks on
+the worker. Each iteration: drain `outcomes.try_recv()` (non-blocking) and apply
+results, opportunistically auto-refresh when idle (5s cadence, suppressed during
+input/overlays/in-flight work, `:1525`), draw one frame, then
+`event::poll(Duration::from_millis(120))` for input. `app.busy: Option<&'static
+str>` gates a spinner and prevents double-dispatch; it is cleared when the
+matching `Outcome` arrives. Network views (Prs/Ci/Governance) are strictly
+on-demand — the idle auto-refresh only touches the local status snapshot.
 
-1. **The v0.1 MVP spans both value layers** — reproducible composition *and* cross-repo
-   MR orchestration — rather than shipping composition alone and bolting MR on later. The
-   union is the differentiator; a composition-only v0.1 would just be "repo with a lock",
-   and a MR-only v0.1 would just be "RepoFleet in Rust". Shipping both, even minimally, is
-   what makes the first release defensible.
-2. **The TUI ships in v0.1**, not as a late phase. The fleet dashboard is the most visible
-   differentiator and the cheapest way to make the double-layer value legible. It is a thin
-   front-end over `haw-core`, so building it early also validates that the core API is
-   genuinely UI-agnostic.
+Separately, cross-repo CLI work (sync, `run`) uses `haw_git::parallel::fan_out`
+(`haw-git/src/parallel.rs`): bounded fan-out across repos with plain
+`std::thread::scope` and a shared atomic index, `jobs.clamp(1, items.len())`
+workers. No tokio there either.
 
-Each phase still ends with a usable binary. Ship early, narrow, correct.
+### The octocrab `runtime.enter()` gotcha
 
-> **Status (2026-07-15): Phases 0–6 are implemented.**
-> Per-phase deltas vs the original plan are recorded in §9's decision records.
+`Forge` is a synchronous trait, but `octocrab` is async. `github::GitHub` owns a
+private `tokio::runtime::Builder::new_current_thread().enable_all().build()`
+runtime (`haw-forge/src/github.rs:16`) and calls `runtime.block_on(...)` for each
+request — a synchronous facade over an async client, one worker thread, no shared
+global runtime.
 
-### Phase 0 — Skeleton (week 1) — ✅ shipped
-- Cargo workspace, the crate boundaries above, CI matrix (Linux/macOS/Windows) from day one.
-- `haw-core::manifest` serde model + TOML loader + round-trip tests.
-- `haw --version`, `haw graph` (parse manifest, print stack→repo tree).
-- **Deliverable:** parses a manifest, prints the composition. Nothing clones yet.
+The subtle bug this guards against: building the octocrab client is not itself an
+`await`, but internally it spawns a `tower::buffer` worker task, and that spawn
+panics with **"no reactor running"** if there is no live Tokio reactor in the
+current thread's context. `block_on` establishes that context only for the future
+it drives — not for the synchronous `builder.build()` call. The fix is the guard
+in `client` (`github.rs:32`):
 
-### Phase 1 — Double-layer MVP (weeks 2–6) — *the whole point, minimally* — ✅ shipped
+```rust
+// octocrab's client spawns a tower::buffer worker on build, which needs a
+// live Tokio reactor; enter the runtime so the spawn doesn't panic.
+let _guard = self.runtime.enter();
+builder.build()...
+```
 
-The MVP deliberately cuts a thin vertical slice through **both** layers plus the TUI,
-rather than completing one layer fully. Scope each item to the minimum that proves value.
+`runtime.enter()` returns an `EnterGuard` that installs the reactor for the
+current scope, so the `tower::buffer` spawn finds a reactor. A dedicated
+regression test builds the client with an empty token and no network to keep this
+from silently breaking again (`github.rs:626`,
+`client_builds_inside_runtime_without_panic`).
 
-*Composition (minimal):*
-- `haw-git`: clone (shell-out), fetch, checkout as a real branch; gitoxide introspection.
-- `haw init`, `haw sync`, `haw lock`, `haw status`.
-- `haw.lock` generation + drift detection. Parallel sync via tokio.
-- Stacks modeled and parsed; `haw switch <stack>` for the single-stack common case.
-  (Overlays and `--shared` object sharing deferred to Phase 2 — not needed to prove value.)
+## 5. The Forge abstraction
 
-*MR orchestration (minimal):*
-- `haw-forge`: `Forge` trait + URL→forge detection + **GitHub (octocrab) first**, GitLab
-  stubbed behind the same trait.
-- `haw change start` (branch across repos) and `haw change status` (aggregated view).
-  `request` and `land` land in Phase 3; `start`+`status` alone already beat manual `cd`-ing.
+`Forge` (`haw-forge/src/lib.rs:130`) is one trait with two production impls:
 
-*TUI (minimal):*
-- `haw tui`: read-only ratatui fleet dashboard — stack→repo tree, per-repo state
-  (branch, SHA, dirty, ahead/behind, drift-vs-lock), and the changeset view. Actions
-  (sync/switch/start) added in Phase 4; a read-only cockpit is already the visual hook.
+- **`github::GitHub`** — `octocrab` (REST v3) over the private current-thread
+  runtime described above. Supports github.com and Enterprise (`/api/v3` base).
+- **`gitlab::GitLab`** — `reqwest::blocking::Client` against REST v4. No runtime
+  needed; MRs map onto the forge-neutral PR vocabulary.
 
-- **Deliverable:** from a manifest, reproducibly clone a stack with a committed lockfile,
-  start a feature branch across its repos, and see the whole fleet + changeset in a TUI.
-  No competitor ships this combination.
+`ForgeFactory::client_for` (impl `Tokens`, `:273`) picks the impl from the
+manifest's explicit `forge =` key if present, else by URL host substring
+(`detect`, `:347`), reads tokens from the conventional env vars (falling back to
+a logged-in `gh auth token`, `:261`), and returns a `Box<dyn Forge>`.
 
-### Phase 2 — Composition depth (weeks 7–8) — ✅ shipped (freeze/unfreeze shipped as `pin`/`unpin` + aliases)
-- Overlays / profile inheritance in the resolver (grit-style, kills manifest duplication).
-- `--shared` object sharing via `git clone --reference` (text file, **no symlinks**).
-- `haw freeze` / `unfreeze`; `stack`/`repo` add/remove editing the manifest.
-- **Deliverable:** the stacks×repos model at full power, incl. shared repos and DRY
-  manifests for large (50+ repo) trees.
+**Cheap-list vs detail-drill.** The trait splits deliberately into cheap fleet
+scans and expensive drill-ins so the fleet views load fast and detail is fetched
+only on `Enter`:
 
-### Phase 3 — MR orchestration depth (weeks 9–11) — ✅ shipped (see DR-11/DR-13)
-- GitLab impl fully behind the `Forge` trait (MRs, approvals, pipelines).
-- `haw change request` (open cross-linked PR/MRs on both forges) and `haw change land`
-  (merge in topological order from the stack→repo graph).
-- `haw change goto` (interactive picker + cd, RepoFleet-style shell integration).
-- `haw forall -c` parallel.
-- Changeset **snapshots** (save/restore multi-repo feature state), a RepoFleet idea worth
-  matching.
-- **Deliverable:** full cross-repo feature lifecycle on GitHub *and* GitLab, with
-  composition underneath — strictly a superset of RepoFleet.
+- `list_open_prs` / `list_ci_runs` — one bounded call per repo, capped at
+  `OPEN_PRS_LIMIT = 25` / `CI_RUNS_LIMIT = 15` to keep request counts bounded on
+  busy repos. Returns forge-neutral `OpenPr` / `CiRun` rows.
+- `pr_detail` / `ci_run_detail` / `pr_diff` / `ci_logs` / `file_blob` — the
+  drill-in fetches, each returning plain text capped by `DIFF_LINE_CAP = 600`,
+  `LOG_LINE_CAP = 800`, `FILE_LINE_CAP = 600` via `cap_lines` (which appends a
+  "truncated, N more line(s)" note).
 
-### Phase 4 — TUI actions & polish (week 12) — ✅ shipped
-- Promote the read-only TUI to interactive: keyboard-driven sync, switch, `pin`, change
-  start/request/land, goto.
-- **Design bar (non-negotiable): match [`k9s`](https://k9scli.io).** Keyboard-first + modal:
-  `:` command bar, `/` filter, single-key actions, live-updating grid, always-visible help
-  bar. Async refresh (no frozen frames), color-coded status, themeable + `NO_COLOR`-aware.
-  Mouse optional, never required. Open with a bare `haw` or `haw dash`.
-- **Deliverable:** the fleet cockpit becomes a polished control surface, not just a viewer.
+**Media-type handling.** octocrab decodes JSON, but diffs, raw blobs, and logs
+are plain text. `GitHub::get_text` (`github.rs:77`) sidesteps octocrab with a
+small blocking `reqwest` GET carrying a custom `Accept` header and following
+redirects, returning `Ok(None)` on 404:
 
-### Phase 5 — Migration & distribution (week 13) — ✅ shipped (`haw import`, packaging/, examples/, `cargo xtask dist`)
-- `haw import --from west.yml | default.xml` (convert existing manifests).
-- Homebrew tap + Scoop bucket + `cargo install` (match RepoFleet's distribution channels).
-- Docs, an embedded/BSP example, an automotive-style pinned-manifest example.
-- **Deliverable:** low-friction adoption path for `repo`/`west` users.
+- unified diffs: `Accept: application/vnd.github.v3.diff` (the pulls endpoint
+  returns the diff verbatim);
+- raw file contents: `application/vnd.github.raw`;
+- Actions job logs: served via a 302 redirect to a signed URL (expired logs
+  surface as a clear message, not an error).
 
-### Phase 6 — Collaborative merge — ✅ shipped (see DR-15)
-- `haw merge plan | resolve | status | cleanup | abort` (mergetopus-style slicing).
-  A conflict-heavy merge runs on a dedicated integration branch; its conflicts are
-  partitioned by top-level path into disjoint **slices** that are resolved (and reviewed)
-  piecewise, then sealed as one clean merge commit that the target branch fast-forwards to.
-- **Deliverable:** a big risky merge becomes a set of small reviewable units without
-  reimplementing git's merge engine — the whole operation is abortable and never leaves
-  the target branch half-merged.
+The plain-text-report contract (no ANSI; the caller styles it) is what lets the
+same detail strings render identically in the CLI and in the TUI's scrollable
+detail view.
 
-### Extensibility, auth & CI/CD (cross-phase)
-hawser stays open at the edges: it orchestrates git, forges, and build tools without
-reimplementing them. The extension surface — `forall`, lifecycle hooks, per-repo build
-commands, `haw-<name>` subcommand plugins, the `--format json` machine interface — plus the
-auth model (git-native transport + opt-in forge tokens / OAuth device flow) and the CI/CD
-integration (`sync --locked`, `verify`, `evidence`, object-sharing cache) are specified in
-[EXTENDING.md](EXTENDING.md), with each item mapped to the phase that ships it. Guiding
-constraint: **the core never grows a hard dependency on a specific build tool, tracker, or
-CI system** — those arrive as hooks, per-repo commands, or plugins.
+## 6. Reproducibility model
 
-### Lexicon & testing (cross-phase)
-- **Lexicon**: verbs are one guessable word each — `tree` (was `graph`), `run` (was
-  `forall -c`), `pin`/`unpin` (was `freeze`/`unfreeze`), bare `haw`/`dash` (was `tui`);
-  flag `--slug` (was `--repo`) on `repo add`. Old names stay as hidden aliases. Canonical
-  spec: [CLI-DESIGN.md](CLI-DESIGN.md). Landed incrementally across Phases 1–2, cosmetic.
-- **Golden CLI-output tests** (Phase 2): snapshot `tree`/`status`/`lock` output so lexicon or
-  format changes surface in review.
-- **Determinism tests** (Phase 1→2): assert `haw.lock` is byte-identical across
-  Linux/macOS/Windows for identical inputs — a hard certification requirement
-  ([COMPLIANCE.md §8](COMPLIANCE.md)).
+The core contract is a three-stage pipeline: **manifest → lock → state.**
 
-## 7. Sequencing rationale
+1. **`haw.toml` (manifest)** — `manifest::Manifest` (`model.rs:16`): remotes,
+   repos, stacks, overlays. Human-authored intent. A repo's `rev` is a
+   branch/tag/sha *reference*.
+2. **`haw.lock` (lockfile)** — `lock::Lockfile` (`lock/mod.rs:34`),
+   `LOCK_VERSION = 1`, `#[serde(deny_unknown_fields)]`. Machine-generated. Each
+   `LockedRepo` pins `rev` (the exact resolved SHA), `source_rev` (the manifest
+   ref it was resolved from), and `branch` (repos are never left detached). The
+   lock covers **all** repos in the manifest, not just one stack — so switching
+   stacks never rewrites the lock; overlays only take effect on regeneration.
+3. **Workspace state** — the `.haw/` directory: current stack, snapshots, audit
+   log. `Workspace` (`workspace/mod.rs:54`) reads the manifest + lock and plans
+   sync (`plan_sync` → `SyncPlan` of `RepoTask`s targeting each locked SHA).
 
-The MVP (Phase 1) is intentionally a thin slice of the *full* vision rather than a complete
-slice of *one* layer, because the value proposition is the union. After that, Phases 2 and 3
-deepen the two layers independently, so each can be released, tested, and reprioritized on
-its own — you deepen composition or MR orchestration based on which users actually pull on,
-without having bet the first release on either one alone.
+**The lock is the proof/audit artifact.** It is deterministic and LF-only — a
+golden test (`hawser/tests/golden.rs::lockfile_is_deterministic_and_lf_only`)
+asserts identical bytes across two runs on the same inputs, no CRLF, trailing
+newline. That determinism is what makes the lock committable and diffable as a
+build-provenance record; `haw-compliance` and `haw-artifact` consume the pinned
+`rev`s directly to emit SBOMs and SLSA provenance.
 
-## 8. What we borrow from the field (and how we differ)
+**Drift.** `RepoStatus` (`workspace/mod.rs:99`) carries `head` (the repo's actual
+`HEAD`), `locked_rev` (what `haw.lock` says), and `drift: bool` — true when HEAD
+differs from the locked rev. `Workspace::status` computes it per repo;
+`haw status`/`haw verify` and the cockpit's fleet grid surface it. `pin`
+(`:257`) does the inverse: rewrite the lock from current HEADs (no network),
+turning the working state into the new pinned truth.
 
-| Source        | What we take                                              | Where we go further                                  |
-|---------------|-----------------------------------------------------------|------------------------------------------------------|
-| Google `repo` | manifest-driven multi-repo checkout, groups               | + lockfile, no Python, no detached HEAD, no symlinks |
-| `west`        | plain-clone layout (Windows-safe), `manifest --freeze`    | + stacks×repos composition, MR orchestration      |
-| `grit`        | overlays / profile inheritance to keep manifests DRY      | integrated with lock + forge layers                  |
-| RepoFleet     | workspace + issue-centered branches, status dashboard, `goto`, snapshots, `--skip-branch` to adopt existing branches | + reproducible composition, both forges, TUI, Rust |
-| mergetopus    | parallel collaborative merge slicing (Phase 6)            | wired into a multi-repo changeset, not single-repo    |
+## 7. Error handling
 
-RepoFleet is the closest prior art on the MR side, so its concrete choices are worth
-matching deliberately: a **workspace** grouping repos, an **issue/changeset** as the unit of
-cross-repo work, a **status dashboard** as the primary view, `goto` shell integration,
-**snapshots** of multi-repo state, and `--skip-branch` to adopt already-checked-out branches
-instead of forcing new ones. hawser's edge is everything underneath and around that:
-a committed lockfile, stack composition, GitHub *and* GitLab, a real TUI, and a
-gitoxide-native Rust core.
+Two-layer strategy, split cleanly at the binary boundary:
 
-## 9. Decision records (as implemented)
+- **Libraries use typed errors** via `thiserror`: `ForgeError`
+  (`haw-forge/src/lib.rs:116` — `MissingToken`, `UnknownForge`, `Api`, ...),
+  `LockError`, `WorkspaceError` / `SyncError`, `GitError`, `ManifestError`,
+  `MergeError`. Callers can match on the variant. The `Controller` trait narrows
+  these to `io::Result` at the TUI seam (`io::Error::other`), because the cockpit
+  only ever renders the message.
+- **The binary uses `anyhow`.** `hawser` is the only crate that depends on
+  `anyhow`; `run()` returns `anyhow::Result` and adds `.context(...)` at call
+  sites. `main` (`main.rs:609`) prints the top-level `error:`, walks
+  `err.chain().skip(1)` for causes, and — the actionable part — runs `hint_for`
+  (`:632`) over the lowercased error text to attach a one-line fix: no
+  manifest → `haw init`; missing token → set `HAW_GITHUB_TOKEN` / `gh auth
+  login`; "drift"/"lock" → `haw sync`; "not a git repo" → `haw sync` to clone.
 
-Decisions the plan left open, fixed during Phase 1. Each one is reversible behind a
-trait or a file format version.
+Workspace lints (`Cargo.toml`) set `clippy::unwrap_used` and
+`clippy::expect_used` to `warn` across the workspace; test modules opt back in
+with `#![cfg_attr(test, allow(...))]`.
 
-- **DR-1 — Lock covers the whole manifest, not one stack.** `haw.lock` pins every
-  repo; `sync --stack` consumes a subset. Switching stacks never rewrites the lock.
-- **DR-2 — Overlays only apply at lock time.** `haw lock --overlay dev` re-resolves;
-  `haw sync` with an existing lock ignores overlays (and says so). Lock stays the single
-  source of truth for reproducibility.
-- **DR-3 — Branch policy, never detached.** A branch rev checks out on a local branch of
-  the same name; tags and SHAs check out on `haw/<rev>`. The lock records the branch
-  (`branch` field) so re-syncs need no network. `checkout -B` is guarded: local commits
-  not contained in the target abort the sync (`GitError::LocalCommits`).
-- **DR-4 — Rev resolution without cloning** uses `git ls-remote --heads --tags` (peeled
-  `^{}` entries win for annotated tags). Full 40-hex revs pass through unresolved.
-- **DR-5 — Reads shell out too, for now.** `gix` is deferred: the `GitBackend` trait in
-  `haw-core::git` is the seam, `haw-git::ShellGit` the only impl. Swapping reads to
-  gitoxide later touches one crate, zero callers. Keeps Phase 1's dep tree small.
-- **DR-6 — Threads, not tokio, for fan-out.** Git work is process-spawning; a bounded
-  `std::thread::scope` pool (`haw-git::parallel::fan_out`) suffices and stays sync.
-  tokio arrives with the async forge APIs (octocrab) in Phase 3.
-- **DR-7 — Workspace state lives in `.haw/`** (uncommitted): `stack` records the
-  current stack; `changesets/<id>.toml` records changeset membership + branches.
-- **DR-8 — haw-core depends on nothing that does I/O by policy**, but performs manifest,
-  lock, and state file I/O itself (it owns those formats). Network/git I/O stays behind
-  `GitBackend`.
-- **DR-9 — Lockfile is versioned** (`version = 1`); unknown versions are a hard error,
-  schema evolution goes through explicit migration.
-- **DR-10 — Forge detection is hostname-substring** (`github`/`gitlab`), which covers
-  self-hosted GitLab; an explicit `forge = "github" | "gitlab"` key on `[remote.X]`
-  overrides the heuristic for hosts it misses (shipped in Phase 3).
-- **DR-11 — Forge clients: octocrab's generic verbs + reqwest, sync trait.** GitHub goes
-  through `octocrab` driven by a private current-thread tokio runtime; GitLab uses
-  `reqwest` (blocking, REST v4). The `Forge` trait stays synchronous, so `haw-core` and
-  the CLI never see an async runtime. Generic JSON verbs (get/post/patch/put) are used
-  instead of octocrab's typed builders to stay stable across its releases.
-- **DR-12 — Snapshots capture the whole workspace.** `haw change snapshot save`
-  records every repo's branch + HEAD (not just the changeset's members): a feature's
-  state includes where the rest of the fleet stood. Restore refuses on dirty repos and
-  never touches the network.
-- **DR-13 — `change land` order is manifest `deps`, then changeset order.** A repo's
-  optional `deps = [...]` gives the product→repo graph real edges; land performs a
-  stable topological sort over the changeset members and stops at the first failure.
-- **DR-14 — OAuth device flow is deferred.** Token resolution today: env
-  (`HAW_GITHUB_TOKEN`/`GITHUB_TOKEN`/`GH_TOKEN`, `HAW_GITLAB_TOKEN`/`GITLAB_TOKEN`,
-  `HAW_FORGE_TOKEN`) then a logged-in `gh` CLI. `haw auth login` + OS keychain
-  (EXTENDING §2.2) needs a keyring dependency and interactive UX — postponed until the
-  CLI's audience demands it; air-gapped and CI environments are already covered.
-- **DR-15 — Collaborative merge is single-worktree and incremental.** The Phase 6
-  `haw-merge` crate is self-contained (its own `MergeBackend` trait + shell-out impl,
-  mirroring how `haw-forge` owns its API clients) rather than extending `GitBackend`. The
-  merge is one real `git merge` on an integration branch, resolved slice by slice in place;
-  slices partition the conflicting paths by top-level component, so they are disjoint and
-  need no recombination. State lives in `.haw/merge/<repo>.toml`. Per-slice `git worktree`
-  parallelism is a future enhancement, not required by the model. The target branch only
-  fast-forwards onto the integration branch at `cleanup`, keeping the operation abortable.
+## 8. Testing
+
+~173 tests, layered to match the seams:
+
+- **Pure/unit** in each crate: `haw-core` (manifest edit, lock round-trips,
+  change lifecycle, resolver, snapshots), `haw-forge` (`repo_coords` for every
+  URL shape, `detect`, `cap_lines`, `progress_bar`).
+- **`haw-tui` (59 tests)** drive `App` state fixtures (e.g. `fleet_app()`) and
+  assert two things: rendered `Span` contents/colors from the pure `draw_*`
+  helpers, and the exact `Job` dispatched onto the worker channel after a
+  keypress (`rx.try_recv()` → `Ok(Job::FleetPrs)` etc.). No terminal, no
+  network — the `Controller` seam and the channel make the whole cockpit
+  headlessly testable.
+- **`FakeForge` / `FakeGit`** (`haw-forge/tests/orchestrate.rs`): the changeset
+  orchestration (request/status/land) runs against in-memory fakes injected via
+  `FakeFactory`, so cross-repo lifecycle logic is verified with no HTTP.
+- **Golden end-to-end** (`hawser/tests/golden.rs`): builds real git repos in
+  tempdirs, runs the actual `haw` binary, and asserts normalized stdout against
+  golden strings — `tree`, `status` + the dirty-repo exit-code-3 CI contract,
+  `sync`, the stable `haw.status/1` JSON schema, and lockfile determinism. These
+  run on the CI matrix, so passing means the shipped binary behaves.
+
+The `Forge`/`GitBackend`/`Controller` triad is the reason this coverage is
+cheap: every expensive dependency has a fake, and the one place they're wired to
+real I/O — `hawser` — is covered by the golden binary tests.

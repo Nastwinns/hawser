@@ -332,6 +332,31 @@ pub struct Governance {
     pub findings: Vec<GovFinding>,
 }
 
+/// One cross-repo grep hit for the `:grep` command / `View::Grep` list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrepHit {
+    pub repo: String,
+    /// Repo-relative path of the matching file.
+    pub path: String,
+    pub line: u32,
+    pub text: String,
+}
+
+/// Parse one `git grep -n` output line — `<relpath>:<line>:<text>` — into a
+/// [`GrepHit`] for `repo`. Returns `None` when the line lacks the expected
+/// `path:line:` prefix (the text field itself may contain further colons).
+pub fn parse_grep_line(repo: &str, raw: &str) -> Option<GrepHit> {
+    let (path, rest) = raw.split_once(':')?;
+    let (line, text) = rest.split_once(':')?;
+    let line: u32 = line.parse().ok()?;
+    Some(GrepHit {
+        repo: repo.to_string(),
+        path: path.to_string(),
+        line,
+        text: text.to_string(),
+    })
+}
+
 /// One CI run/pipeline for the fleet-wide CI view (`i`).
 #[derive(Debug, Clone)]
 pub struct FleetCiRun {
@@ -391,6 +416,13 @@ pub trait Controller: Send {
     fn pr_diff(&mut self, repo: &str, number: u64) -> io::Result<String>;
     /// The CI run/pipeline's job logs as plain text (scrollable detail view).
     fn ci_logs(&mut self, repo: &str, run_id: u64) -> io::Result<String>;
+    /// Cross-repo grep: run `git grep -n <pattern>` in each cloned repo of the
+    /// stack (or the whole fleet when `stack` is `None`), returning every hit.
+    fn grep(&mut self, pattern: &str, stack: Option<&str>) -> io::Result<Vec<GrepHit>>;
+    /// `git fetch` one repo's default remote (distinct from `sync`).
+    fn repo_fetch(&mut self, repo: &str) -> io::Result<String>;
+    /// Run a shell command in one repo's checkout dir (combined stdout+stderr).
+    fn exec_in(&mut self, repo: &str, cmd: &str) -> io::Result<String>;
     /// List `subpath` ("" = root) of `repo`'s tree, on local disk or the forge.
     fn repo_tree(&mut self, repo: &str, subpath: &str, remote: bool) -> io::Result<Vec<FileEntry>>;
     /// The text content of `path` in `repo`, from local disk or the forge.
@@ -413,6 +445,7 @@ enum View {
     PrDetail,
     CiDetail,
     Files,
+    Grep,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -421,6 +454,8 @@ enum InputMode {
     Filter(String),
     Command(String),
     NewChangeset(String),
+    /// The `!` single-repo shell prompt; carries the target repo + typed cmd.
+    Exec(String, String),
 }
 
 enum Job {
@@ -438,6 +473,8 @@ enum Job {
     RepoTree(String, String, bool),
     /// (repo, path, remote, title) — fetch one file's content into the detail view.
     FileContent(String, String, bool, String),
+    /// (pattern, stack) — cross-repo grep on the worker thread.
+    Grep(String, Option<String>),
     Action(&'static str, ActionKind),
 }
 
@@ -458,6 +495,10 @@ enum ActionKind {
     CheckoutPr(String, u64),
     MergeCleanup(String),
     MergeAbort(String),
+    /// `git fetch` one repo, then the outcome loop refreshes.
+    RepoFetch(String),
+    /// Run a shell command in one repo, showing output in the detail view.
+    Exec(String, String),
 }
 
 enum Outcome {
@@ -470,6 +511,8 @@ enum Outcome {
     Detail(String, Box<io::Result<String>>),
     /// A file browser directory listing.
     Tree(Box<io::Result<Vec<FileEntry>>>),
+    /// Cross-repo grep results.
+    Grep(Box<io::Result<Vec<GrepHit>>>),
     Action(&'static str, io::Result<String>),
 }
 
@@ -529,6 +572,12 @@ struct App {
     /// PageDown/PageUp/Ctrl-d/Ctrl-u. Updated each frame; defaults to a sane
     /// fallback before the first draw.
     page_size: usize,
+    /// Fleet "problems only" filter (`p`): show only rows with `has_problem()`.
+    problems_only: bool,
+    /// Cross-repo grep results for `View::Grep`; `None` while loading.
+    grep_hits: Option<Vec<GrepHit>>,
+    /// The pattern of the last `:grep`, for the panel title.
+    grep_pattern: String,
 }
 
 thread_local! {
@@ -571,6 +620,7 @@ impl App {
                 repos
                     .iter()
                     .filter(|r| repo_matches(&r.name, &r.groups, &self.filter))
+                    .filter(|r| !self.problems_only || has_problem(r))
                     .collect()
             })
             .unwrap_or_default();
@@ -697,6 +747,7 @@ impl App {
             View::Ci => self.ci_rows().len(),
             View::Governance => self.gov_rows().len(),
             View::Files => self.file_rows().len(),
+            View::Grep => self.grep_rows().len(),
             View::RepoDetail | View::PrDetail | View::CiDetail => 0,
         }
     }
@@ -713,6 +764,32 @@ impl App {
             .collect();
         rows.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
         rows
+    }
+
+    /// Cross-repo grep hits, filtered by the live filter (repo/path/text).
+    fn grep_rows(&self) -> Vec<&GrepHit> {
+        self.grep_hits
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|h| {
+                self.filter.is_empty()
+                    || hit(&h.repo, &self.filter)
+                    || hit(&h.path, &self.filter)
+                    || hit(&h.text, &self.filter)
+            })
+            .collect()
+    }
+
+    /// Total repos in the current stack, ignoring filters — the denominator of
+    /// the `problems (3/40)` title.
+    fn fleet_total(&self) -> usize {
+        let stack = self.stack.as_deref().unwrap_or_default();
+        self.snapshot
+            .fleet
+            .iter()
+            .find(|(name, _)| name == stack)
+            .map_or(0, |(_, repos)| repos.len())
     }
 
     /// URL under the cursor in the PR/CI views, for `o` (open in browser).
@@ -950,6 +1027,9 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                     title,
                     Box::new(controller.file_content(&repo, &path, remote)),
                 ),
+                Job::Grep(pattern, stack) => {
+                    Outcome::Grep(Box::new(controller.grep(&pattern, stack.as_deref())))
+                }
                 Job::Action(label, kind) => {
                     let result = match kind {
                         ActionKind::SyncStack(stack) => controller.sync_stack(&stack),
@@ -970,6 +1050,8 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                         }
                         ActionKind::MergeCleanup(repo) => controller.merge_cleanup(&repo),
                         ActionKind::MergeAbort(repo) => controller.merge_abort(&repo),
+                        ActionKind::RepoFetch(repo) => controller.repo_fetch(&repo),
+                        ActionKind::Exec(repo, cmd) => controller.exec_in(&repo, &cmd),
                     };
                     Outcome::Action(label, result)
                 }
@@ -1038,6 +1120,9 @@ fn open_repo_detail(app: &mut App, jobs: &Sender<Job>, repo: &str) {
         "git detail",
         Job::RepoDetail(repo.to_string()),
     );
+    // Track the repo so `x`/`!`/`F` in the detail view act on it. Set after
+    // `open_detail` — `goto_view` clears `files_repo` on non-Files views.
+    app.files_repo = Some(repo.to_string());
 }
 
 /// Navigate into a PR/MR's drill-in detail view and fetch its report.
@@ -1136,6 +1221,60 @@ fn open_file_content(app: &mut App, jobs: &Sender<Job>, name: &str) {
     app.goto_view(View::RepoDetail);
     app.busy = Some("file");
     let _ = jobs.send(Job::FileContent(repo, path, app.files_remote, title));
+}
+
+/// Run a cross-repo grep on the worker thread and open the results list.
+fn run_grep(app: &mut App, jobs: &Sender<Job>, pattern: &str) {
+    let pattern = pattern.trim().to_string();
+    if pattern.is_empty() {
+        app.message = "grep: give a pattern — :grep <pattern>".to_string();
+        return;
+    }
+    app.grep_pattern = pattern.clone();
+    app.grep_hits = None;
+    app.goto_view(View::Grep);
+    // Always enqueue: the serial worker runs it after any in-flight job.
+    app.busy = Some("grep");
+    let _ = jobs.send(Job::Grep(pattern, app.stack.clone()));
+}
+
+/// Open the file that a grep hit points at, scrolled to the hit's line.
+fn open_grep_hit(app: &mut App, jobs: &Sender<Job>, hit: &GrepHit) {
+    let title = format!("{}:/{}", hit.repo, hit.path);
+    app.detail_title = title.clone();
+    app.detail_text = None;
+    // The detail view clamps scroll to its content; a 1-based line maps to a
+    // 0-based scroll offset. It is re-clamped once the text loads.
+    app.detail_scroll = hit.line.saturating_sub(1) as u16;
+    app.goto_view(View::RepoDetail);
+    app.busy = Some("file");
+    let _ = jobs.send(Job::FileContent(
+        hit.repo.clone(),
+        hit.path.clone(),
+        false,
+        title,
+    ));
+}
+
+/// Run a shell command in one repo on the worker thread; its output lands in
+/// the shared detail view titled `$ <cmd> @ <repo>`.
+fn run_exec(app: &mut App, jobs: &Sender<Job>, repo: &str, cmd: &str) {
+    let cmd = cmd.trim().to_string();
+    if cmd.is_empty() {
+        app.message = "exec: give a command — !<cmd>".to_string();
+        return;
+    }
+    if app.busy.is_some() {
+        app.message = "busy — wait for the current operation".to_string();
+        return;
+    }
+    app.detail_title = format!("$ {cmd} @ {repo}");
+    app.detail_text = None;
+    app.detail_scroll = 0;
+    app.goto_view(View::RepoDetail);
+    app.message = format!("→ {cmd} @ {repo}");
+    app.busy = Some("exec");
+    let _ = jobs.send(Job::Action("exec", ActionKind::Exec(repo.to_string(), cmd)));
 }
 
 /// Navigate to a fleet-wide network view (`m`/`i`) and (re)fetch its rows.
@@ -1283,6 +1422,28 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
             }
         },
         ("help", "") => app.help = true,
+        ("grep", pat) if !pat.is_empty() => run_grep(app, jobs, pat),
+        ("grep", "") => app.message = "grep: give a pattern — :grep <pattern>".to_string(),
+        ("sh", cmd) if !cmd.is_empty() => match app.cursor_repo() {
+            Some(repo) => run_exec(app, jobs, &repo, cmd),
+            None => app.message = "sh: put the cursor on a repo row".to_string(),
+        },
+        ("problems", "") => {
+            app.problems_only = !app.problems_only;
+            app.clamp_cursor();
+            app.message = if app.problems_only {
+                "problems-only filter on".to_string()
+            } else {
+                "problems-only filter off".to_string()
+            };
+        }
+        ("fetch", "") => match app.cursor_repo() {
+            Some(repo) => {
+                app.message = format!("→ git fetch ({repo})");
+                dispatch(app, jobs, "fetch", ActionKind::RepoFetch(repo));
+            }
+            None => app.message = "fetch: put the cursor on a repo row".to_string(),
+        },
         ("merge", "") => {
             app.message = match app.snapshot.merges.len() {
                 0 => "no merges in progress".to_string(),
@@ -1313,7 +1474,39 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
             }
         }
         ("q" | "quit", _) => app.message = "use q outside the command bar".to_string(),
+        // `:<repo-substring>` (single token) → jump the fleet cursor to the
+        // first matching repo. Only a bare token with no args is treated so.
+        (token, "") if !token.is_empty() && jump_to_repo(app, token) => {}
         _ => app.message = format!("unknown command `{line}`"),
+    }
+}
+
+/// Move the fleet cursor to the first repo whose name fuzzy-matches `needle`.
+/// Returns `false` (and does nothing) when no repo matches, so the caller can
+/// fall through to an "unknown command" message.
+fn jump_to_repo(app: &mut App, needle: &str) -> bool {
+    let stack = app.stack.as_deref().unwrap_or_default();
+    let matched = app
+        .snapshot
+        .fleet
+        .iter()
+        .find(|(name, _)| name == stack)
+        .and_then(|(_, repos)| repos.iter().find(|r| hit(&r.name, needle)))
+        .map(|r| r.name.clone());
+    match matched {
+        Some(name) => {
+            app.problems_only = false;
+            app.filter.clear();
+            if app.view != View::Fleet {
+                app.goto_view(View::Fleet);
+            }
+            if let Some(index) = app.fleet_rows().iter().position(|r| r.name == name) {
+                app.cursor.select(Some(index));
+            }
+            app.message = format!("→ {name}");
+            true
+        }
+        None => false,
     }
 }
 
@@ -1354,6 +1547,9 @@ fn event_loop(
         detail_pr: None,
         detail_ci: None,
         page_size: 10,
+        problems_only: false,
+        grep_hits: None,
+        grep_pattern: String::new(),
     };
     app.cursor.select(Some(0));
     request_refresh(&mut app, jobs);
@@ -1468,8 +1664,42 @@ fn event_loop(
                         }
                     }
                 }
+                Outcome::Grep(result) => {
+                    app.busy = None;
+                    match *result {
+                        Ok(hits) => {
+                            app.message = format!(
+                                "{} hit(s) for `{}` across the fleet",
+                                hits.len(),
+                                app.grep_pattern
+                            );
+                            app.grep_hits = Some(hits);
+                            app.cursor.select(Some(0));
+                            app.clamp_cursor();
+                        }
+                        Err(err) => {
+                            app.grep_hits = Some(Vec::new());
+                            app.message = format!("grep failed: {err}");
+                        }
+                    }
+                }
                 Outcome::Action(label, result) => {
                     app.busy = None;
+                    // `!`/`:sh` exec output lands in the shared detail view.
+                    if label == "exec" {
+                        app.detail_scroll = 0;
+                        match result {
+                            Ok(output) => {
+                                app.detail_text = Some(output);
+                                app.message = "command finished".to_string();
+                            }
+                            Err(err) => {
+                                app.detail_text = Some(format!("failed to run: {err}"));
+                                app.message = format!("exec failed: {err}");
+                            }
+                        }
+                        continue;
+                    }
                     match result {
                         Ok(message) if label == "run" => {
                             app.message = "ran — press any key to dismiss the output".to_string();
@@ -1606,7 +1836,8 @@ fn event_loop(
         match &mut app.input {
             InputMode::Filter(buffer)
             | InputMode::Command(buffer)
-            | InputMode::NewChangeset(buffer) => {
+            | InputMode::NewChangeset(buffer)
+            | InputMode::Exec(_, buffer) => {
                 match key.code {
                     KeyCode::Esc => app.input = InputMode::None,
                     KeyCode::Backspace => {
@@ -1628,6 +1859,9 @@ fn event_loop(
                         match mode {
                             InputMode::Filter(_) => {}
                             InputMode::Command(line) => run_command_bar(&mut app, jobs, &line),
+                            InputMode::Exec(repo, cmd) => {
+                                run_exec(&mut app, jobs, &repo, &cmd);
+                            }
                             InputMode::NewChangeset(id) => {
                                 let id = id.trim().to_string();
                                 if !id.is_empty() {
@@ -1827,6 +2061,11 @@ fn event_loop(
                         open_ci_detail(&mut app, jobs, &repo, id, &name);
                     }
                 }
+                View::Grep => {
+                    if let Some(hit) = app.grep_rows().get(selected).map(|h| (*h).clone()) {
+                        open_grep_hit(&mut app, jobs, &hit);
+                    }
+                }
                 _ => {}
             },
             KeyCode::Char('s') if app.view == View::Fleet => {
@@ -1862,9 +2101,41 @@ fn event_loop(
                     None => app.goto_view(View::Stacks),
                 }
             }
-            KeyCode::Char('p') if app.view == View::Fleet || app.view == View::Stacks => {
+            KeyCode::Char('p') if app.view == View::Fleet => {
+                app.problems_only = !app.problems_only;
+                app.clamp_cursor();
+                app.message = if app.problems_only {
+                    "problems-only filter on".to_string()
+                } else {
+                    "problems-only filter off".to_string()
+                };
+            }
+            KeyCode::Char('p') if app.view == View::Stacks => {
                 app.message = "→ haw pin".to_string();
                 dispatch(&mut app, jobs, "pin", ActionKind::Pin);
+            }
+            KeyCode::Char('!') if matches!(app.view, View::Fleet | View::RepoDetail) => {
+                let repo = match app.view {
+                    View::RepoDetail => app.files_repo.clone(),
+                    _ => app.cursor_repo(),
+                };
+                match repo {
+                    Some(repo) => app.input = InputMode::Exec(repo, String::new()),
+                    None => app.message = "exec: put the cursor on a repo row".to_string(),
+                }
+            }
+            KeyCode::Char('F') if matches!(app.view, View::Fleet | View::RepoDetail) => {
+                let repo = match app.view {
+                    View::RepoDetail => app.files_repo.clone(),
+                    _ => app.cursor_repo(),
+                };
+                match repo {
+                    Some(repo) => {
+                        app.message = format!("→ git fetch ({repo})");
+                        dispatch(&mut app, jobs, "fetch", ActionKind::RepoFetch(repo));
+                    }
+                    None => app.message = "fetch: put the cursor on a repo row".to_string(),
+                }
             }
             KeyCode::Char('l') if app.view == View::Fleet || app.view == View::Stacks => {
                 app.message = "→ haw lock".to_string();
@@ -1984,6 +2255,13 @@ fn view_name(app: &App, view: View) -> String {
             }
         }
         View::RepoDetail | View::PrDetail | View::CiDetail => app.detail_title.clone(),
+        View::Grep => {
+            if app.grep_pattern.is_empty() {
+                "grep".to_string()
+            } else {
+                format!("grep {}", app.grep_pattern)
+            }
+        }
     }
 }
 
@@ -2012,10 +2290,12 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         ],
         View::Fleet => &[
             ("s", "sync"),
+            ("F", "fetch"),
             ("S", "switch stack"),
             ("space", "mark"),
-            ("p", "pin"),
+            ("p", "problems"),
             ("l", "lock"),
+            ("!", "exec"),
             ("c", "changesets"),
             ("m", "PRs"),
             ("i", "CI"),
@@ -2106,8 +2386,18 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         View::RepoDetail => &[
             ("j/k", "scroll"),
             ("x", "shell"),
+            ("!", "exec"),
+            ("F", "fetch"),
             ("b", "back"),
             ("q", "quit"),
+        ],
+        View::Grep => &[
+            ("enter", "open hit"),
+            ("PgUp/PgDn", "page"),
+            ("b", "back"),
+            ("/", "filter"),
+            (":", "cmd"),
+            ("?", "help"),
         ],
         View::Files => &[
             ("enter", "open · R remote · b up"),
@@ -2146,6 +2436,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         View::Ci => draw_ci(frame, app, zones[1]),
         View::Governance => draw_governance(frame, app, zones[1]),
         View::Files => draw_files(frame, app, zones[1]),
+        View::Grep => draw_grep(frame, app, zones[1]),
         View::RepoDetail | View::PrDetail | View::CiDetail => draw_detail(frame, app, zones[1]),
     }
     draw_status(frame, app, zones[2]);
@@ -2517,11 +2808,18 @@ fn short(sha: &str) -> &str {
     sha.get(..8).unwrap_or(sha)
 }
 
+/// Whether a repo row is a problem the fleet grid should flag loudly: not
+/// cloned, drifted from the lock, a dirty worktree, or behind its upstream.
+fn has_problem(repo: &RepoStatus) -> bool {
+    repo.missing
+        || repo.drift
+        || repo.dirty
+        || repo.ahead_behind.is_some_and(|(_, behind)| behind > 0)
+}
+
 fn state_dot(repo: &RepoStatus) -> Span<'static> {
-    let (dot, color) = if repo.missing {
-        ("○", theme::dim())
-    } else if repo.drift {
-        ("●", theme::red())
+    let (dot, color) = if repo.missing || repo.drift {
+        ("⚠", theme::red())
     } else if repo.dirty {
         ("●", theme::yellow())
     } else {
@@ -2584,12 +2882,28 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
         .map(|repo| {
             let (groups, groups_color) = groups_label(&repo.groups);
             let marked = app.selected_repos.contains(&repo.name);
+            let problem = has_problem(repo);
+            // A problem row leads with a red `⚠`; a clean row keeps its dot.
             let mark_cell = || {
                 if marked {
                     Cell::from(Span::styled("◉", Style::default().fg(theme::teal())))
+                } else if problem && !repo.missing && !repo.drift {
+                    // dirty / behind: state_dot renders a colored dot, but a
+                    // problem must be loud — override with a red ⚠.
+                    Cell::from(Span::styled("⚠", Style::default().fg(theme::red())))
                 } else {
                     Cell::from(state_dot(repo))
                 }
+            };
+            // The repo-name style: red+bold on any problem, else normal bold.
+            let name_style = if problem {
+                Style::default()
+                    .fg(theme::red())
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(theme::text())
+                    .add_modifier(Modifier::BOLD)
             };
             let merge_cell = match app.merge_badge(&repo.name) {
                 Some(badge) => Cell::from(Span::styled(
@@ -2614,12 +2928,7 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
             }
             Row::new(vec![
                 mark_cell(),
-                Cell::from(Span::styled(
-                    repo.name.clone(),
-                    Style::default()
-                        .fg(theme::text())
-                        .add_modifier(Modifier::BOLD),
-                )),
+                Cell::from(Span::styled(repo.name.clone(), name_style)),
                 Cell::from(Span::styled(groups, Style::default().fg(groups_color))),
                 Cell::from(Span::styled(
                     repo.branch.clone().unwrap_or_else(|| "(detached)".into()),
@@ -2676,10 +2985,15 @@ fn draw_fleet(frame: &mut Frame, app: &mut App, area: Rect) {
         app.sort
             .map(|(col, desc)| ([1usize, 3, 4, 5, 6, 7][col.min(5) as usize], desc)),
     ))
-    .block(panel(format!(
-        "fleet({count}){}",
-        row_indicator(app, count)
-    )))
+    .block(panel(if app.problems_only {
+        format!(
+            "fleet ⚠ problems ({count}/{}){}",
+            app.fleet_total(),
+            row_indicator(app, count)
+        )
+    } else {
+        format!("fleet({count}){}", row_indicator(app, count))
+    }))
     .row_highlight_style(cursor_style())
     .highlight_symbol(Span::styled("▍", Style::default().fg(theme::accent())));
 
@@ -3429,6 +3743,68 @@ fn draw_files(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
+fn draw_grep(frame: &mut Frame, app: &mut App, area: Rect) {
+    let fetched = app.grep_hits.is_some();
+    let rows: Vec<Row> = app
+        .grep_rows()
+        .iter()
+        .map(|hit| {
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    hit.repo.clone(),
+                    Style::default()
+                        .fg(theme::text())
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Cell::from(Span::styled(
+                    format!("{}:{}", hit.path, hit.line),
+                    Style::default().fg(theme::teal()),
+                )),
+                Cell::from(Span::styled(
+                    hit.text.trim_end().to_string(),
+                    Style::default().fg(theme::text()),
+                )),
+            ])
+        })
+        .collect();
+
+    let count = rows.len();
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Min(10),
+            Constraint::Min(20),
+            Constraint::Min(20),
+        ],
+    )
+    .header(header_row(&["REPO", "PATH:LINE", "TEXT"]))
+    .block(panel(format!(
+        "grep `{}`({count}){}",
+        app.grep_pattern,
+        row_indicator(app, count)
+    )))
+    .row_highlight_style(cursor_style())
+    .highlight_symbol(Span::styled("▍", Style::default().fg(theme::accent())));
+
+    let mut state = TableState::default();
+    state.select(app.cursor.selected());
+    frame.render_stateful_widget(table, area, &mut state);
+
+    if count == 0 {
+        draw_empty_hint(
+            frame,
+            area,
+            if app.busy.is_some() {
+                "grepping…"
+            } else if fetched {
+                "no matches across the fleet"
+            } else {
+                "run :grep <pattern>"
+            },
+        );
+    }
+}
+
 fn draw_detail(frame: &mut Frame, app: &mut App, area: Rect) {
     let title = app.detail_title.clone();
     match &app.detail_text {
@@ -3488,6 +3864,20 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
             Span::styled(" new changeset: ", Style::default().fg(theme::mauve())),
             Span::styled(buffer.clone(), Style::default().fg(theme::text())),
             Span::styled(caret, Style::default().fg(theme::text())),
+        ]),
+        (InputMode::Exec(repo, buffer), _) => Line::from(vec![
+            Span::styled(
+                " ! ",
+                Style::default()
+                    .fg(theme::peach())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(buffer.clone(), Style::default().fg(theme::text())),
+            Span::styled(caret, Style::default().fg(theme::text())),
+            Span::styled(
+                format!("   (shell command in {repo})"),
+                Style::default().fg(theme::dim()),
+            ),
         ]),
         (InputMode::None, Some(label)) => Line::from(vec![
             Span::styled(
@@ -3592,8 +3982,11 @@ fn draw_help(frame: &mut Frame) {
             "drill into the repo's live git detail (scrollable)",
         ),
         help_entry("s", "sync marked repos, else cursor repo (or stack)"),
+        help_entry("F", "git fetch the cursor repo (distinct from s sync)"),
         help_entry("space", "mark/unmark repo · s / r act on the marked set"),
-        help_entry("S", "switch stack · p pin · l lock"),
+        help_entry("p", "problems-only filter (⚠ dirty/drift/behind/missing)"),
+        help_entry("!", "run a shell command in the cursor repo (detail view)"),
+        help_entry("S", "switch stack · l lock"),
         help_entry("t", "tree · c changesets · r run · g goto"),
         help_entry("x", "drop into a shell in the repo (exits the cockpit)"),
         help_entry("f", "browse the repo's files (local disk or forge)"),
@@ -3639,6 +4032,8 @@ fn draw_help(frame: &mut Frame) {
         help_entry(":prs", "· :ci · :governance · :plugins · :help"),
         help_entry(":pin", "· :lock — pin HEADs / commit the lock"),
         help_entry(":change", "[ID | start ID | land ID | request ID]"),
+        help_entry(":grep <pat>", "· :sh CMD · :problems · :fetch"),
+        help_entry(":<repo>", "jump the fleet cursor to a matching repo"),
         help_entry(":theme <name>", "switch skin (catppuccin/dracula/nord/…)"),
         Line::raw(""),
         Line::styled(" press any key to close", Style::default().fg(theme::dim())),
@@ -3717,6 +4112,9 @@ mod tests {
             detail_pr: None,
             detail_ci: None,
             page_size: 10,
+            problems_only: false,
+            grep_hits: None,
+            grep_pattern: String::new(),
         }
     }
 
@@ -3812,7 +4210,7 @@ mod tests {
         }
     }
 
-    const ALL_VIEWS: [View; 12] = [
+    const ALL_VIEWS: [View; 13] = [
         View::Stacks,
         View::Fleet,
         View::Changesets,
@@ -3825,6 +4223,7 @@ mod tests {
         View::PrDetail,
         View::CiDetail,
         View::Files,
+        View::Grep,
     ];
 
     /// Every key advertised in `key_hints` must be one the event loop actually
@@ -3850,6 +4249,7 @@ mod tests {
             "s" => matches!(view, View::Fleet | View::Stacks),
             "S" => true,
             "p" => matches!(view, View::Fleet | View::Stacks),
+            "!" | "F" => matches!(view, View::Fleet | View::RepoDetail),
             "n" => matches!(view, View::Changesets | View::Changeset),
             "L" => view == View::Changeset,
             "R" => matches!(view, View::Changeset | View::Files),
@@ -3860,7 +4260,12 @@ mod tests {
             "l" => matches!(view, View::Fleet | View::Stacks | View::Ci | View::CiDetail),
             "o" => matches!(view, View::Prs | View::Ci | View::Governance),
             "<>" | "." => matches!(view, View::Fleet | View::Prs | View::Ci),
-            "PgUp/PgDn" => matches!(view, View::Fleet | View::Changeset | View::Prs | View::Ci),
+            "PgUp/PgDn" => {
+                matches!(
+                    view,
+                    View::Fleet | View::Changeset | View::Prs | View::Ci | View::Grep
+                )
+            }
             _ => false,
         }
     }
@@ -4587,6 +4992,198 @@ mod tests {
         assert!(view_name(&app, View::Files).contains("kernel"));
         assert!(view_name(&app, View::Files).contains("src"));
         assert!(!key_hints(View::Files).is_empty());
+    }
+
+    // ---- Feature A/B: problems highlight + filter -------------------------
+
+    fn dirty_repo(name: &str) -> RepoStatus {
+        let mut r = repo(name, &[]);
+        r.dirty = true;
+        r
+    }
+
+    #[test]
+    fn has_problem_truth_table() {
+        // clean repo: no problem.
+        assert!(!has_problem(&repo("clean", &[])));
+        // dirty worktree.
+        let mut r = repo("dirty", &[]);
+        r.dirty = true;
+        assert!(has_problem(&r));
+        // drift (head != lock).
+        let mut r = repo("drift", &[]);
+        r.drift = true;
+        assert!(has_problem(&r));
+        // missing / not cloned.
+        let mut r = repo("gone", &[]);
+        r.missing = true;
+        assert!(has_problem(&r));
+        // behind upstream.
+        let mut r = repo("behind", &[]);
+        r.ahead_behind = Some((0, 2));
+        assert!(has_problem(&r));
+        // ahead-only is fine.
+        let mut r = repo("ahead", &[]);
+        r.ahead_behind = Some((3, 0));
+        assert!(!has_problem(&r));
+    }
+
+    #[test]
+    fn problems_only_filter_reduces_rows() {
+        let snap = Snapshot {
+            stacks: vec!["gw".to_string()],
+            fleet: vec![(
+                "gw".to_string(),
+                vec![
+                    repo("clean", &[]),
+                    dirty_repo("dirty"),
+                    repo("also-clean", &[]),
+                ],
+            )],
+            ..Default::default()
+        };
+        let mut app = app_with(snap);
+        assert_eq!(app.fleet_rows().len(), 3);
+        app.problems_only = true;
+        let rows = app.fleet_rows();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name, "dirty");
+        assert_eq!(app.fleet_total(), 3);
+    }
+
+    #[test]
+    fn problems_command_toggles_the_filter() {
+        let mut app = fleet_app();
+        let (tx, _rx) = channel();
+        assert!(!app.problems_only);
+        run_command_bar(&mut app, &tx, "problems");
+        assert!(app.problems_only);
+        run_command_bar(&mut app, &tx, "problems");
+        assert!(!app.problems_only);
+    }
+
+    // ---- Feature C: cross-repo grep ---------------------------------------
+
+    #[test]
+    fn parse_grep_line_splits_path_line_text() {
+        let hit = parse_grep_line("kernel", "src/main.rs:12:let x = 1;").unwrap();
+        assert_eq!(hit.repo, "kernel");
+        assert_eq!(hit.path, "src/main.rs");
+        assert_eq!(hit.line, 12);
+        assert_eq!(hit.text, "let x = 1;");
+        // Text may itself contain colons.
+        let hit = parse_grep_line("hal", "a.rs:3:url = http://x").unwrap();
+        assert_eq!(hit.line, 3);
+        assert_eq!(hit.text, "url = http://x");
+        // Non-matching lines yield None.
+        assert!(parse_grep_line("hal", "garbage").is_none());
+        assert!(parse_grep_line("hal", "a.rs:notaline:x").is_none());
+    }
+
+    #[test]
+    fn grep_command_sets_pending_grep_and_opens_view() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        run_command_bar(&mut app, &tx, "grep foo");
+        assert_eq!(app.view, View::Grep);
+        assert_eq!(app.grep_pattern, "foo");
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Job::Grep(pat, Some(stack))) if pat == "foo" && stack == "gw"
+        ));
+    }
+
+    #[test]
+    fn grep_rows_filter_by_repo_path_and_text() {
+        let mut app = fleet_app();
+        app.view = View::Grep;
+        app.grep_hits = Some(vec![
+            GrepHit {
+                repo: "kernel".to_string(),
+                path: "src/boot.rs".to_string(),
+                line: 4,
+                text: "fn boot()".to_string(),
+            },
+            GrepHit {
+                repo: "hal".to_string(),
+                path: "src/i2c.rs".to_string(),
+                line: 9,
+                text: "fn xfer()".to_string(),
+            },
+        ]);
+        assert_eq!(app.grep_rows().len(), 2);
+        app.filter = "kernel".to_string();
+        assert_eq!(app.grep_rows().len(), 1);
+        app.filter = "i2c".to_string();
+        assert_eq!(app.grep_rows().len(), 1);
+        app.filter = "boot".to_string();
+        assert_eq!(app.grep_rows().len(), 1);
+    }
+
+    #[test]
+    fn grep_view_name_and_hints_cover() {
+        let mut app = fleet_app();
+        app.view = View::Grep;
+        app.grep_pattern = "todo".to_string();
+        assert!(view_name(&app, View::Grep).contains("todo"));
+        assert!(!key_hints(View::Grep).is_empty());
+    }
+
+    #[test]
+    fn open_grep_hit_opens_detail_scrolled_to_line() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        let hit = GrepHit {
+            repo: "kernel".to_string(),
+            path: "src/boot.rs".to_string(),
+            line: 12,
+            text: "x".to_string(),
+        };
+        open_grep_hit(&mut app, &tx, &hit);
+        assert_eq!(app.view, View::RepoDetail);
+        assert_eq!(app.detail_title, "kernel:/src/boot.rs");
+        assert_eq!(app.detail_scroll, 11);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Job::FileContent(repo, path, false, _)) if repo == "kernel" && path == "src/boot.rs"
+        ));
+    }
+
+    // ---- Feature D: single-repo exec + fetch ------------------------------
+
+    #[test]
+    fn exec_command_opens_detail_and_dispatches() {
+        let mut app = fleet_app();
+        app.view = View::Fleet;
+        app.cursor.select(Some(0)); // kernel
+        let (tx, rx) = channel();
+        run_command_bar(&mut app, &tx, "sh echo hi");
+        assert_eq!(app.view, View::RepoDetail);
+        assert_eq!(app.detail_title, "$ echo hi @ kernel");
+        assert_eq!(drain(&rx), vec!["exec"]);
+    }
+
+    #[test]
+    fn fetch_command_dispatches_fetch() {
+        let mut app = fleet_app();
+        app.view = View::Fleet;
+        app.cursor.select(Some(0));
+        let (tx, rx) = channel();
+        run_command_bar(&mut app, &tx, "fetch");
+        assert_eq!(drain(&rx), vec!["fetch"]);
+    }
+
+    #[test]
+    fn colon_repo_substring_jumps_the_cursor() {
+        let mut app = fleet_app();
+        app.view = View::Fleet;
+        app.cursor.select(Some(0));
+        let (tx, _rx) = channel();
+        // `:hal` (a bare token) jumps to the `hal` row.
+        run_command_bar(&mut app, &tx, "hal");
+        let idx = app.cursor.selected().unwrap();
+        assert_eq!(app.fleet_rows()[idx].name, "hal");
+        assert!(app.message.contains("hal"));
     }
 
     #[test]
