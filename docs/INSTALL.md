@@ -5,7 +5,7 @@ matrix: every channel, how to verify the signed release, the air-gap workflow, a
 building from source. For the short version, see the
 [README Install section](https://github.com/Nastwinns/hawser#install).
 
-The current release is **v0.1.0**, published with signed, reproducible archives for
+The current release is **v0.1.2**, published with signed, reproducible archives for
 every supported platform.
 
 ## Channel matrix
@@ -15,7 +15,7 @@ every supported platform.
 | **crates.io** | any (Rust) | `cargo install hawser` | Rust 1.90+ toolchain |
 | **Homebrew** | macOS + Linux | `brew install nastwinns/tap/hawser` | Homebrew |
 | **Scoop** | Windows | `scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket` then `scoop install hawser` | Scoop |
-| **Static musl binary** | Linux x86_64 | download `haw-0.1.0-x86_64-unknown-linux-musl.tar.gz` (see below) | none (zero-dependency) |
+| **Static musl binary** | Linux x86_64 | download `haw-0.1.2-x86_64-unknown-linux-musl.tar.gz` (see below) | none (zero-dependency) |
 | **Prebuilt archive** | Linux gnu (x86_64/aarch64), Linux musl (x86_64), macOS (x86_64/aarch64), Windows (x86_64) | [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest) | none (optional: `cosign`, `sha256sum` to verify) |
 | **Docker** | any (with Docker) | `docker build -t haw .` | Docker + the repo |
 | **From source** | any (Rust) | `cargo install --git …` or `cargo build --release` | Rust 1.90+ toolchain |
@@ -100,12 +100,12 @@ on a connected machine, verify it (below), copy all four files across, then inst
 Every platform ships an archive on the
 [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest):
 
-- `haw-0.1.0-x86_64-unknown-linux-gnu.tar.gz`
-- `haw-0.1.0-aarch64-unknown-linux-gnu.tar.gz`
-- `haw-0.1.0-x86_64-unknown-linux-musl.tar.gz` (static)
-- `haw-0.1.0-x86_64-apple-darwin.tar.gz`
-- `haw-0.1.0-aarch64-apple-darwin.tar.gz`
-- `haw-0.1.0-x86_64-pc-windows-msvc.zip`
+- `haw-0.1.2-x86_64-unknown-linux-gnu.tar.gz`
+- `haw-0.1.2-aarch64-unknown-linux-gnu.tar.gz`
+- `haw-0.1.2-x86_64-unknown-linux-musl.tar.gz` (static)
+- `haw-0.1.2-x86_64-apple-darwin.tar.gz`
+- `haw-0.1.2-aarch64-apple-darwin.tar.gz`
+- `haw-0.1.2-x86_64-pc-windows-msvc.zip`
 
 Each archive is accompanied by:
 
@@ -119,7 +119,7 @@ and it is the whole point on locked-down or air-gapped hosts.
 ### Verify the checksum
 
 ```bash
-sha256sum -c haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.sha256
+sha256sum -c haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.sha256
 ```
 
 Expect `… OK`. (On macOS, `shasum -a 256 -c` is the equivalent.)
@@ -131,17 +131,17 @@ need [`cosign`](https://github.com/sigstore/cosign) installed:
 
 ```bash
 cosign verify-blob \
-  --certificate haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.pem \
-  --signature   haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.sig \
+  --certificate haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.pem \
+  --signature   haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.sig \
   --certificate-identity-regexp 'https://github.com/Nastwinns/hawser' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  haw-0.1.0-x86_64-unknown-linux-musl.tar.gz
+  haw-0.1.2-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Expect `Verified OK`. Once verified, unpack and install:
 
 ```bash
-tar xzf haw-0.1.0-x86_64-unknown-linux-musl.tar.gz
+tar xzf haw-0.1.2-x86_64-unknown-linux-musl.tar.gz
 sudo install haw /usr/local/bin/
 ```
 
