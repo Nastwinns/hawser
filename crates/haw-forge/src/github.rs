@@ -465,6 +465,50 @@ impl Forge for GitHub {
         }
         Ok(crate::cap_lines(&out, crate::LOG_LINE_CAP))
     }
+
+    fn repo_tree(
+        &self,
+        repo_url: &str,
+        subpath: &str,
+        git_ref: Option<&str>,
+    ) -> Result<Vec<crate::TreeEntry>, ForgeError> {
+        let (host, path) = self.split(repo_url)?;
+        let sub = subpath.trim_matches('/');
+        let mut route = format!("/repos/{path}/contents/{sub}");
+        if let Some(git_ref) = git_ref {
+            route.push_str(&format!("?ref={git_ref}"));
+        }
+        let list = self.get(&host, &route)?;
+        let out = list
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry["name"].as_str()?.to_string();
+                let is_dir = entry["type"].as_str() == Some("dir");
+                Some(crate::TreeEntry { name, is_dir })
+            })
+            .collect();
+        Ok(out)
+    }
+
+    fn file_blob(
+        &self,
+        repo_url: &str,
+        path: &str,
+        git_ref: Option<&str>,
+    ) -> Result<String, ForgeError> {
+        let (host, repo_path) = self.split(repo_url)?;
+        let file = path.trim_start_matches('/');
+        let mut route = format!("/repos/{repo_path}/contents/{file}");
+        if let Some(git_ref) = git_ref {
+            route.push_str(&format!("?ref={git_ref}"));
+        }
+        match self.get_text(&host, &route, "application/vnd.github.raw")? {
+            Some(text) => Ok(crate::cap_lines(&text, crate::FILE_LINE_CAP)),
+            None => Ok(format!("(no file at {file} — not found)\n")),
+        }
+    }
 }
 
 /// Map a GitHub Actions run object to the forge-neutral [`crate::CiRun`].

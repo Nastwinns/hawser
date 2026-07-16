@@ -406,6 +406,53 @@ impl Forge for GitLab {
         }
         Ok(crate::cap_lines(&out, crate::LOG_LINE_CAP))
     }
+
+    fn repo_tree(
+        &self,
+        repo_url: &str,
+        subpath: &str,
+        git_ref: Option<&str>,
+    ) -> Result<Vec<crate::TreeEntry>, ForgeError> {
+        let api = self.project_api(repo_url)?;
+        let sub = subpath.trim_matches('/');
+        let mut url = format!("{api}/repository/tree?per_page=100");
+        if !sub.is_empty() {
+            url.push_str(&format!("&path={}", encode_path(sub)));
+        }
+        if let Some(git_ref) = git_ref {
+            url.push_str(&format!("&ref={git_ref}"));
+        }
+        let list = self.call(Method::GET, &url, None)?;
+        let out = list
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry["name"].as_str()?.to_string();
+                let is_dir = entry["type"].as_str() == Some("tree");
+                Some(crate::TreeEntry { name, is_dir })
+            })
+            .collect();
+        Ok(out)
+    }
+
+    fn file_blob(
+        &self,
+        repo_url: &str,
+        path: &str,
+        git_ref: Option<&str>,
+    ) -> Result<String, ForgeError> {
+        let api = self.project_api(repo_url)?;
+        let file = path.trim_start_matches('/');
+        let mut url = format!("{api}/repository/files/{}/raw", encode_path(file));
+        if let Some(git_ref) = git_ref {
+            url.push_str(&format!("?ref={git_ref}"));
+        }
+        match self.call_text(&url)? {
+            Some(text) => Ok(crate::cap_lines(&text, crate::FILE_LINE_CAP)),
+            None => Ok(format!("(no file at {file} — not found)\n")),
+        }
+    }
 }
 
 /// Map a GitLab pipeline object to the forge-neutral [`crate::CiRun`].

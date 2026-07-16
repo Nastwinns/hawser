@@ -2680,6 +2680,125 @@ impl haw_tui::Controller for CliController {
         let (forge, url) = forge_for_repo(&ws, repo)?;
         forge.ci_logs(&url, run_id).map_err(std::io::Error::other)
     }
+
+    fn repo_tree(
+        &mut self,
+        repo: &str,
+        subpath: &str,
+        remote: bool,
+    ) -> std::io::Result<Vec<haw_tui::FileEntry>> {
+        let ws = self.workspace()?;
+        if remote {
+            let (forge, url) = forge_for_repo(&ws, repo)?;
+            let git_ref = locked_sha(&ws, repo);
+            let entries = forge
+                .repo_tree(&url, subpath, git_ref.as_deref())
+                .map_err(std::io::Error::other)?;
+            Ok(entries
+                .into_iter()
+                .map(|e| haw_tui::FileEntry {
+                    name: e.name,
+                    is_dir: e.is_dir,
+                })
+                .collect())
+        } else {
+            let root = repo_root(&ws, repo)?;
+            let dir = safe_join(&root, subpath)?;
+            let mut out = Vec::new();
+            for entry in std::fs::read_dir(&dir)? {
+                let entry = entry?;
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name == ".git" {
+                    continue;
+                }
+                let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                out.push(haw_tui::FileEntry { name, is_dir });
+            }
+            Ok(out)
+        }
+    }
+
+    fn file_content(&mut self, repo: &str, path: &str, remote: bool) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        if remote {
+            let (forge, url) = forge_for_repo(&ws, repo)?;
+            let git_ref = locked_sha(&ws, repo);
+            return forge
+                .file_blob(&url, path, git_ref.as_deref())
+                .map_err(std::io::Error::other);
+        }
+        let root = repo_root(&ws, repo)?;
+        let file = safe_join(&root, path)?;
+        let meta = std::fs::metadata(&file)?;
+        if meta.len() > FILE_SIZE_CAP {
+            return Ok(format!(
+                "<file too large: {} bytes (cap {FILE_SIZE_CAP})>\n",
+                meta.len()
+            ));
+        }
+        let bytes = std::fs::read(&file)?;
+        Ok(render_file_bytes(&bytes))
+    }
+}
+
+/// Read cap for local file content (~1 MB).
+const FILE_SIZE_CAP: u64 = 1_048_576;
+
+/// Render already-read file bytes for the detail view: a binary NUL-sniff on
+/// the first 8 KB yields a placeholder, else the (line-capped) text.
+fn render_file_bytes(bytes: &[u8]) -> String {
+    let sniff = &bytes[..bytes.len().min(8192)];
+    if sniff.contains(&0) {
+        return format!("<binary file, {} bytes>\n", bytes.len());
+    }
+    let text = String::from_utf8_lossy(bytes);
+    haw_forge::cap_lines(&text, 600)
+}
+
+/// A repo's absolute checkout root, or an error when it isn't in the manifest.
+fn repo_root(ws: &Workspace, repo: &str) -> std::io::Result<PathBuf> {
+    let spec =
+        ws.manifest.repos.get(repo).ok_or_else(|| {
+            std::io::Error::other(format!("repo `{repo}` is not in the manifest"))
+        })?;
+    let root = ws.root.join(spec.checkout_path(repo));
+    if !ShellGit.is_repo(&root) {
+        return Err(std::io::Error::other(format!(
+            "repo `{repo}` is not cloned at {}; press s to sync or R for the forge view",
+            root.display()
+        )));
+    }
+    Ok(root)
+}
+
+/// The repo's locked SHA from haw.lock, if a lock exists and lists it.
+fn locked_sha(ws: &Workspace, repo: &str) -> Option<String> {
+    ws.read_lock().ok().flatten().and_then(|lock| {
+        lock.repos
+            .iter()
+            .find(|r| r.name == repo)
+            .map(|r| r.rev.clone())
+    })
+}
+
+/// Join `subpath` under `root` and refuse any path that escapes it (path
+/// traversal). Canonicalizes both sides so `..`, symlinks, and `.` are all
+/// resolved before the containment check.
+fn safe_join(root: &Path, subpath: &str) -> std::io::Result<PathBuf> {
+    let sub = subpath.trim_matches('/');
+    let candidate = if sub.is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(sub)
+    };
+    let real_root = root.canonicalize()?;
+    let real = candidate.canonicalize()?;
+    if !real.starts_with(&real_root) {
+        return Err(std::io::Error::other(format!(
+            "refusing path outside the repo: {subpath}"
+        )));
+    }
+    Ok(real)
 }
 
 /// Resolve a repo's clone URL and a ready-to-call forge client, honoring the
@@ -2786,9 +2905,38 @@ fn dash(demo: bool) -> Result<()> {
         open_workspace()?;
         Box::new(CliController)
     };
-    if let Some(path) = haw_tui::run(controller)? {
-        println!("{}", path.display());
+    // `haw_tui::run` restores the terminal before returning, so the TTY is
+    // cooked by the time we act on the exit request.
+    match haw_tui::run(controller)? {
+        Some(haw_tui::Exit::Goto(path)) => println!("{}", path.display()),
+        Some(haw_tui::Exit::Shell(path)) => launch_shell(&path)?,
+        None => {}
     }
+    Ok(())
+}
+
+/// Drop the user into an interactive shell rooted at `path`. When stdout is not
+/// a terminal (scripted `cd "$(haw dash)"`), print the path instead so the
+/// cockpit stays scriptable.
+fn launch_shell(path: &Path) -> Result<()> {
+    if !std::io::stdin().is_terminal() {
+        println!("{}", path.display());
+        return Ok(());
+    }
+    #[cfg(windows)]
+    let shell = std::env::var_os("COMSPEC").unwrap_or_else(|| "cmd".into());
+    #[cfg(not(windows))]
+    let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/sh".into());
+    std::process::Command::new(&shell)
+        .current_dir(path)
+        .status()
+        .with_context(|| {
+            format!(
+                "launching {} in {}",
+                shell.to_string_lossy(),
+                path.display()
+            )
+        })?;
     Ok(())
 }
 
@@ -3362,6 +3510,48 @@ diff --git a/drivers/i2c/i2c.h b/drivers/i2c/i2c.h\n\
         ))
     }
 
+    fn repo_tree(
+        &mut self,
+        _repo: &str,
+        subpath: &str,
+        _remote: bool,
+    ) -> std::io::Result<Vec<haw_tui::FileEntry>> {
+        let dir = |name: &str| haw_tui::FileEntry {
+            name: name.to_string(),
+            is_dir: true,
+        };
+        let file = |name: &str| haw_tui::FileEntry {
+            name: name.to_string(),
+            is_dir: false,
+        };
+        Ok(match subpath {
+            "" => vec![
+                dir("drivers"),
+                dir("include"),
+                file("Cargo.toml"),
+                file("README.md"),
+            ],
+            "drivers" => vec![dir("i2c"), file("Kconfig")],
+            "drivers/i2c" => vec![file("dma.c"), file("i2c.h")],
+            "include" => vec![file("kernel.h")],
+            _ => Vec::new(),
+        })
+    }
+
+    fn file_content(&mut self, repo: &str, path: &str, _remote: bool) -> std::io::Result<String> {
+        Ok(format!(
+            "// {repo}:/{path}\n\
+// canned demo content\n\
+\n\
+#include \"i2c.h\"\n\
+\n\
+int i2c_dma_xfer(struct i2c_bus *bus, struct i2c_msg *msg) {{\n\
+    if (!bus->dma) return i2c_pio_xfer(bus, msg);\n\
+    return dma_submit(bus->dma, msg->buf, msg->len);\n\
+}}\n"
+        ))
+    }
+
     fn ci_logs(&mut self, repo: &str, run_id: u64) -> std::io::Result<String> {
         Ok(format!(
             "== build (success) ==\n\
@@ -3414,5 +3604,84 @@ mod demo_controller_tests {
         let mut controller = DemoController;
         assert!(!controller.fleet_prs().expect("prs").is_empty());
         assert!(!controller.fleet_ci().expect("ci").is_empty());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod files_tests {
+    use super::{FILE_SIZE_CAP, render_file_bytes, safe_join};
+    use std::path::PathBuf;
+
+    /// A unique scratch directory under the OS temp dir, created for one test.
+    fn scratch(tag: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "haw-files-{tag}-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn safe_join_walks_within_the_root() {
+        let root = scratch("walk");
+        std::fs::create_dir_all(root.join("src/net")).unwrap();
+        std::fs::write(root.join("src/net/tcp.rs"), b"fn main() {}").unwrap();
+
+        let joined = safe_join(&root, "src/net").unwrap();
+        let real_root = root.canonicalize().unwrap();
+        assert!(joined.starts_with(&real_root));
+        assert!(joined.ends_with("src/net"));
+        // "" resolves to the root itself.
+        assert_eq!(safe_join(&root, "").unwrap(), real_root);
+
+        let entries: Vec<String> = std::fs::read_dir(&joined)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(entries, vec!["tcp.rs".to_string()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn safe_join_rejects_path_traversal() {
+        let root = scratch("traverse");
+        std::fs::create_dir_all(root.join("inside")).unwrap();
+        // A sibling file outside the root, reachable only via `..`.
+        std::fs::write(root.join("secret.txt"), b"top secret").unwrap();
+        let escape = safe_join(&root.join("inside"), "../secret.txt");
+        assert!(escape.is_err(), "traversal must be refused");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn render_file_bytes_sniffs_binary() {
+        let out = render_file_bytes(b"ELF\0\x01\x02binary");
+        assert!(out.starts_with("<binary file, "));
+        assert!(out.contains("bytes>"));
+    }
+
+    #[test]
+    fn render_file_bytes_returns_text_and_caps_lines() {
+        assert_eq!(render_file_bytes(b"hello\nworld"), "hello\nworld");
+        let many = (0..800)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let capped = render_file_bytes(many.as_bytes());
+        assert!(capped.contains("truncated"));
+        assert!(!capped.contains("line 799"));
+    }
+
+    #[test]
+    fn file_size_cap_is_about_one_megabyte() {
+        assert_eq!(FILE_SIZE_CAP, 1_048_576);
     }
 }

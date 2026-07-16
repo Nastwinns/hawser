@@ -158,6 +158,31 @@ impl Forge for FakeForge {
     fn ci_logs(&self, _repo_url: &str, _run_id: u64) -> Result<String, ForgeError> {
         Ok(String::new())
     }
+    fn repo_tree(
+        &self,
+        _repo_url: &str,
+        _subpath: &str,
+        _git_ref: Option<&str>,
+    ) -> Result<Vec<haw_forge::TreeEntry>, ForgeError> {
+        Ok(vec![
+            haw_forge::TreeEntry {
+                name: "src".to_string(),
+                is_dir: true,
+            },
+            haw_forge::TreeEntry {
+                name: "README.md".to_string(),
+                is_dir: false,
+            },
+        ])
+    }
+    fn file_blob(
+        &self,
+        _repo_url: &str,
+        _path: &str,
+        _git_ref: Option<&str>,
+    ) -> Result<String, ForgeError> {
+        Ok(String::new())
+    }
 }
 
 struct FakeFactory {

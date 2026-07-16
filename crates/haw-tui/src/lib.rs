@@ -212,6 +212,23 @@ mod theme {
 
 pub use theme::{THEMES, Theme};
 
+/// Why the cockpit exited with a repo path in hand: the caller either prints
+/// the path (`cd "$(haw dash)"`) or drops the user into a shell there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Exit {
+    /// The user asked to `goto` a repo — print the path.
+    Goto(PathBuf),
+    /// The user asked to drop into a shell in a repo.
+    Shell(PathBuf),
+}
+
+/// One entry in the file browser's current directory listing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileEntry {
+    pub name: String,
+    pub is_dir: bool,
+}
+
 /// One repo of a changeset, with its rendered PR/CI cells.
 #[derive(Debug, Clone)]
 pub struct ChangeRepoRow {
@@ -374,6 +391,10 @@ pub trait Controller: Send {
     fn pr_diff(&mut self, repo: &str, number: u64) -> io::Result<String>;
     /// The CI run/pipeline's job logs as plain text (scrollable detail view).
     fn ci_logs(&mut self, repo: &str, run_id: u64) -> io::Result<String>;
+    /// List `subpath` ("" = root) of `repo`'s tree, on local disk or the forge.
+    fn repo_tree(&mut self, repo: &str, subpath: &str, remote: bool) -> io::Result<Vec<FileEntry>>;
+    /// The text content of `path` in `repo`, from local disk or the forge.
+    fn file_content(&mut self, repo: &str, path: &str, remote: bool) -> io::Result<String>;
 }
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -391,6 +412,7 @@ enum View {
     RepoDetail,
     PrDetail,
     CiDetail,
+    Files,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -412,6 +434,10 @@ enum Job {
     CiDetail(String, u64),
     PrDiff(String, u64),
     CiLogs(String, u64),
+    /// (repo, subpath, remote) — list a directory in the file browser.
+    RepoTree(String, String, bool),
+    /// (repo, path, remote, title) — fetch one file's content into the detail view.
+    FileContent(String, String, bool, String),
     Action(&'static str, ActionKind),
 }
 
@@ -442,6 +468,8 @@ enum Outcome {
     Governance(Box<io::Result<Governance>>),
     /// A shared drill-in detail (repo git / PR / CI); carries its panel title.
     Detail(String, Box<io::Result<String>>),
+    /// A file browser directory listing.
+    Tree(Box<io::Result<Vec<FileEntry>>>),
     Action(&'static str, io::Result<String>),
 }
 
@@ -464,7 +492,16 @@ struct App {
     /// Free-running frame counter; paces the input cursor blink.
     tick: u64,
     help: bool,
-    goto: Option<PathBuf>,
+    /// Set when the user asked to leave the cockpit into a repo (goto/shell).
+    exit: Option<Exit>,
+    /// File browser: the repo whose tree is open, `None` outside `View::Files`.
+    files_repo: Option<String>,
+    /// File browser: the current subpath under the repo root ("" = root).
+    files_subpath: String,
+    /// File browser: whether the tree is the forge view (else local disk).
+    files_remote: bool,
+    /// File browser: the current directory listing; `None` while loading.
+    files_entries: Option<Vec<FileEntry>>,
     /// Set when an action with real side effects (land, request) awaits y/n.
     pending_confirm: Option<Confirm>,
     /// Full multi-repo output from the last `r`/`:run`, shown as a dismissable overlay.
@@ -659,8 +696,23 @@ impl App {
             View::Prs => self.pr_rows().len(),
             View::Ci => self.ci_rows().len(),
             View::Governance => self.gov_rows().len(),
+            View::Files => self.file_rows().len(),
             View::RepoDetail | View::PrDetail | View::CiDetail => 0,
         }
+    }
+
+    /// The file browser's current listing, filtered and sorted dirs-first then
+    /// lexicographically.
+    fn file_rows(&self) -> Vec<&FileEntry> {
+        let mut rows: Vec<&FileEntry> = self
+            .files_entries
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|e| hit(&e.name, &self.filter))
+            .collect();
+        rows.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
+        rows
     }
 
     /// URL under the cursor in the PR/CI views, for `o` (open in browser).
@@ -757,6 +809,11 @@ impl App {
             self.filter.clear();
             self.sort = None;
             self.selected_repos.clear();
+            if view != View::Files {
+                self.files_repo = None;
+                self.files_entries = None;
+                self.files_subpath.clear();
+            }
         }
     }
 
@@ -824,9 +881,9 @@ impl App {
     }
 }
 
-/// Run the cockpit until quit. Returns a path when the user asked to `goto`
-/// a repo, so the caller can print it (`cd "$(haw dash)"`).
-pub fn run(controller: Box<dyn Controller>) -> io::Result<Option<PathBuf>> {
+/// Run the cockpit until quit. Returns an [`Exit`] when the user asked to
+/// leave into a repo — either to `goto` it (print the path) or to open a shell.
+pub fn run(controller: Box<dyn Controller>) -> io::Result<Option<Exit>> {
     let (job_tx, job_rx) = channel::<Job>();
     let (out_tx, out_rx) = channel::<Outcome>();
     spawn_worker(controller, job_rx, out_tx);
@@ -885,6 +942,13 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                 Job::CiLogs(repo, run_id) => Outcome::Detail(
                     format!("logs {repo} #{run_id}"),
                     Box::new(controller.ci_logs(&repo, run_id)),
+                ),
+                Job::RepoTree(repo, subpath, remote) => {
+                    Outcome::Tree(Box::new(controller.repo_tree(&repo, &subpath, remote)))
+                }
+                Job::FileContent(repo, path, remote, title) => Outcome::Detail(
+                    title,
+                    Box::new(controller.file_content(&repo, &path, remote)),
                 ),
                 Job::Action(label, kind) => {
                     let result = match kind {
@@ -1027,6 +1091,51 @@ fn open_ci_logs(app: &mut App, jobs: &Sender<Job>, repo: &str, run_id: u64, name
         "CI logs",
         Job::CiLogs(repo.to_string(), run_id),
     );
+}
+
+/// Open the file browser on `repo` at its root. `remote` picks the forge view
+/// (true when the repo isn't cloned locally).
+fn open_files(app: &mut App, jobs: &Sender<Job>, repo: &str, remote: bool) {
+    app.goto_view(View::Files);
+    app.files_repo = Some(repo.to_string());
+    app.files_subpath = String::new();
+    app.files_remote = remote;
+    reload_files(app, jobs);
+}
+
+/// (Re)fetch the current file-browser directory listing.
+fn reload_files(app: &mut App, jobs: &Sender<Job>) {
+    let Some(repo) = app.files_repo.clone() else {
+        return;
+    };
+    app.files_entries = None;
+    app.cursor.select(Some(0));
+    app.busy = Some("files");
+    let _ = jobs.send(Job::RepoTree(
+        repo,
+        app.files_subpath.clone(),
+        app.files_remote,
+    ));
+}
+
+/// Fetch one file's content into the shared scrollable detail view. The detail
+/// view lives under `View::RepoDetail`, titled `<repo>:/<path>`.
+fn open_file_content(app: &mut App, jobs: &Sender<Job>, name: &str) {
+    let Some(repo) = app.files_repo.clone() else {
+        return;
+    };
+    let path = if app.files_subpath.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}/{}", app.files_subpath, name)
+    };
+    let title = format!("{repo}:/{path}");
+    app.detail_title = title.clone();
+    app.detail_text = None;
+    app.detail_scroll = 0;
+    app.goto_view(View::RepoDetail);
+    app.busy = Some("file");
+    let _ = jobs.send(Job::FileContent(repo, path, app.files_remote, title));
 }
 
 /// Navigate to a fleet-wide network view (`m`/`i`) and (re)fetch its rows.
@@ -1212,7 +1321,7 @@ fn event_loop(
     terminal: &mut ratatui::DefaultTerminal,
     jobs: &Sender<Job>,
     outcomes: &Receiver<Outcome>,
-) -> io::Result<Option<PathBuf>> {
+) -> io::Result<Option<Exit>> {
     let mut app = App {
         view: View::Fleet,
         back: Vec::new(),
@@ -1229,7 +1338,11 @@ fn event_loop(
         spinner: 0,
         tick: 0,
         help: false,
-        goto: None,
+        exit: None,
+        files_repo: None,
+        files_subpath: String::new(),
+        files_remote: false,
+        files_entries: None,
         pending_confirm: None,
         output: None,
         prs: None,
@@ -1339,6 +1452,22 @@ fn event_loop(
                         }
                     }
                 }
+                Outcome::Tree(result) => {
+                    app.busy = None;
+                    match *result {
+                        Ok(entries) => {
+                            let count = entries.len();
+                            app.files_entries = Some(entries);
+                            app.cursor.select(Some(0));
+                            app.clamp_cursor();
+                            app.message = format!("{count} entr(y/ies)");
+                        }
+                        Err(err) => {
+                            app.files_entries = Some(Vec::new());
+                            app.message = format!("files failed: {err}");
+                        }
+                    }
+                }
                 Outcome::Action(label, result) => {
                     app.busy = None;
                     match result {
@@ -1395,7 +1524,7 @@ fn event_loop(
             continue;
         }
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-            return Ok(app.goto);
+            return Ok(app.exit);
         }
         if key.code == KeyCode::F(5)
             || (key.code == KeyCode::Char('r') && key.modifiers.contains(KeyModifiers::CONTROL))
@@ -1523,16 +1652,33 @@ fn event_loop(
 
         let selected = app.cursor.selected().unwrap_or(0);
         match key.code {
-            KeyCode::Char('q') => return Ok(app.goto),
+            KeyCode::Char('q') => return Ok(app.exit),
             KeyCode::Char('?') => app.help = true,
             KeyCode::Char('/') => app.input = InputMode::Filter(app.filter.clone()),
             KeyCode::Char(':') => app.input = InputMode::Command(String::new()),
+            KeyCode::Esc | KeyCode::Char('b') | KeyCode::Backspace if app.view == View::Files => {
+                if !app.filter.is_empty() {
+                    app.filter.clear();
+                } else if let Some((parent, _)) = app.files_subpath.rsplit_once('/') {
+                    app.files_subpath = parent.to_string();
+                    reload_files(&mut app, jobs);
+                } else if !app.files_subpath.is_empty() {
+                    app.files_subpath.clear();
+                    reload_files(&mut app, jobs);
+                } else {
+                    app.go_back();
+                }
+            }
             KeyCode::Esc | KeyCode::Char('b') => {
                 if !app.filter.is_empty() {
                     app.filter.clear();
                 } else {
                     app.go_back();
                 }
+            }
+            KeyCode::Char('R') if app.view == View::Files => {
+                app.files_remote = !app.files_remote;
+                reload_files(&mut app, jobs);
             }
             KeyCode::Down | KeyCode::Char('j') if app.is_detail_view() => {
                 app.detail_scroll = app
@@ -1595,10 +1741,42 @@ fn event_loop(
                 if let Some(repo) = app.cursor_repo()
                     && let Some(path) = app.repo_path(&repo)
                 {
-                    app.goto = Some(path);
-                    return Ok(app.goto);
+                    app.exit = Some(Exit::Goto(path));
+                    return Ok(app.exit);
                 }
                 app.message = "goto: put the cursor on a repo row".to_string();
+            }
+            KeyCode::Char('x')
+                if matches!(app.view, View::Fleet | View::RepoDetail | View::Files) =>
+            {
+                let repo = match app.view {
+                    View::Files | View::RepoDetail => app.files_repo.clone(),
+                    _ => app.cursor_repo(),
+                };
+                match repo.as_deref().and_then(|r| app.repo_path(r)) {
+                    Some(path) if path.exists() => {
+                        app.exit = Some(Exit::Shell(path));
+                        return Ok(app.exit);
+                    }
+                    Some(_) => {
+                        app.message = "not cloned — press s to sync".to_string();
+                    }
+                    None => app.message = "shell: put the cursor on a repo row".to_string(),
+                }
+            }
+            KeyCode::Char('f') if matches!(app.view, View::Fleet | View::Changeset) => {
+                match app.cursor_repo() {
+                    Some(repo) => {
+                        let cloned = app
+                            .repo_path(&repo)
+                            .is_some_and(|p| p.join(".git").exists());
+                        if !cloned {
+                            app.message = "not cloned — showing forge view".to_string();
+                        }
+                        open_files(&mut app, jobs, &repo, !cloned);
+                    }
+                    None => app.message = "files: put the cursor on a repo row".to_string(),
+                }
             }
             KeyCode::Enter => match app.view {
                 View::Stacks => {
@@ -1615,6 +1793,20 @@ fn event_loop(
                 View::Fleet => {
                     if let Some(repo) = app.cursor_repo() {
                         open_repo_detail(&mut app, jobs, &repo);
+                    }
+                }
+                View::Files => {
+                    if let Some(entry) = app.file_rows().get(selected).map(|e| (*e).clone()) {
+                        if entry.is_dir {
+                            if app.files_subpath.is_empty() {
+                                app.files_subpath = entry.name;
+                            } else {
+                                app.files_subpath = format!("{}/{}", app.files_subpath, entry.name);
+                            }
+                            reload_files(&mut app, jobs);
+                        } else {
+                            open_file_content(&mut app, jobs, &entry.name);
+                        }
                     }
                 }
                 View::Prs => {
@@ -1782,6 +1974,15 @@ fn view_name(app: &App, view: View) -> String {
         View::Prs => "pr/mr".to_string(),
         View::Ci => "ci".to_string(),
         View::Governance => "governance".to_string(),
+        View::Files => {
+            let repo = app.files_repo.as_deref().unwrap_or("—");
+            let scope = if app.files_remote { "forge" } else { "local" };
+            if app.files_subpath.is_empty() {
+                format!("files {repo} ({scope})")
+            } else {
+                format!("files {repo}:/{} ({scope})", app.files_subpath)
+            }
+        }
         View::RepoDetail | View::PrDetail | View::CiDetail => app.detail_title.clone(),
     }
 }
@@ -1821,6 +2022,8 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("v", "governance"),
             ("r", "run"),
             ("g", "goto"),
+            ("x", "shell"),
+            ("f", "files"),
             ("t", "tree"),
             ("<>", "sort"),
             (".", "dir"),
@@ -1842,6 +2045,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("L", "land"),
             ("n", "new"),
             ("g", "goto"),
+            ("f", "files"),
             ("PgUp/PgDn", "page"),
             ("b", "back"),
             ("/", "filter"),
@@ -1899,7 +2103,19 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("b", "back"),
             ("q", "quit"),
         ],
-        View::RepoDetail => &[("j/k", "scroll"), ("b", "back"), ("q", "quit")],
+        View::RepoDetail => &[
+            ("j/k", "scroll"),
+            ("x", "shell"),
+            ("b", "back"),
+            ("q", "quit"),
+        ],
+        View::Files => &[
+            ("enter", "open · R remote · b up"),
+            ("x", "shell"),
+            ("/", "filter"),
+            ("b", "back"),
+            ("q", "quit"),
+        ],
     }
 }
 
@@ -1929,6 +2145,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         View::Prs => draw_prs(frame, app, zones[1]),
         View::Ci => draw_ci(frame, app, zones[1]),
         View::Governance => draw_governance(frame, app, zones[1]),
+        View::Files => draw_files(frame, app, zones[1]),
         View::RepoDetail | View::PrDetail | View::CiDetail => draw_detail(frame, app, zones[1]),
     }
     draw_status(frame, app, zones[2]);
@@ -3109,6 +3326,62 @@ fn detail_line(raw: &str) -> Line<'static> {
     Line::styled(raw.to_string(), style)
 }
 
+fn draw_files(frame: &mut Frame, app: &mut App, area: Rect) {
+    let fetched = app.files_entries.is_some();
+    let rows = app.file_rows();
+    let items: Vec<ListItem> = rows
+        .iter()
+        .map(|entry| {
+            let (glyph, color) = if entry.is_dir {
+                ("▸ ", theme::accent())
+            } else {
+                ("  ", theme::text())
+            };
+            let name = if entry.is_dir {
+                format!("{}/", entry.name)
+            } else {
+                entry.name.clone()
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(glyph, Style::default().fg(theme::accent())),
+                Span::styled(name, Style::default().fg(color)),
+            ]))
+        })
+        .collect();
+    let count = items.len();
+    let repo = app.files_repo.as_deref().unwrap_or("—");
+    let scope = if app.files_remote { "forge" } else { "local" };
+    let crumb = if app.files_subpath.is_empty() {
+        format!("{repo}:/")
+    } else {
+        format!("{repo}:/{}/", app.files_subpath)
+    };
+    let list = List::new(items)
+        .block(panel(format!(
+            "files {crumb} ({scope}){}",
+            row_indicator(app, count)
+        )))
+        .highlight_style(cursor_style())
+        .highlight_symbol("▍");
+    let mut state = ListState::default();
+    state.select(app.cursor.selected());
+    frame.render_stateful_widget(list, area, &mut state);
+
+    if count == 0 {
+        draw_empty_hint(
+            frame,
+            area,
+            if fetched {
+                "empty directory"
+            } else if app.busy.is_some() {
+                "loading files…"
+            } else {
+                "no files"
+            },
+        );
+    }
+}
+
 fn draw_detail(frame: &mut Frame, app: &mut App, area: Rect) {
     let title = app.detail_title.clone();
     match &app.detail_text {
@@ -3275,6 +3548,8 @@ fn draw_help(frame: &mut Frame) {
         help_entry("space", "mark/unmark repo · s / r act on the marked set"),
         help_entry("S", "switch stack · p pin · l lock"),
         help_entry("t", "tree · c changesets · r run · g goto"),
+        help_entry("x", "drop into a shell in the repo (exits the cockpit)"),
+        help_entry("f", "browse the repo's files (local disk or forge)"),
         help_entry("< >", "move sort column · . toggles asc/desc"),
         help_entry(
             "/",
@@ -3300,6 +3575,11 @@ fn draw_help(frame: &mut Frame) {
         help_entry("R", "request PR/MRs (cross-linked, asks y/n)"),
         help_entry("L", "land in dependency order (asks y/n)"),
         help_entry("g", "goto the repo under the cursor"),
+        Line::raw(""),
+        help_section("files"),
+        help_entry("enter", "open a dir or view a file (scrollable)"),
+        help_entry("R", "toggle local disk / forge view"),
+        help_entry("b", "up a directory, then back to the fleet"),
         Line::raw(""),
         help_section("collaborative merge (MERGE column)"),
         help_entry("MERGE", "resolved/total slices of an in-progress merge"),
@@ -3374,7 +3654,11 @@ mod tests {
             spinner: 0,
             tick: 0,
             help: false,
-            goto: None,
+            exit: None,
+            files_repo: None,
+            files_subpath: String::new(),
+            files_remote: false,
+            files_entries: None,
             pending_confirm: None,
             output: None,
             prs: None,
@@ -3481,7 +3765,7 @@ mod tests {
         }
     }
 
-    const ALL_VIEWS: [View; 11] = [
+    const ALL_VIEWS: [View; 12] = [
         View::Stacks,
         View::Fleet,
         View::Changesets,
@@ -3493,6 +3777,7 @@ mod tests {
         View::RepoDetail,
         View::PrDetail,
         View::CiDetail,
+        View::Files,
     ];
 
     /// Every key advertised in `key_hints` must be one the event loop actually
@@ -3519,7 +3804,10 @@ mod tests {
             "S" => true,
             "p" => matches!(view, View::Fleet | View::Stacks),
             "n" => matches!(view, View::Changesets | View::Changeset),
-            "R" | "L" => view == View::Changeset,
+            "L" => view == View::Changeset,
+            "R" => matches!(view, View::Changeset | View::Files),
+            "f" => matches!(view, View::Fleet | View::Changeset),
+            "x" => matches!(view, View::Fleet | View::RepoDetail | View::Files),
             "M" | "A" | "C" => matches!(view, View::Prs | View::PrDetail),
             "d" => matches!(view, View::Prs | View::PrDetail),
             "l" => matches!(view, View::Fleet | View::Stacks | View::Ci | View::CiDetail),
@@ -4139,6 +4427,119 @@ mod tests {
         // Wide enough for at least two columns: fewer lines than hints.
         let wide = hint_grid(hints, 120);
         assert!(wide.len() < 4);
+    }
+
+    // ---- file browser -----------------------------------------------------
+
+    fn fe(name: &str, is_dir: bool) -> FileEntry {
+        FileEntry {
+            name: name.to_string(),
+            is_dir,
+        }
+    }
+
+    #[test]
+    fn file_rows_sort_dirs_first_then_lexicographic() {
+        let mut app = fleet_app();
+        app.view = View::Files;
+        app.files_entries = Some(vec![
+            fe("zeta.rs", false),
+            fe("alpha", true),
+            fe("beta.rs", false),
+            fe("gamma", true),
+        ]);
+        let names: Vec<_> = app.file_rows().iter().map(|e| e.name.clone()).collect();
+        assert_eq!(names, vec!["alpha", "gamma", "beta.rs", "zeta.rs"]);
+    }
+
+    #[test]
+    fn open_files_enters_the_view_and_requests_a_tree() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        open_files(&mut app, &tx, "kernel", false);
+        assert_eq!(app.view, View::Files);
+        assert_eq!(app.files_repo.as_deref(), Some("kernel"));
+        assert!(app.files_subpath.is_empty());
+        assert!(!app.files_remote);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Job::RepoTree(repo, sub, false)) if repo == "kernel" && sub.is_empty()
+        ));
+    }
+
+    #[test]
+    fn enter_dir_pushes_subpath_and_reloads() {
+        let mut app = fleet_app();
+        app.view = View::Files;
+        app.files_repo = Some("kernel".to_string());
+        app.files_entries = Some(vec![fe("drivers", true), fe("README.md", false)]);
+        app.cursor.select(Some(0)); // "drivers" sorts first
+        let (tx, rx) = channel();
+        let selected = app.cursor.selected().unwrap();
+        let entry = app.file_rows().get(selected).map(|e| (*e).clone()).unwrap();
+        assert!(entry.is_dir);
+        app.files_subpath = entry.name.clone();
+        reload_files(&mut app, &tx);
+        assert_eq!(app.files_subpath, "drivers");
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Job::RepoTree(_, sub, _)) if sub == "drivers"
+        ));
+    }
+
+    #[test]
+    fn backspace_pops_one_subpath_segment() {
+        let mut app = fleet_app();
+        app.view = View::Files;
+        app.files_repo = Some("kernel".to_string());
+        app.files_subpath = "drivers/i2c".to_string();
+        if let Some((parent, _)) = app.files_subpath.clone().rsplit_once('/') {
+            app.files_subpath = parent.to_string();
+        }
+        assert_eq!(app.files_subpath, "drivers");
+        assert!(app.files_subpath.rsplit_once('/').is_none());
+        app.files_subpath.clear();
+        assert!(app.files_subpath.is_empty());
+    }
+
+    #[test]
+    fn open_file_content_opens_the_shared_detail_titled_with_the_path() {
+        let mut app = fleet_app();
+        app.view = View::Files;
+        app.files_repo = Some("kernel".to_string());
+        app.files_subpath = "drivers/i2c".to_string();
+        let (tx, rx) = channel();
+        open_file_content(&mut app, &tx, "dma.c");
+        assert_eq!(app.view, View::RepoDetail);
+        assert_eq!(app.detail_title, "kernel:/drivers/i2c/dma.c");
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Job::FileContent(repo, path, false, _))
+                if repo == "kernel" && path == "drivers/i2c/dma.c"
+        ));
+    }
+
+    #[test]
+    fn x_in_fleet_sets_shell_exit_when_cloned() {
+        let mut app = fleet_app();
+        app.view = View::Fleet;
+        app.cursor.select(Some(0)); // kernel
+        let repo = app.cursor_repo().unwrap();
+        assert_eq!(repo, "kernel");
+        let path = app.repo_path(&repo).unwrap();
+        app.exit = Some(Exit::Shell(path));
+        assert_eq!(app.exit, Some(Exit::Shell(PathBuf::from("/w/kernel"))));
+    }
+
+    #[test]
+    fn files_view_name_and_hints() {
+        let mut app = fleet_app();
+        app.view = View::Files;
+        app.files_repo = Some("kernel".to_string());
+        app.files_subpath = "src".to_string();
+        assert!(view_name(&app, View::Files).contains("kernel"));
+        assert!(view_name(&app, View::Files).contains("src"));
+        assert!(!key_hints(View::Files).is_empty());
     }
 
     #[test]

@@ -101,6 +101,16 @@ pub struct CiRun {
 /// request count bounded on busy repos.
 pub const CI_RUNS_LIMIT: usize = 15;
 
+/// One entry in a repository directory listing, forge-neutral.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeEntry {
+    pub name: String,
+    pub is_dir: bool,
+}
+
+/// Cap on the number of lines a `file_blob` returns before truncation.
+pub const FILE_LINE_CAP: usize = 600;
+
 /// Errors from a forge implementation.
 #[derive(Debug, thiserror::Error)]
 pub enum ForgeError {
@@ -144,6 +154,23 @@ pub trait Forge {
     /// headers and capped to a readable length (see [`LOG_LINE_CAP`]). Returns a
     /// clear message string (not an error) when logs are unavailable/expired.
     fn ci_logs(&self, repo_url: &str, run_id: u64) -> Result<String, ForgeError>;
+    /// List the entries of `subpath` ("" = repo root) in the repo tree at
+    /// `git_ref` (a branch/tag/sha; the forge default when `None`). Directories
+    /// first is the caller's concern; this returns them forge-order.
+    fn repo_tree(
+        &self,
+        repo_url: &str,
+        subpath: &str,
+        git_ref: Option<&str>,
+    ) -> Result<Vec<TreeEntry>, ForgeError>;
+    /// The raw text of the file at `path` in the repo tree at `git_ref`, capped
+    /// to a readable length (see [`FILE_LINE_CAP`]). No ANSI.
+    fn file_blob(
+        &self,
+        repo_url: &str,
+        path: &str,
+        git_ref: Option<&str>,
+    ) -> Result<String, ForgeError>;
 }
 
 /// Cap on the number of lines a `pr_diff` returns before truncation.
