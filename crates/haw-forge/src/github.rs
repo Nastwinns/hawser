@@ -277,17 +277,12 @@ impl Forge for GitHub {
         let html_url = pr["html_url"].as_str().unwrap_or_default();
 
         let mut out = String::new();
+        let (state_emoji, state_label) = pr_state_badge(state_of(&pr));
         out.push_str(&format!(
-            "#{number} {title} — {}\n",
-            match state_of(&pr) {
-                PrState::Open => "open",
-                PrState::Draft => "draft",
-                PrState::Merged => "merged",
-                PrState::Closed => "closed",
-            }
+            "{state_emoji} #{number} {title} — {state_label}\n"
         ));
         out.push_str(&format!(
-            "head {head_branch} @ {}  ->  base {base_branch}\n",
+            "🌿 head {head_branch} @ {}  ->  base {base_branch}\n",
             &head_sha[..7.min(head_sha.len())]
         ));
         if let Some(mergeable) = pr["mergeable"].as_bool() {
@@ -297,7 +292,7 @@ impl Forge for GitHub {
             ));
         }
 
-        out.push_str("\n-- reviewers --\n");
+        out.push_str("\n👤 -- reviewers --\n");
         let reviews = self.get(&host, &format!("/repos/{path}/pulls/{number}/reviews"))?;
         match reviews.as_array().filter(|list| !list.is_empty()) {
             Some(list) => {
@@ -310,7 +305,7 @@ impl Forge for GitHub {
             None => out.push_str("  (no reviews yet)\n"),
         }
 
-        out.push_str("\n-- checks --\n");
+        out.push_str("\n✅ -- checks --\n");
         if head_sha.is_empty() {
             out.push_str("  (no head sha)\n");
         } else {
@@ -344,7 +339,7 @@ impl Forge for GitHub {
             }
         }
 
-        out.push_str("\n-- body --\n");
+        out.push_str("\n📄 -- body --\n");
         let body = pr["body"].as_str().unwrap_or("");
         if body.trim().is_empty() {
             out.push_str("  (no description)\n");
@@ -371,22 +366,42 @@ impl Forge for GitHub {
         let sha = run["head_sha"].as_str().unwrap_or_default();
         let html_url = run["html_url"].as_str().unwrap_or_default();
 
+        let jobs = self.get(&host, &format!("/repos/{path}/actions/runs/{run_id}/jobs"))?;
+        let job_list = jobs["jobs"].as_array().cloned().unwrap_or_default();
+
         let mut out = String::new();
-        out.push_str(&format!("{name} — {status}/{conclusion}\n"));
+        // Progress summary first: a job completed once its status is "completed".
+        let total = job_list.len();
+        let completed = job_list
+            .iter()
+            .filter(|job| job["status"].as_str() == Some("completed"))
+            .count();
+        let finished = status == "completed";
+        let bar = crate::progress_bar(if finished { total } else { completed }, total);
+        let (phase_emoji, phase) = run_phase(status, conclusion, finished);
+        out.push_str(&format!("progress: {bar}  ·  {phase_emoji} {phase}\n"));
+
         out.push_str(&format!(
-            "branch {branch}  event {event}  @ {}\n",
+            "{} {name} — {status}/{conclusion}\n",
+            ci_emoji(status, conclusion)
+        ));
+        out.push_str(&format!(
+            "🌿 branch {branch}  event {event}  @ {}\n",
             &sha[..7.min(sha.len())]
         ));
 
-        out.push_str("\n-- jobs --\n");
-        let jobs = self.get(&host, &format!("/repos/{path}/actions/runs/{run_id}/jobs"))?;
-        match jobs["jobs"].as_array().filter(|list| !list.is_empty()) {
+        out.push_str("\n🧩 -- jobs --\n");
+        match Some(&job_list).filter(|list| !list.is_empty()) {
             Some(list) => {
                 for job in list {
                     let job_name = job["name"].as_str().unwrap_or("?");
                     let job_status = job["status"].as_str().unwrap_or("");
                     let job_conclusion = job["conclusion"].as_str().unwrap_or("—");
-                    out.push_str(&format!("  {job_name}: {job_status}/{job_conclusion}\n"));
+                    let runner = job_runner(job);
+                    out.push_str(&format!(
+                        "  {} {job_name}: {job_status}/{job_conclusion}{runner}\n",
+                        ci_emoji(job_status, job_conclusion)
+                    ));
                     if let Some(steps) = job["steps"].as_array() {
                         for step in steps.iter().take(30) {
                             let step_name = step["name"].as_str().unwrap_or("?");
@@ -437,7 +452,8 @@ impl Forge for GitHub {
             let job_id = job["id"].as_u64().unwrap_or_default();
             let job_name = job["name"].as_str().unwrap_or("?");
             let conclusion = job["conclusion"].as_str().unwrap_or("—");
-            out.push_str(&format!("== {job_name} ({conclusion}) ==\n"));
+            let runner = job_runner(job);
+            out.push_str(&format!("📜 == {job_name} ({conclusion}){runner} ==\n"));
             match self.get_text(
                 &host,
                 &format!("/repos/{path}/actions/jobs/{job_id}/logs"),
@@ -508,6 +524,62 @@ impl Forge for GitHub {
             Some(text) => Ok(crate::cap_lines(&text, crate::FILE_LINE_CAP)),
             None => Ok(format!("(no file at {file} — not found)\n")),
         }
+    }
+}
+
+/// Emoji + label for a PR state, used in the drill-in detail header.
+fn pr_state_badge(state: PrState) -> (&'static str, &'static str) {
+    match state {
+        PrState::Open => ("🟢", "open"),
+        PrState::Draft => ("📝", "draft"),
+        PrState::Merged => ("🟣", "merged"),
+        PrState::Closed => ("🔴", "closed"),
+    }
+}
+
+/// A leading status emoji for a GitHub `status`/`conclusion` pair, used in CI
+/// detail headers (plain text, so no column-alignment concern).
+fn ci_emoji(status: &str, conclusion: &str) -> &'static str {
+    match (status, conclusion) {
+        ("completed", "success") => "✅",
+        ("completed", "cancelled") => "⏹",
+        ("completed", _) => "❌",
+        ("queued" | "pending" | "waiting" | "requested", _) => "⏳",
+        _ => "🔄",
+    }
+}
+
+/// Overall run phase label + emoji for the progress line.
+fn run_phase(status: &str, conclusion: &str, finished: bool) -> (&'static str, String) {
+    if finished {
+        match conclusion {
+            "success" => ("✅", "passed".to_string()),
+            "cancelled" => ("⏹", "cancelled".to_string()),
+            other => ("❌", other.to_string()),
+        }
+    } else if matches!(status, "queued" | "pending" | "waiting" | "requested") {
+        ("⏳", "queued".to_string())
+    } else {
+        ("🔄", "running".to_string())
+    }
+}
+
+/// ` on <runner>` suffix for a job, using `runner_name` then falling back to
+/// its `labels`. Empty string when neither is present.
+fn job_runner(job: &Value) -> String {
+    if let Some(name) = job["runner_name"].as_str().filter(|s| !s.is_empty()) {
+        return format!("  on {name}");
+    }
+    let labels: Vec<&str> = job["labels"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|l| l.as_str())
+        .collect();
+    if labels.is_empty() {
+        String::new()
+    } else {
+        format!("  on {}", labels.join(","))
     }
 }
 

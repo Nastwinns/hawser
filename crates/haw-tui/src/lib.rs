@@ -2863,6 +2863,42 @@ fn pr_span(text: &str) -> Span<'static> {
     Span::styled(text.to_string(), Style::default().fg(color))
 }
 
+/// Status emoji for a CI status word (`passed`/`failed`/`running`/…), used in
+/// the CI list STATUS cell and detail headers. 2 cells wide — callers that
+/// place it in a tight table column must budget for it.
+fn ci_status_emoji(status: &str) -> &'static str {
+    let lower = status.to_lowercase();
+    if lower.contains("pass") || status.contains('✓') {
+        "✅"
+    } else if lower.contains("fail") || status.contains('✗') {
+        "❌"
+    } else if lower.contains("cancel") {
+        "⏹"
+    } else if lower.contains("queue") || lower.contains("pend") {
+        "⏳"
+    } else if lower.contains("run") {
+        "🔄"
+    } else {
+        "•"
+    }
+}
+
+/// Status emoji for a PR/MR state word, used in the PR list STATE cell and
+/// detail headers.
+fn pr_state_emoji(state: &str) -> &'static str {
+    if state.contains("open") {
+        "🟢"
+    } else if state.contains("merged") {
+        "🟣"
+    } else if state.contains("draft") {
+        "📝"
+    } else if state.contains("closed") {
+        "🔴"
+    } else {
+        "•"
+    }
+}
+
 fn ci_span(text: &str) -> Span<'static> {
     let lower = text.to_lowercase();
     let color = if text.contains('✓') || lower.contains("pass") {
@@ -2994,15 +3030,19 @@ fn draw_prs(frame: &mut Frame, app: &mut App, area: Rect) {
                     pr.title.clone(),
                     Style::default().fg(theme::text()),
                 )),
-                Cell::from(pr_span(&pr.state)),
+                Cell::from(pr_span(&format!(
+                    "{} {}",
+                    pr_state_emoji(&pr.state),
+                    pr.state
+                ))),
                 Cell::from(if pr.approved {
                     Span::styled("✓", Style::default().fg(theme::green()))
                 } else {
                     Span::styled("·", Style::default().fg(theme::dim()))
                 }),
                 Cell::from(ci_span(match pr.ci {
-                    Some(true) => "✓ passed",
-                    Some(false) => "✗ failed",
+                    Some(true) => "✅ passed",
+                    Some(false) => "❌ failed",
                     None => "—",
                 })),
             ])
@@ -3017,9 +3057,11 @@ fn draw_prs(frame: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Length(7),
             Constraint::Length(6),
             Constraint::Min(24),
-            Constraint::Length(7),
-            Constraint::Length(5),
+            // STATE: 2-cell emoji + " merged" (7) → widen from 7.
             Constraint::Length(9),
+            Constraint::Length(5),
+            // CI: 2-cell emoji + " passed" → widen from 9.
+            Constraint::Length(10),
         ],
     )
     .header(sorted_header_row(
@@ -3079,7 +3121,11 @@ fn draw_ci(frame: &mut Frame, app: &mut App, area: Rect) {
                     run.event.clone(),
                     Style::default().fg(theme::teal()),
                 )),
-                Cell::from(ci_span(&run.status)),
+                Cell::from(ci_span(&format!(
+                    "{} {}",
+                    ci_status_emoji(&run.status),
+                    run.status
+                ))),
             ])
         })
         .collect();
@@ -3092,7 +3138,8 @@ fn draw_ci(frame: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(18),
             Constraint::Min(14),
             Constraint::Length(13),
-            Constraint::Length(11),
+            // STATUS holds a 2-cell emoji + " cancelled" (9) — widen to fit.
+            Constraint::Length(13),
         ],
     )
     .header(sorted_header_row(

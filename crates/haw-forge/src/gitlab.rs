@@ -225,24 +225,19 @@ impl Forge for GitLab {
         let web_url = mr["web_url"].as_str().unwrap_or_default();
 
         let mut out = String::new();
+        let (state_emoji, state_label) = pr_state_badge(state_of(&mr));
         out.push_str(&format!(
-            "#{number} {title} — {}\n",
-            match state_of(&mr) {
-                PrState::Open => "open",
-                PrState::Draft => "draft",
-                PrState::Merged => "merged",
-                PrState::Closed => "closed",
-            }
+            "{state_emoji} #{number} {title} — {state_label}\n"
         ));
         out.push_str(&format!(
-            "head {source_branch} @ {}  ->  base {target_branch}\n",
+            "🌿 head {source_branch} @ {}  ->  base {target_branch}\n",
             &head_sha[..7.min(head_sha.len())]
         ));
         if let Some(status) = mr["merge_status"].as_str() {
             out.push_str(&format!("mergeable: {status}\n"));
         }
 
-        out.push_str("\n-- reviewers --\n");
+        out.push_str("\n👤 -- reviewers --\n");
         match self.call(
             Method::GET,
             &format!("{api}/merge_requests/{number}/approvals"),
@@ -264,7 +259,7 @@ impl Forge for GitLab {
             Err(err) => out.push_str(&format!("  (approvals unavailable: {err})\n")),
         }
 
-        out.push_str("\n-- checks --\n");
+        out.push_str("\n✅ -- checks --\n");
         match mr["head_pipeline"]["id"].as_u64() {
             Some(pipeline_id) => {
                 let pipeline_status = mr["head_pipeline"]["status"].as_str().unwrap_or("—");
@@ -289,7 +284,7 @@ impl Forge for GitLab {
             None => out.push_str("  (no pipeline for this MR)\n"),
         }
 
-        out.push_str("\n-- body --\n");
+        out.push_str("\n📄 -- body --\n");
         let body = mr["description"].as_str().unwrap_or("");
         if body.trim().is_empty() {
             out.push_str("  (no description)\n");
@@ -314,22 +309,41 @@ impl Forge for GitLab {
         let sha = pipeline["sha"].as_str().unwrap_or_default();
         let web_url = pipeline["web_url"].as_str().unwrap_or_default();
 
+        let jobs = self.call(Method::GET, &format!("{api}/pipelines/{run_id}/jobs"), None)?;
+        let job_list = jobs.as_array().cloned().unwrap_or_default();
+
         let mut out = String::new();
-        out.push_str(&format!("pipeline #{run_id} — {status}\n"));
+        let total = job_list.len();
+        let completed = job_list
+            .iter()
+            .filter(|job| is_finished(job["status"].as_str().unwrap_or("")))
+            .count();
+        let finished = is_finished(status);
+        let bar = crate::progress_bar(if finished { total } else { completed }, total);
+        let (phase_emoji, phase) = pipeline_phase(status);
+        out.push_str(&format!("progress: {bar}  ·  {phase_emoji} {phase}\n"));
+
         out.push_str(&format!(
-            "branch {branch}  source {source}  @ {}\n",
+            "{} pipeline #{run_id} — {status}\n",
+            ci_emoji(status)
+        ));
+        out.push_str(&format!(
+            "🌿 branch {branch}  source {source}  @ {}\n",
             &sha[..7.min(sha.len())]
         ));
 
-        out.push_str("\n-- jobs --\n");
-        let jobs = self.call(Method::GET, &format!("{api}/pipelines/{run_id}/jobs"), None)?;
-        match jobs.as_array().filter(|list| !list.is_empty()) {
+        out.push_str("\n🧩 -- jobs --\n");
+        match Some(&job_list).filter(|list| !list.is_empty()) {
             Some(list) => {
                 for job in list {
                     let job_name = job["name"].as_str().unwrap_or("?");
                     let stage = job["stage"].as_str().unwrap_or("—");
                     let job_status = job["status"].as_str().unwrap_or("—");
-                    out.push_str(&format!("  [{stage}] {job_name}: {job_status}\n"));
+                    let runner = job_runner(job);
+                    out.push_str(&format!(
+                        "  {} [{stage}] {job_name}: {job_status}{runner}\n",
+                        ci_emoji(job_status)
+                    ));
                 }
             }
             None => out.push_str("  (no jobs reported)\n"),
@@ -386,7 +400,8 @@ impl Forge for GitLab {
             let job_id = job["id"].as_u64().unwrap_or_default();
             let job_name = job["name"].as_str().unwrap_or("?");
             let status = job["status"].as_str().unwrap_or("—");
-            out.push_str(&format!("== {job_name} ({status}) ==\n"));
+            let runner = job_runner(job);
+            out.push_str(&format!("📜 == {job_name} ({status}){runner} ==\n"));
             match self.call_text(&format!("{api}/jobs/{job_id}/trace")) {
                 Ok(Some(trace)) if !trace.trim().is_empty() => {
                     let lines: Vec<&str> = trace.lines().collect();
@@ -452,6 +467,71 @@ impl Forge for GitLab {
             Some(text) => Ok(crate::cap_lines(&text, crate::FILE_LINE_CAP)),
             None => Ok(format!("(no file at {file} — not found)\n")),
         }
+    }
+}
+
+/// Whether a GitLab job/pipeline `status` is a terminal (finished) state.
+fn is_finished(status: &str) -> bool {
+    matches!(
+        status,
+        "success" | "failed" | "canceled" | "skipped" | "manual"
+    )
+}
+
+/// A leading status emoji for a GitLab job/pipeline `status`.
+fn ci_emoji(status: &str) -> &'static str {
+    match status {
+        "success" => "✅",
+        "failed" => "❌",
+        "canceled" | "skipped" => "⏹",
+        "created" | "pending" | "waiting_for_resource" | "preparing" | "scheduled" => "⏳",
+        _ => "🔄",
+    }
+}
+
+/// Overall pipeline phase label + emoji for the progress line.
+fn pipeline_phase(status: &str) -> (&'static str, String) {
+    match status {
+        "success" => ("✅", "passed".to_string()),
+        "failed" => ("❌", "failed".to_string()),
+        "canceled" | "skipped" => ("⏹", status.to_string()),
+        "created" | "pending" | "waiting_for_resource" | "preparing" | "scheduled" => {
+            ("⏳", "queued".to_string())
+        }
+        _ => ("🔄", "running".to_string()),
+    }
+}
+
+/// Emoji + label for a PR/MR state, used in the drill-in detail header.
+fn pr_state_badge(state: PrState) -> (&'static str, &'static str) {
+    match state {
+        PrState::Open => ("🟢", "open"),
+        PrState::Draft => ("📝", "draft"),
+        PrState::Merged => ("🟣", "merged"),
+        PrState::Closed => ("🔴", "closed"),
+    }
+}
+
+/// ` on <runner>` suffix for a GitLab job, using the runner's description/name
+/// then falling back to its `tag_list`. Empty when neither is present.
+fn job_runner(job: &Value) -> String {
+    let runner = job["runner"]["description"]
+        .as_str()
+        .or_else(|| job["runner"]["name"].as_str())
+        .filter(|s| !s.is_empty());
+    if let Some(name) = runner {
+        return format!("  on {name}");
+    }
+    let tags: Vec<&str> = job["tag_list"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|t| t.as_str())
+        .collect();
+    if tags.is_empty() {
+        String::new()
+    } else {
+        format!("  on {}", tags.join(","))
     }
 }
 

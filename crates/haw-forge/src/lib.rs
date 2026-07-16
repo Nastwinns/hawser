@@ -191,6 +191,26 @@ pub fn cap_lines(text: &str, cap: usize) -> String {
     out
 }
 
+/// Width (in cells) of the ASCII progress bar rendered in CI run details.
+pub const PROGRESS_BAR_WIDTH: usize = 15;
+
+/// Render an ASCII progress bar like `[██████████░░░░░]` filled to
+/// `completed`/`total`. Kept ASCII (block chars only) so it works in every
+/// terminal and in the plain-text detail view. A zero `total` renders empty.
+pub fn progress_bar(completed: usize, total: usize) -> String {
+    let completed = completed.min(total);
+    let filled = (completed * PROGRESS_BAR_WIDTH)
+        .checked_div(total)
+        .unwrap_or(0);
+    let percent = (completed * 100).checked_div(total).unwrap_or(0);
+    let empty = PROGRESS_BAR_WIDTH - filled;
+    format!(
+        "[{}{}] {completed}/{total} jobs ({percent}%)",
+        "█".repeat(filled),
+        "░".repeat(empty),
+    )
+}
+
 /// Turns a repo URL into a ready-to-call [`Forge`] client.
 /// The production impl is [`Tokens`]; tests substitute fakes.
 /// `hint` is the manifest's explicit `forge = "github" | "gitlab"` key on the
@@ -334,7 +354,32 @@ pub fn detect(url: &str) -> ForgeKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{ForgeKind, RepoCoords, cap_lines, detect, repo_coords};
+    use super::{
+        ForgeKind, PROGRESS_BAR_WIDTH, RepoCoords, cap_lines, detect, progress_bar, repo_coords,
+    };
+
+    #[test]
+    fn progress_bar_reports_ratio_percent_and_fill() {
+        let bar = progress_bar(6, 9);
+        assert!(bar.contains("6/9"), "{bar}");
+        assert!(bar.contains("66%"), "{bar}");
+        // 6/9 * 15 = 10 filled cells, 5 empty.
+        assert_eq!(bar.matches('█').count(), 10, "{bar}");
+        assert_eq!(bar.matches('░').count(), 5, "{bar}");
+    }
+
+    #[test]
+    fn progress_bar_full_and_empty_edges() {
+        let full = progress_bar(9, 9);
+        assert!(full.contains("9/9"));
+        assert!(full.contains("100%"));
+        assert_eq!(full.matches('█').count(), PROGRESS_BAR_WIDTH);
+        // A zero total never divides by zero and renders an empty bar.
+        let none = progress_bar(0, 0);
+        assert!(none.contains("0/0"));
+        assert!(none.contains("0%"));
+        assert_eq!(none.matches('░').count(), PROGRESS_BAR_WIDTH);
+    }
 
     #[test]
     fn cap_lines_is_noop_within_cap() {

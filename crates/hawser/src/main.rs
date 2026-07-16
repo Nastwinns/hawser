@@ -3464,22 +3464,35 @@ url: https://github.com/acme/{repo}/pull/{number}\n"
     }
 
     fn ci_detail(&mut self, repo: &str, run_id: u64) -> std::io::Result<String> {
+        // A realistic in-flight pipeline: 6 of 9 jobs done (66%), still running,
+        // with runner names on each job — mirrors the live forge report shape.
+        let bar = haw_forge::progress_bar(6, 9);
         Ok(format!(
-            "build-and-test — completed/success\n\
-branch release/6.1  event push  @ a1c9f4e\n\
+            "progress: {bar}  ·  🔄 running\n\
+🔄 firmware-ci — in_progress/—\n\
+🌿 branch feature/i2c-dma  event pull_request  @ 7fe1b02\n\
 \n\
--- jobs --\n\
-  build: completed/success\n\
+🧩 -- jobs --\n\
+  ✅ build: completed/success  on ubuntu-22.04-16core\n\
     - checkout: success\n\
     - configure: success\n\
     - compile: success\n\
-  test: completed/success\n\
+  ✅ unit-tests: completed/success  on ubuntu-22.04-16core\n\
     - checkout: success\n\
     - unit: success\n\
-    - integration: success\n\
-  lint: completed/success\n\
+  ✅ clippy: completed/success  on ubuntu-22.04-4core\n\
     - clippy: success\n\
+  ✅ fmt: completed/success  on ubuntu-22.04-4core\n\
     - fmt: success\n\
+  ✅ docs: completed/success  on ubuntu-22.04-4core\n\
+    - build-docs: success\n\
+  ✅ package: completed/success  on ubuntu-22.04-4core\n\
+    - bundle: success\n\
+  🔄 integration: in_progress/—  on self-hosted-hw-rig-3\n\
+    - checkout: success\n\
+    - flash-board: in_progress\n\
+  ⏳ hardware-smoke: queued/—  on self-hosted-hw-rig-3\n\
+  ⏳ deploy: queued/—  on ubuntu-22.04-4core\n\
 \n\
 url: https://github.com/acme/{repo}/actions/runs/{run_id}\n"
         ))
