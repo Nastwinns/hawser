@@ -49,14 +49,8 @@ The landing page renders the live cockpit TUI in WebAssembly — no install requ
 - **[CLI design & TUI keymap](CLI-DESIGN.md)** — the full verb lexicon and the
   cockpit keymap.
 - **[Extending](EXTENDING.md)** — plugins, hooks, auth, and CI/CD integration.
-- **[Plugin ecosystem](PLUGIN-ECOSYSTEM.md)** — the plugin study and roadmap.
-- **[Production-fit validation](PROD-VALIDATION.md)** — how haw is validated for
-  real-world use.
-- **[Qualification kit](QUALIFICATION-KIT.md)** — the tool-qualification skeleton
-  for regulated environments.
+- **[Plugins](PLUGINS.md)** — writing and submitting `haw-<name>` plugins.
 - **[Compliance](COMPLIANCE.md)** — tool qualification, SBOM/CRA, signing, GDPR.
-- **[Commercialization](COMMERCIALIZATION.md)** — editions, licensing, pricing, GTM.
-- **[Launch playbook](LAUNCH.md)** — timing, assets, copy.
 
 ## Links
 

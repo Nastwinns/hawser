@@ -1,6 +1,6 @@
 //! Optional mergetopus-style collaborative merge (Phase 6).
 //!
-//! A big, conflict-heavy merge is hard to review as one lump. Keelson slices it
+//! A big, conflict-heavy merge is hard to review as one lump. hawser slices it
 //! into disjoint units by top-level path, so the conflicts can be resolved (and
 //! reviewed) piece by piece, then sealed into a single clean merge commit.
 //!

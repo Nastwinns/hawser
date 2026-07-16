@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Release and packaging automation for Keelson"
+description = "Release and packaging automation for hawser"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,6 +1,6 @@
-# Keelson — Extensions, Plugins, Auth & CI/CD
+# hawser — Extensions, Plugins, Auth & CI/CD
 
-How Keelson stays open at the edges: it **orchestrates** git, forges, and build tools — it
+How hawser stays open at the edges: it **orchestrates** git, forges, and build tools — it
 never reimplements them. Everything task-specific (build systems, forges, custom steps)
 plugs in from outside through stable, boring interfaces. Pairs with
 [ARCHITECTURE.md](ARCHITECTURE.md) (internals) and [COMPLIANCE.md](COMPLIANCE.md) (evidence).

@@ -218,9 +218,10 @@ build/test checklist and PR etiquette, then open a PR that adds your plugin to t
 community list — one line: name, one-sentence description, and a link. We keep core
 small on purpose; the ecosystem lives in plugins.
 
-## Where the ecosystem is heading
+## Lifecycle phases
 
-A validated design for lifecycle **phases** (`--haw-phase`), explicit `[plugins]`
-registration, an optional `haw-plugin` SDK, and first-party bundled plugins
-(SBOM, provenance) lives in
-[PLUGIN-ECOSYSTEM.md](PLUGIN-ECOSYSTEM.md) — with the roadmap and effort estimate.
+Plugins can subscribe to lifecycle phases in the manifest's `[plugins]` table and
+are invoked out-of-process with `--haw-phase <name>` (e.g. an SBOM plugin on
+`post-build`). The optional `haw-plugin` SDK crate gives Rust authors the
+`Context`/`Report` ergonomics while still compiling to a standalone `haw-<name>`
+binary.

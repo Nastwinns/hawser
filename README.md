@@ -8,7 +8,7 @@
 **Reproducible multi-repo stacks + cross-repo PR/MR orchestration. One binary, one TUI. In Rust.**
 
 [![crates.io](https://img.shields.io/crates/v/hawser)](https://crates.io/crates/hawser)
-[![CI](https://img.shields.io/badge/CI-Linux%20%7C%20macOS%20%7C%20Windows-brightgreen?logo=github)](.github/workflows/ci.yml)
+[![CI](https://github.com/Nastwinns/hawser/actions/workflows/ci.yml/badge.svg)](https://github.com/Nastwinns/hawser/actions/workflows/ci.yml)
 [![rust](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![unsafe](https://img.shields.io/badge/unsafe-forbidden-success.svg)](Cargo.toml)
@@ -103,8 +103,8 @@ curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.0/haw-0.1.0
 **Prebuilt archives (signed).** Every platform — x86_64/aarch64 Linux (glibc), x86_64
 musl (static), x86_64/aarch64 macOS, x86_64 Windows — ships on the
 [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest) with a `.sha256`
-and a **cosign signature** (`.sig`/`.pem`). The release is **reproducible and signed**;
-verify offline before installing on locked-down hosts.
+and a **cosign signature** (`.sig`/`.pem`) — verify offline before installing on
+locked-down hosts.
 
 **Docker:**
 
@@ -125,7 +125,7 @@ Full channel matrix, signature verification, and the air-gap workflow:
 ## Quick start
 
 ```bash
-haw init haw.toml     # bootstrap a workspace from a manifest
+haw init examples/quickstart/haw.toml   # bootstrap from a ready-made example
 haw sync              # clone every repo, write haw.lock
 haw                   # open the TUI cockpit
 ```
@@ -316,7 +316,7 @@ Git's merge engine, replace a forge, or replace domain toolchains.
 ## Development
 
 ```bash
-cargo test --workspace                                # 79 tests, all green
+cargo test --workspace                                # all green (unit + integration)
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -351,9 +351,7 @@ Published at **[nastwinns.github.io/hawser/docs](https://nastwinns.github.io/haw
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
 | [docs/PLUGINS.md](docs/PLUGINS.md) | Writing subcommand plugins — `haw <name>` runs `haw-<name>` from PATH |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Tool qualification, SBOM/CRA, crypto/signing, GDPR |
-| [docs/COMMERCIALIZATION.md](docs/COMMERCIALIZATION.md) | Editions, licensing, LTS, pricing, GTM |
-| [docs/LAUNCH.md](docs/LAUNCH.md) | Launch playbook |
-| [AGENTS.md](AGENTS.md) | Output rules for AI coding agents in this repo |
+| [docs/INSTALL.md](docs/INSTALL.md) | Full install matrix + signature verification |
 
 ## License
 

@@ -1,6 +1,6 @@
 [package]
 name = "haw-core"
-description = "Keelson domain logic: manifest, lock, resolver, workspace, changesets"
+description = "hawser domain logic: manifest, lock, resolver, workspace, changesets"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

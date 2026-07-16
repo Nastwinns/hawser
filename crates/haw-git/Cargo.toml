@@ -1,6 +1,6 @@
 [package]
 name = "haw-git"
-description = "Keelson git operations: shell-out plumbing today, gitoxide reads later"
+description = "hawser git operations: shell-out plumbing today, gitoxide reads later"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

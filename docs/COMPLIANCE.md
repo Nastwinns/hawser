@@ -1,21 +1,21 @@
-# Keelson — Compliance, Certification & Security Specification
+# hawser — Compliance, Certification & Security Specification
 
 Target market: safety- and security-critical programs (avionics, space, defense, rail,
 automotive, industrial, medical). These buyers cannot adopt an SCM tool unless it produces
 **certification evidence**, is itself **qualifiable**, has an auditable **security posture**,
-and is **data-protection clean**. This document specifies what Keelson must provide, per
+and is **data-protection clean**. This document specifies what hawser must provide, per
 domain, and maps each requirement to a technical feature and a delivery phase.
 
 Terminology: "the tool" = the `haw` binary + `haw-core`. "The applicant" = the customer's
-safety/security team who owns the certification argument. Keelson supplies **evidence and a
+safety/security team who owns the certification argument. hawser supplies **evidence and a
 qualification kit**; the applicant owns the final determination in their plan (PSAC, safety
 plan, SEooC assumptions).
 
 ---
 
-## 1. Where Keelson sits in the lifecycle
+## 1. Where hawser sits in the lifecycle
 
-Keelson is a **Software Configuration Management (SCM) + composition** tool. It decides
+hawser is a **Software Configuration Management (SCM) + composition** tool. It decides
 *which revision of which repository enters a build* and records that decision immutably. It
 does **not** compile, generate, or verify airborne/embedded code. That scoping is the single
 most important sentence for qualification: it bounds the tool's failure modes to
@@ -25,15 +25,15 @@ Consequences of that scope:
 - The tool's output (`haw.lock` + materialized tree) is **verifiable independently** by the
   downstream build + review, which lowers required qualification rigor.
 - The evidence it produces (baseline, SBOM, provenance) is consumed by the customer's SCM,
-  safety, and security processes — Keelson is an *evidence producer*, not an authority.
+  safety, and security processes — hawser is an *evidence producer*, not an authority.
 
 ---
 
 ## 2. Tool qualification
 
-Keelson is **qualification-relevant** in every safety standard because a config/composition
+hawser is **qualification-relevant** in every safety standard because a config/composition
 tool can select the wrong source into a safety build. The classification and rigor differ by
-standard; the *artifacts* Keelson must supply are largely shared (§2.6).
+standard; the *artifacts* hawser must supply are largely shared (§2.6).
 
 ### 2.1 DO-178C / DO-330 (airborne) & DO-278A (ground/ATM)
 - Tool qualification governed by **DO-330**. Criterion is set by whether the tool can insert
@@ -42,24 +42,24 @@ standard; the *artifacts* Keelson must supply are largely shared (§2.6).
     **Criterion 3** → typically **TQL-5** (lowest rigor).
   - If the lockfile/tree is trusted without independent re-verification → **Criterion 1** →
     **TQL-4** (or higher at DAL A/B).
-- Keelson's recommendation to applicants: keep the downstream build+review as the verifying
+- hawser's recommendation to applicants: keep the downstream build+review as the verifying
   activity so the tool stays Criterion 3 / TQL-5. Document this in the PSAC.
-- Deliverables Keelson supplies: **Tool Operational Requirements (TOR)**, **Tool
+- Deliverables hawser supplies: **Tool Operational Requirements (TOR)**, **Tool
   Qualification Plan (TQP)**, tool requirements + test cases + results with traceability,
   **Tool Accomplishment Summary (TAS)** template, and a **known-limitations / errata** list.
 
 ### 2.2 ISO 26262-8:2018 §11 (automotive) + ASPICE
 - Determine **Tool Confidence Level** TCL1–3 from Tool Impact (TI) × Tool error Detection
-  (TD). Keelson is TI2 (a malfunction can violate a safety requirement) with achievable
+  (TD). hawser is TI2 (a malfunction can violate a safety requirement) with achievable
   TD1/TD2 if the customer verifies the build → typically **TCL1–TCL2**.
-- Qualification methods Keelson supports: **1a** increased confidence from use (usage
+- Qualification methods hawser supports: **1a** increased confidence from use (usage
   metrics, field-history template), **1b** evaluation of the tool development process (our
   SDLC evidence, §7), **1c** validation of the tool (our test suite + results).
 - ASPICE mapping: **SUP.8 Configuration Management** and **SUP.10 Change Request Management**
   (see §3). Provide the mapping table as a sales/audit artifact.
 
 ### 2.3 IEC 61508-3 (industrial functional safety)
-- Offline support tool classification **T2/T3**. Keelson contributes to what is built →
+- Offline support tool classification **T2/T3**. hawser contributes to what is built →
   treat as **T3** unless the customer's build independently re-derives the source set.
 - Supply: tool validation evidence, version + configuration record, known-defects list.
 
@@ -90,7 +90,7 @@ standard; the *artifacts* Keelson must supply are largely shared (§2.6).
 
 ## 3. Reproducibility & SCM evidence
 
-The commercial and certification wedge. Keelson turns "trust our process" into "here is the
+The commercial and certification wedge. hawser turns "trust our process" into "here is the
 signed, reproducible baseline".
 
 - **`haw.lock` = the configuration baseline.** Every repo pinned to an exact object id.
@@ -120,14 +120,14 @@ Regulatory tailwind — increasingly mandatory, not optional.
 - **SBOM export** in both dominant formats: **CycloneDX** and **SPDX 2.3 (ISO/IEC 5962)**,
   SPDX 3.0 when stable. Include NTIA minimum elements (supplier, component, version, unique
   id, dependency relationship, author, timestamp).
-- Keelson emits an SBOM **of the composed product** (repos + their pinned ids) *and* ships
+- hawser emits an SBOM **of the composed product** (repos + their pinned ids) *and* ships
   an SBOM **of `haw` itself** (its Rust dependency tree) per release.
 - **EU Cyber Resilience Act (Regulation (EU) 2024/2847).** In force since Dec 2024; core
   obligations apply ~Dec 2027, vulnerability/incident reporting ~Sept 2026. Requires
   manufacturers of products-with-digital-elements to maintain an SBOM and handle
-  vulnerabilities. Keelson's lock→SBOM path is a direct compliance enabler for customers,
-  and Keelson itself must be CRA-conformant as a product we sell.
-- **US EO 14028 / NIST SSDF (SP 800-218)** and **SLSA v1.0 provenance.** Keelson emits
+  vulnerabilities. hawser's lock→SBOM path is a direct compliance enabler for customers,
+  and hawser itself must be CRA-conformant as a product we sell.
+- **US EO 14028 / NIST SSDF (SP 800-218)** and **SLSA v1.0 provenance.** hawser emits
   build/composition **provenance attestations** (in-toto style) so the composed tree carries
   verifiable "what went in, from where, at which id".
 
@@ -173,8 +173,8 @@ crypto, be FIPS-swappable, be secret-hygienic.
   workspace state. Source them from the OS keychain, `git credential` helpers, or a secrets
   manager (Vault) via env/helper. **Redact** any credential-shaped string in logs and errors.
 
-### 5.7 Export control (Keelson as a crypto-bearing product)
-- Keelson uses/links cryptography → likely **ECCN 5D002** under the US EAR. Path:
+### 5.7 Export control (hawser as a crypto-bearing product)
+- hawser uses/links cryptography → likely **ECCN 5D002** under the US EAR. Path:
   self-classify as mass-market (740.17 / mass-market note) and, for the open-source core,
   file the **published-encryption-source notification** to BIS/NSA (§742.15(b)). Publish the
   ECCN and classification so customers can clear import/use in their jurisdiction.
@@ -185,14 +185,14 @@ crypto, be FIPS-swappable, be secret-hygienic.
 
 ## 6. Data protection (GDPR & equivalents)
 
-Keelson processes personal data incidentally: **git author/committer name + email, forge
+hawser processes personal data incidentally: **git author/committer name + email, forge
 usernames, PR/MR reviewer identities, CI actor, review timestamps**. All are personal data
 under GDPR (and CCPA, LGPD, UK-GDPR).
 
 Design stance — this is a *selling point*, not just a constraint:
 
 - **Local-first, zero-egress by default.** For local operation, data never leaves the
-  operator's machine/network → the **customer is the controller** and Keelson's vendor is
+  operator's machine/network → the **customer is the controller** and hawser's vendor is
   **not a processor** (nothing is transmitted to us). This is the cleanest possible posture
   for classified/regulated networks.
 - **No telemetry by default.** Any future telemetry is strictly opt-in, anonymized, EU-
@@ -203,11 +203,11 @@ Design stance — this is a *selling point*, not just a constraint:
   inside the customer boundary. For any optional hosted component (license server, mirror),
   offer an **EU region** and a signed **Data Processing Agreement (DPA)**.
 - **Records of processing (Art. 30) & DPIA support.** Provide a data-flow description and a
-  DPIA-input template documenting exactly which personal-data fields Keelson reads and where
+  DPIA-input template documenting exactly which personal-data fields hawser reads and where
   they go (answer: nowhere, for local use).
-- **Right to erasure vs immutable history.** Keelson creates **no new personal-data store**;
+- **Right to erasure vs immutable history.** hawser creates **no new personal-data store**;
   it reads git/forge metadata that already exists. Erasure requests are handled at the git
-  history / forge layer by the customer — Keelson documents this boundary rather than
+  history / forge layer by the customer — hawser documents this boundary rather than
   pretending to satisfy erasure over immutable commit objects.
 - Ship a **privacy notice** and a `security.txt` / `.well-known/security.txt` contact.
 
@@ -273,4 +273,4 @@ What must be *built* to make the above real. Phases refer to `ARCHITECTURE.md §
 | Cryptographic inventory doc                    | Crypto-agility / FIPS / CC audits        | doc   |
 | Qualification Kit per LTS                       | DO-330 / ISO 26262 / IEC 61508 / EN 50128| commercial |
 
-See `COMMERCIALIZATION.md` for how these are packaged, licensed, and supported.
+Contact the maintainers for how these are packaged, licensed, and supported.

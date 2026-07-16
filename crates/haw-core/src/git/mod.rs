@@ -62,7 +62,7 @@ pub fn mirror_dir(cache_root: &Path, url: &str) -> PathBuf {
     cache_root.join(format!("{stem}-{hash:016x}.git"))
 }
 
-/// Every git operation Keelson needs, behind one trait.
+/// Every git operation hawser needs, behind one trait.
 pub trait GitBackend: Sync {
     /// Resolve a rev (branch, tag, or SHA) to a commit SHA without cloning.
     fn resolve_rev(&self, url: &str, rev: &str) -> Result<ResolvedRev, GitError>;

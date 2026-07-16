@@ -1,6 +1,6 @@
 [package]
 name = "haw-tui"
-description = "Keelson ratatui fleet dashboard (thin over haw-core)"
+description = "hawser ratatui fleet dashboard (thin over haw-core)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
