@@ -109,14 +109,10 @@ jobs:
     runs-on: ubuntu-latest
     # A packaging failure must not block the core release.
     continue-on-error: true
-    env:
-      TARGET: x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -125,52 +121,24 @@ jobs:
       - name: Install cargo-deb and cargo-generate-rpm
         run: cargo install cargo-deb cargo-generate-rpm --locked
 
-      - name: Resolve version
-        id: v
-        shell: bash
-        run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Build release binary (native gnu -> target/release/haw)
+        run: cargo build --release -p hawser
 
-      - name: Build release binary (gnu)
-        run: cargo build --release -p hawser --target "$TARGET"
-
-      - name: Build .deb (cargo-deb infers metadata from Cargo.toml)
+      - name: Build .deb (reads [package.metadata.deb])
         shell: bash
         run: |
           set -euo pipefail
-          # --no-build reuses the binary compiled above; pass fields cargo-deb
-          # cannot infer from the (crate-metadata-free) Cargo.toml via CLI flags.
-          cargo deb -p hawser --no-build --target "$TARGET" \
-            --deb-version "${{ steps.v.outputs.version }}" \
-            --section utils
+          cargo deb -p hawser --no-build
           mkdir -p pkg
-          cp target/"$TARGET"/debian/*.deb pkg/
+          cp target/debian/*.deb pkg/
 
-      - name: Build .rpm (assets injected via --metadata-overwrite, no crate edit)
+      - name: Build .rpm (reads [package.metadata.generate-rpm])
         shell: bash
         run: |
           set -euo pipefail
-          # cargo-generate-rpm requires a [package.metadata.generate-rpm]
-          # `assets` table, which the (crate-metadata-free) Cargo.toml lacks.
-          # Since we cannot edit crates/, supply it at build time via an
-          # overlay TOML merged over the crate metadata with --metadata-overwrite.
-          cat > rpm-meta.toml <<EOF
-          [package.metadata.generate-rpm]
-          summary = "haw: multi-repo product composition and cross-repo MR orchestration"
-          assets = [
-            { source = "target/${TARGET}/release/haw", dest = "/usr/bin/haw", mode = "0755" },
-          ]
-          EOF
-          cargo generate-rpm \
-            --package crates/hawser \
-            --target "$TARGET" \
-            --metadata-overwrite rpm-meta.toml \
-            --payload-compress none
+          cargo generate-rpm -p crates/hawser
           mkdir -p pkg
-          cp target/"$TARGET"/generate-rpm/*.rpm pkg/ 2>/dev/null || \
-            cp target/generate-rpm/*.rpm pkg/
+          cp target/generate-rpm/*.rpm pkg/
 
       - name: Checksums for packages
         shell: bash

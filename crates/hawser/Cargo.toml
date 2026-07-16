@@ -11,6 +11,17 @@ repository.workspace = true
 name = "haw"
 path = "src/main.rs"
 
+[package.metadata.deb]
+maintainer = "Jean Balin <pros.balin@gmail.com>"
+section = "utils"
+priority = "optional"
+assets = [["target/release/haw", "usr/bin/", "755"]]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/haw", dest = "/usr/bin/haw", mode = "755" },
+]
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
