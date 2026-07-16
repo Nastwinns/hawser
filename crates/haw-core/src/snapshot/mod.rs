@@ -164,7 +164,7 @@ pub fn restore(
             .branch
             .clone()
             .unwrap_or_else(|| format!("haw/snap-{}", &entry.sha[..8.min(entry.sha.len())]));
-        backend.checkout(&path, &entry.sha, &branch)?;
+        backend.checkout(&path, &entry.sha, &branch, None)?;
     }
     Ok(snapshot)
 }

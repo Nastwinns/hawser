@@ -138,7 +138,7 @@ mod pin_tests {
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
 
-    use haw_core::git::{GitBackend, GitError, ResolvedRev, RevKind};
+    use haw_core::git::{CloneOpts, GitBackend, GitError, ResolvedRev, RevKind};
     use haw_core::workspace::Workspace;
 
     struct FakeGit {
@@ -156,12 +156,7 @@ mod pin_tests {
                 },
             })
         }
-        fn clone_repo(
-            &self,
-            _url: &str,
-            _dest: &Path,
-            _reference: Option<&Path>,
-        ) -> Result<(), GitError> {
+        fn clone_repo(&self, _url: &str, _dest: &Path, _opts: &CloneOpts) -> Result<(), GitError> {
             Ok(())
         }
         fn ensure_mirror(&self, _url: &str, _mirror: &Path) -> Result<(), GitError> {
@@ -170,7 +165,13 @@ mod pin_tests {
         fn fetch(&self, _repo: &Path) -> Result<(), GitError> {
             Ok(())
         }
-        fn checkout(&self, _repo: &Path, _sha: &str, _branch: &str) -> Result<(), GitError> {
+        fn checkout(
+            &self,
+            _repo: &Path,
+            _sha: &str,
+            _branch: &str,
+            _shallow_depth: Option<u32>,
+        ) -> Result<(), GitError> {
             Ok(())
         }
         fn create_branch(&self, _repo: &Path, _name: &str) -> Result<(), GitError> {

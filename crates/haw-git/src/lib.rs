@@ -9,7 +9,7 @@ pub mod parallel;
 use std::path::Path;
 use std::process::Command;
 
-use haw_core::git::{GitBackend, GitError, ResolvedRev, RevKind};
+use haw_core::git::{CloneOpts, GitBackend, GitError, ResolvedRev, RevKind};
 
 /// The default backend: runs `git` from PATH, prompts disabled.
 #[derive(Debug, Clone, Copy, Default)]
@@ -43,6 +43,89 @@ fn run(args: &[&str], cwd: Option<&Path>) -> Result<String, GitError> {
 
 fn is_full_sha(rev: &str) -> bool {
     rev.len() == 40 && rev.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Build the `git clone` argv (everything after `git`) for `opts`.
+///
+/// `--reference` (shared mirror), `--filter=<spec>` (partial clone), and
+/// `--depth <N>` (shallow clone) are independent and compose. Extracted so the
+/// argument order is unit-testable without spawning git.
+fn clone_argv(url: &str, dest: &Path, opts: &CloneOpts) -> Vec<std::ffi::OsString> {
+    use std::ffi::OsString;
+    let mut argv: Vec<OsString> = vec!["clone".into()];
+    if let Some(mirror) = &opts.reference {
+        argv.push("--reference".into());
+        argv.push(mirror.into());
+    }
+    // Partial clone: keeps all commits (any locked SHA stays reachable), fetch
+    // blobs/trees lazily. Safe for pinned revs.
+    if let Some(filter) = &opts.filter {
+        argv.push(format!("--filter={filter}").into());
+    }
+    // Shallow clone: truncate history to N commits. Smaller, but an old locked
+    // SHA may fall outside it — recovered at checkout time.
+    if let Some(depth) = opts.depth {
+        argv.push("--depth".into());
+        argv.push(depth.to_string().into());
+    }
+    argv.push(url.into());
+    argv.push(dest.into());
+    argv
+}
+
+/// True when `sha` names a commit object already in `repo`.
+fn sha_present(repo: &Path, sha: &str) -> bool {
+    run(
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{sha}^{{commit}}"),
+        ],
+        Some(repo),
+    )
+    .is_ok()
+}
+
+/// Make `sha` reachable in a shallow `repo`, deepening progressively.
+///
+/// Reproducibility recovery for `--depth` clones. The locked SHA can lie
+/// outside the truncated history; without this the checkout would fail or,
+/// worse, land on the wrong commit. Steps, cheapest first:
+/// 1. If the SHA is already present, do nothing.
+/// 2. `git fetch --depth <N> origin <sha>` — a targeted deepen (works when the
+///    server honors want-sha uploads; most do).
+/// 3. `git fetch --unshallow` — last resort, converts to a full history.
+///
+/// Emits a clear message whenever a deepen/unshallow was needed so the cost of
+/// a shallow clone against an old pin is visible, never silent.
+fn ensure_sha_present(repo: &Path, sha: &str, depth: Option<u32>) -> Result<(), GitError> {
+    if sha_present(repo, sha) {
+        return Ok(());
+    }
+    // Targeted deepen: ask the server for exactly this commit.
+    let depth_arg = depth.unwrap_or(1).to_string();
+    let targeted = run(&["fetch", "--depth", &depth_arg, "origin", sha], Some(repo));
+    if targeted.is_ok() && sha_present(repo, sha) {
+        eprintln!(
+            "note: deepened shallow clone to reach locked SHA {}",
+            &sha[..12.min(sha.len())]
+        );
+        return Ok(());
+    }
+    // Last resort: unshallow to a full history.
+    run(&["fetch", "--unshallow"], Some(repo))?;
+    if sha_present(repo, sha) {
+        eprintln!(
+            "note: unshallowed clone to reach locked SHA {}",
+            &sha[..12.min(sha.len())]
+        );
+        return Ok(());
+    }
+    Err(GitError::Command {
+        context: format!("locate {sha} after deepen/unshallow"),
+        stderr: "locked SHA not reachable even after unshallowing the clone".to_string(),
+    })
 }
 
 impl GitBackend for ShellGit {
@@ -90,16 +173,13 @@ impl GitBackend for ShellGit {
         })
     }
 
-    fn clone_repo(&self, url: &str, dest: &Path, reference: Option<&Path>) -> Result<(), GitError> {
+    fn clone_repo(&self, url: &str, dest: &Path, opts: &CloneOpts) -> Result<(), GitError> {
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
         }
         let mut cmd = git_command(None);
-        cmd.arg("clone");
-        if let Some(mirror) = reference {
-            cmd.arg("--reference").arg(mirror);
-        }
-        let output = cmd.arg(url).arg(dest).output()?;
+        cmd.args(clone_argv(url, dest, opts));
+        let output = cmd.output()?;
         if !output.status.success() {
             return Err(GitError::Command {
                 context: format!("git clone {url}"),
@@ -140,7 +220,19 @@ impl GitBackend for ShellGit {
         Ok(())
     }
 
-    fn checkout(&self, repo: &Path, sha: &str, branch: &str) -> Result<(), GitError> {
+    fn checkout(
+        &self,
+        repo: &Path,
+        sha: &str,
+        branch: &str,
+        shallow_depth: Option<u32>,
+    ) -> Result<(), GitError> {
+        // Shallow clones may not contain an old locked SHA. Ensure it is
+        // present before we try to branch onto it, deepening or unshallowing
+        // as needed (and telling the user when we had to).
+        if shallow_depth.is_some() {
+            ensure_sha_present(repo, sha, shallow_depth)?;
+        }
         let branch_ref = format!("refs/heads/{branch}");
         let exists = run(
             &["rev-parse", "--verify", "--quiet", &branch_ref],
@@ -211,5 +303,80 @@ impl GitBackend for ShellGit {
 
     fn is_repo(&self, repo: &Path) -> bool {
         repo.join(".git").exists()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn argv_strings(url: &str, opts: &CloneOpts) -> Vec<String> {
+        clone_argv(url, Path::new("/tmp/dest"), opts)
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn plain_clone_has_no_mode_flags() {
+        let argv = argv_strings("https://x/y.git", &CloneOpts::none());
+        assert_eq!(argv, vec!["clone", "https://x/y.git", "/tmp/dest"]);
+    }
+
+    #[test]
+    fn filter_reaches_git_argv() {
+        let opts = CloneOpts {
+            filter: Some("blob:none".to_string()),
+            ..CloneOpts::none()
+        };
+        let argv = argv_strings("u", &opts);
+        assert!(
+            argv.contains(&"--filter=blob:none".to_string()),
+            "argv = {argv:?}"
+        );
+        assert!(!argv.iter().any(|a| a == "--depth"));
+    }
+
+    #[test]
+    fn depth_reaches_git_argv() {
+        let opts = CloneOpts {
+            depth: Some(1),
+            ..CloneOpts::none()
+        };
+        let argv = argv_strings("u", &opts);
+        let i = argv.iter().position(|a| a == "--depth").expect("--depth");
+        assert_eq!(argv[i + 1], "1");
+    }
+
+    #[test]
+    fn reference_still_present_alongside_filter() {
+        // Shared mode composes with partial clone.
+        let opts = CloneOpts {
+            reference: Some(PathBuf::from("/cache/mirror.git")),
+            filter: Some("blob:none".to_string()),
+            depth: None,
+        };
+        let argv = argv_strings("u", &opts);
+        let i = argv
+            .iter()
+            .position(|a| a == "--reference")
+            .expect("--reference");
+        assert_eq!(argv[i + 1], "/cache/mirror.git");
+        assert!(argv.contains(&"--filter=blob:none".to_string()));
+    }
+
+    #[test]
+    fn all_three_levers_compose() {
+        let opts = CloneOpts {
+            reference: Some(PathBuf::from("/m.git")),
+            filter: Some("tree:0".to_string()),
+            depth: Some(2),
+        };
+        let argv = argv_strings("u", &opts);
+        assert!(argv.contains(&"--reference".to_string()));
+        assert!(argv.contains(&"--filter=tree:0".to_string()));
+        assert!(argv.contains(&"--depth".to_string()));
     }
 }

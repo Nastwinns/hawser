@@ -70,6 +70,39 @@ fn round_trips_through_toml() {
 }
 
 #[test]
+fn parses_and_round_trips_defaults() {
+    let text = r#"
+[defaults]
+filter = "blob:none"
+depth = 1
+
+[repo.a]
+url = "https://example.com/a.git"
+rev = "main"
+"#;
+    let manifest: Manifest = text.parse().unwrap();
+    assert_eq!(manifest.defaults.filter.as_deref(), Some("blob:none"));
+    assert_eq!(manifest.defaults.depth, Some(1));
+
+    // Round-trips: the [defaults] section survives serialization.
+    let serialized = toml::to_string(&manifest).unwrap();
+    assert!(serialized.contains("[defaults]"), "{serialized}");
+    let reparsed: Manifest = serialized.parse().unwrap();
+    assert_eq!(manifest, reparsed);
+}
+
+#[test]
+fn defaults_absent_is_empty_and_omitted() {
+    let manifest: Manifest = EXAMPLE.parse().unwrap();
+    assert!(manifest.defaults.is_empty());
+    let serialized = toml::to_string(&manifest).unwrap();
+    assert!(
+        !serialized.contains("[defaults]"),
+        "empty defaults must not be serialized"
+    );
+}
+
+#[test]
 fn rejects_unknown_remote() {
     let err = r#"
 [repo.a]

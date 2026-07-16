@@ -8,7 +8,9 @@ use clap::{Parser, Subcommand};
 use haw_core::git::GitBackend;
 use haw_core::manifest::{ManifestLoader, TomlLoader, edit, import};
 use haw_core::plugin::{self, Dispatch, ProcessRunner, RepoContext};
-use haw_core::workspace::{MANIFEST_FILE, RepoStatus, SyncOutcome, Workspace, sync_repo};
+use haw_core::workspace::{
+    CloneTuning, MANIFEST_FILE, RepoStatus, SyncOutcome, Workspace, sync_repo,
+};
 use haw_core::{audit, change, hooks, resolver, snapshot};
 use haw_forge::{PrState, Tokens, orchestrate};
 use haw_git::ShellGit;
@@ -125,6 +127,8 @@ Examples:
   $ haw sync --stack gateway          sync one specific stack
   $ haw sync --locked                 CI gate: fail unless haw.lock already exists
   $ haw sync --shared                 clone via a local mirror cache (git alternates)
+  $ haw sync --filter blob:none       partial clone: keep all commits, lazy blobs (scales to 1000s of repos)
+  $ haw sync --depth 1                shallow clone: truncated history (smaller, may deepen for old pins)
   $ haw sync --group firmware -j 4    only `firmware`-grouped repos, 4 parallel jobs")]
     Sync {
         /// CI contract: fail unless haw.lock exists (no rev resolution).
@@ -141,6 +145,18 @@ Examples:
         /// Share objects with a local mirror cache (git alternates, no symlinks).
         #[arg(long)]
         shared: bool,
+        /// Partial clone: `git clone --filter=<spec>` (e.g. blob:none, tree:0).
+        /// Keeps ALL commits so any locked SHA stays reachable; blobs fetch
+        /// lazily. The reproducibility-safe lever for pinned revs. Overrides
+        /// `[defaults] filter` in haw.toml.
+        #[arg(long, value_name = "SPEC")]
+        filter: Option<String>,
+        /// Shallow clone: `git clone --depth <N>`. Faster/smaller, but the
+        /// locked SHA may not be in the truncated history — haw will deepen to
+        /// reach an old locked SHA; --filter=blob:none is safer for pinned
+        /// revs. Overrides `[defaults] depth` in haw.toml.
+        #[arg(long, value_name = "N")]
+        depth: Option<u32>,
         #[arg(long, short = 'j')]
         jobs: Option<usize>,
     },
@@ -210,9 +226,21 @@ Examples:
     #[command(after_help = "\
 Examples:
   $ haw switch sensor-node       record `sensor-node` as current, then sync it
-  $ haw switch gateway -j 8       ...with 8 parallel sync jobs")]
+  $ haw switch gateway -j 8       ...with 8 parallel sync jobs
+  $ haw switch gateway --filter blob:none   partial-clone the stack (keeps all commits)
+  $ haw switch gateway --depth 1            shallow-clone the stack (may deepen for old pins)")]
     Switch {
         stack: String,
+        /// Partial clone: `git clone --filter=<spec>` (e.g. blob:none, tree:0).
+        /// Keeps ALL commits so any locked SHA stays reachable; blobs fetch
+        /// lazily. Overrides `[defaults] filter` in haw.toml.
+        #[arg(long, value_name = "SPEC")]
+        filter: Option<String>,
+        /// Shallow clone: `git clone --depth <N>`. Smaller, but may need to
+        /// deepen to reach an old locked SHA; --filter=blob:none is safer for
+        /// pinned revs. Overrides `[defaults] depth` in haw.toml.
+        #[arg(long, value_name = "N")]
+        depth: Option<u32>,
         #[arg(long, short = 'j')]
         jobs: Option<usize>,
     },
@@ -682,8 +710,19 @@ fn run() -> Result<ExitCode> {
             overlay,
             groups,
             shared,
+            filter,
+            depth,
             jobs,
-        } => sync(stack.as_deref(), &overlay, &groups, shared, locked, jobs)?,
+        } => sync(
+            stack.as_deref(),
+            &overlay,
+            &groups,
+            shared,
+            locked,
+            filter,
+            depth,
+            jobs,
+        )?,
         Command::Lock { overlay } => lock(&overlay)?,
         Command::Pin => pin()?,
         Command::Unpin { overlay } => unpin(&overlay)?,
@@ -710,7 +749,12 @@ fn run() -> Result<ExitCode> {
             format,
             verify,
         } => return status(&groups, &format, verify),
-        Command::Switch { stack, jobs } => switch(&stack, jobs)?,
+        Command::Switch {
+            stack,
+            filter,
+            depth,
+            jobs,
+        } => switch(&stack, filter, depth, jobs)?,
         Command::Tree {
             stack,
             overlay,
@@ -815,6 +859,16 @@ fn default_jobs(flag: Option<usize>) -> usize {
     })
 }
 
+/// Resolve clone tuning as CLI-flag-over-manifest-`[defaults]`. A present CLI
+/// flag wins; otherwise the manifest default (if any) applies. `filter` and
+/// `depth` resolve independently.
+fn resolve_tuning(ws: &Workspace, filter: Option<String>, depth: Option<u32>) -> CloneTuning {
+    CloneTuning {
+        filter: filter.or_else(|| ws.manifest.defaults.filter.clone()),
+        depth: depth.or(ws.manifest.defaults.depth),
+    }
+}
+
 fn record(ws: &Workspace, op: &str, repo: Option<&str>, before: Option<&str>, after: Option<&str>) {
     if let Err(err) = audit::record(ws, op, repo, before, after) {
         eprintln!("warning: audit log not written: {err}");
@@ -849,12 +903,15 @@ fn init(source: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sync(
     stack: Option<&str>,
     overlays: &[String],
     groups: &[String],
     shared: bool,
     locked: bool,
+    filter: Option<String>,
+    depth: Option<u32>,
     jobs: Option<usize>,
 ) -> Result<()> {
     let ws = open_workspace()?;
@@ -871,7 +928,16 @@ fn sync(
     } else {
         None
     };
-    let plan = ws.plan_sync(&stack, overlays, groups, cache_root.as_deref(), &backend)?;
+    // CLI flag overrides the manifest `[defaults]`; fall back to the manifest.
+    let tuning = resolve_tuning(&ws, filter, depth);
+    let plan = ws.plan_sync(
+        &stack,
+        overlays,
+        groups,
+        cache_root.as_deref(),
+        &tuning,
+        &backend,
+    )?;
     if plan.wrote_lock {
         println!("wrote haw.lock ({} repos pinned)", plan.tasks.len());
         record(&ws, "lock.write", None, None, None);
@@ -1191,14 +1257,19 @@ fn status(groups: &[String], format: &str, verify: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn switch(stack: &str, jobs: Option<usize>) -> Result<()> {
+fn switch(
+    stack: &str,
+    filter: Option<String>,
+    depth: Option<u32>,
+    jobs: Option<usize>,
+) -> Result<()> {
     let ws = open_workspace()?;
     let stack = ws.pick_stack(Some(stack))?;
     ws.set_current_stack(&stack)?;
     record(&ws, "switch", None, None, Some(&stack));
     hooks::fire(&ws, hooks::Hook::PostSwitch, &json!({"stack": stack}))?;
     println!("switched to stack `{stack}`");
-    sync(Some(&stack), &[], &[], false, false, jobs)
+    sync(Some(&stack), &[], &[], false, false, filter, depth, jobs)
 }
 
 fn tree(path: &Path, stack: Option<&str>, overlays: &[String], format: &str) -> Result<()> {
@@ -2231,7 +2302,7 @@ impl CliController {
         let ws = self.workspace()?;
         let backend = ShellGit;
         let plan = ws
-            .plan_sync(stack, &[], &[], None, &backend)
+            .plan_sync(stack, &[], &[], None, &CloneTuning::default(), &backend)
             .map_err(std::io::Error::other)?;
         let tasks: Vec<_> = plan
             .tasks
@@ -2465,7 +2536,7 @@ impl haw_tui::Controller for CliController {
         let stack = ws.pick_stack(None).map_err(std::io::Error::other)?;
         let backend = ShellGit;
         let plan = ws
-            .plan_sync(&stack, &[], &[], None, &backend)
+            .plan_sync(&stack, &[], &[], None, &CloneTuning::default(), &backend)
             .map_err(std::io::Error::other)?;
         let tasks: Vec<_> = plan
             .tasks
@@ -3801,6 +3872,63 @@ int i2c_dma_xfer(struct i2c_bus *bus, struct i2c_msg *msg) {{\n\
 [00:00:19] FAILED: i2c_dma_roundtrip — expected 8 bytes, got 0\n\
 [00:00:19] error: 1 test failed (run #{run_id})\n"
         ))
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tuning_tests {
+    use super::*;
+
+    fn ws_with(manifest: &str) -> Workspace {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(MANIFEST_FILE);
+        std::fs::write(&path, manifest).unwrap();
+        let ws = Workspace::open_manifest(&path).unwrap();
+        // Keep the tempdir alive for the workspace's lifetime by leaking it;
+        // fine for a unit test.
+        std::mem::forget(dir);
+        ws
+    }
+
+    const WITH_DEFAULTS: &str = r#"
+[defaults]
+filter = "blob:none"
+depth = 3
+
+[repo.a]
+url = "https://example.com/a.git"
+rev = "main"
+"#;
+
+    #[test]
+    fn manifest_defaults_apply_when_no_flag() {
+        let ws = ws_with(WITH_DEFAULTS);
+        let t = resolve_tuning(&ws, None, None);
+        assert_eq!(t.filter.as_deref(), Some("blob:none"));
+        assert_eq!(t.depth, Some(3));
+    }
+
+    #[test]
+    fn cli_flags_override_manifest_defaults() {
+        let ws = ws_with(WITH_DEFAULTS);
+        let t = resolve_tuning(&ws, Some("tree:0".to_string()), Some(1));
+        assert_eq!(t.filter.as_deref(), Some("tree:0"));
+        assert_eq!(t.depth, Some(1));
+    }
+
+    #[test]
+    fn no_manifest_defaults_no_flags_is_empty() {
+        let ws = ws_with(
+            r#"
+[repo.a]
+url = "https://example.com/a.git"
+rev = "main"
+"#,
+        );
+        let t = resolve_tuning(&ws, None, None);
+        assert!(t.filter.is_none());
+        assert!(t.depth.is_none());
     }
 }
 

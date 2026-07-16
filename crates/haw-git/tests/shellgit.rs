@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use haw_core::git::{GitBackend, GitError, RevKind};
+use haw_core::git::{CloneOpts, GitBackend, GitError, RevKind};
 use haw_git::ShellGit;
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -69,10 +69,12 @@ fn clone_checkout_and_introspect() {
     let dest = tmp.path().join("clones").join("repo");
 
     assert!(!ShellGit.is_repo(&dest));
-    ShellGit.clone_repo(&url, &dest, None).unwrap();
+    ShellGit
+        .clone_repo(&url, &dest, &CloneOpts::none())
+        .unwrap();
     assert!(ShellGit.is_repo(&dest));
 
-    ShellGit.checkout(&dest, &head, "main").unwrap();
+    ShellGit.checkout(&dest, &head, "main", None).unwrap();
     assert_eq!(ShellGit.head_sha(&dest).unwrap(), head);
     assert_eq!(
         ShellGit.current_branch(&dest).unwrap().as_deref(),
@@ -80,7 +82,7 @@ fn clone_checkout_and_introspect() {
     );
     assert!(!ShellGit.is_dirty(&dest).unwrap());
 
-    ShellGit.checkout(&dest, &head, "haw/v1").unwrap();
+    ShellGit.checkout(&dest, &head, "haw/v1", None).unwrap();
     assert_eq!(
         ShellGit.current_branch(&dest).unwrap().as_deref(),
         Some("haw/v1"),
@@ -99,8 +101,10 @@ fn refuses_to_discard_local_commits() {
     let old = git(&src, &["rev-parse", "main"]);
     let dest = tmp.path().join("repo");
 
-    ShellGit.clone_repo(&url, &dest, None).unwrap();
-    ShellGit.checkout(&dest, &old, "main").unwrap();
+    ShellGit
+        .clone_repo(&url, &dest, &CloneOpts::none())
+        .unwrap();
+    ShellGit.checkout(&dest, &old, "main", None).unwrap();
 
     git(&dest, &["config", "user.email", "test@hawser.dev"]);
     git(&dest, &["config", "user.name", "hawser Test"]);
@@ -108,7 +112,7 @@ fn refuses_to_discard_local_commits() {
     git(&dest, &["add", "."]);
     git(&dest, &["commit", "-m", "local only"]);
 
-    let err = ShellGit.checkout(&dest, &old, "main").unwrap_err();
+    let err = ShellGit.checkout(&dest, &old, "main", None).unwrap_err();
     assert!(matches!(err, GitError::LocalCommits { count: 1, .. }));
 }
 
@@ -124,7 +128,13 @@ fn shared_clone_references_the_mirror() {
     assert!(mirror.join("HEAD").exists(), "mirror is a bare repo");
     ShellGit.ensure_mirror(&url, &mirror).unwrap();
 
-    ShellGit.clone_repo(&url, &dest, Some(&mirror)).unwrap();
+    ShellGit
+        .clone_repo(
+            &url,
+            &dest,
+            &CloneOpts::none().with_reference(Some(mirror.clone())),
+        )
+        .unwrap();
     let alternates = dest
         .join(".git")
         .join("objects")
@@ -136,6 +146,87 @@ fn shared_clone_references_the_mirror() {
     );
 }
 
+/// A source repo with `n` commits on `main`; returns each commit SHA (oldest
+/// first). Used to test that clone modes can still reach an *old* locked SHA.
+fn make_multi_commit_repo(root: &Path, n: usize) -> (PathBuf, Vec<String>) {
+    let src = root.join("source");
+    std::fs::create_dir_all(&src).unwrap();
+    git(&src, &["init", "-b", "main"]);
+    git(&src, &["config", "user.email", "test@hawser.dev"]);
+    git(&src, &["config", "user.name", "hawser Test"]);
+    // Allow fetching an arbitrary SHA from this local "server".
+    git(&src, &["config", "uploadpack.allowAnySHA1InWant", "true"]);
+    let mut shas = Vec::with_capacity(n);
+    for i in 0..n {
+        std::fs::write(src.join("README.md"), format!("commit {i}\n")).unwrap();
+        git(&src, &["add", "."]);
+        git(&src, &["commit", "-m", &format!("commit {i}")]);
+        shas.push(git(&src, &["rev-parse", "HEAD"]));
+    }
+    (src, shas)
+}
+
+#[test]
+fn partial_clone_reaches_any_locked_sha() {
+    // --filter=blob:none keeps ALL commits, so even the oldest locked SHA is
+    // present after clone — the reproducibility-safe lever.
+    let tmp = tempfile::tempdir().unwrap();
+    let (src, shas) = make_multi_commit_repo(tmp.path(), 5);
+    let url = src.to_string_lossy().into_owned();
+    let dest = tmp.path().join("repo");
+    let oldest = shas.first().unwrap().clone();
+
+    let opts = CloneOpts {
+        filter: Some("blob:none".to_string()),
+        ..CloneOpts::none()
+    };
+    ShellGit.clone_repo(&url, &dest, &opts).unwrap();
+
+    // Full history is present despite the partial (blobless) clone.
+    let count: usize = git(&dest, &["rev-list", "--count", "HEAD"])
+        .parse()
+        .unwrap();
+    assert_eq!(count, 5, "partial clone keeps all commits");
+
+    // The oldest locked SHA is reachable and checks out (filter => depth None).
+    ShellGit.checkout(&dest, &oldest, "haw/pin", None).unwrap();
+    assert_eq!(ShellGit.head_sha(&dest).unwrap(), oldest);
+}
+
+#[test]
+fn shallow_clone_deepens_to_reach_old_locked_sha() {
+    // --depth 1 truncates history; an old locked SHA is initially missing and
+    // must be recovered before checkout (never left off the locked SHA).
+    let tmp = tempfile::tempdir().unwrap();
+    let (src, shas) = make_multi_commit_repo(tmp.path(), 5);
+    // A `file://` URL forces git's real (non-local-hardlink) transport, so
+    // `--depth` actually truncates and the deepen/unshallow recovery is exercised.
+    let url = format!("file://{}", src.to_string_lossy());
+    let dest = tmp.path().join("repo");
+    let oldest = shas.first().unwrap().clone();
+
+    let opts = CloneOpts {
+        depth: Some(1),
+        ..CloneOpts::none()
+    };
+    ShellGit.clone_repo(&url, &dest, &opts).unwrap();
+
+    let shallow_count: usize = git(&dest, &["rev-list", "--count", "HEAD"])
+        .parse()
+        .unwrap();
+    assert_eq!(shallow_count, 1, "depth 1 truncates to a single commit");
+
+    // Checkout with the shallow depth triggers the deepen/unshallow recovery.
+    ShellGit
+        .checkout(&dest, &oldest, "haw/pin", Some(1))
+        .unwrap();
+    assert_eq!(
+        ShellGit.head_sha(&dest).unwrap(),
+        oldest,
+        "recovery brought the old locked SHA into a shallow clone"
+    );
+}
+
 #[test]
 fn create_branch_and_fetch() {
     let tmp = tempfile::tempdir().unwrap();
@@ -143,7 +234,9 @@ fn create_branch_and_fetch() {
     let url = src.to_string_lossy().into_owned();
     let dest = tmp.path().join("repo");
 
-    ShellGit.clone_repo(&url, &dest, None).unwrap();
+    ShellGit
+        .clone_repo(&url, &dest, &CloneOpts::none())
+        .unwrap();
     ShellGit.create_branch(&dest, "change/FEAT-1").unwrap();
     assert_eq!(
         ShellGit.current_branch(&dest).unwrap().as_deref(),

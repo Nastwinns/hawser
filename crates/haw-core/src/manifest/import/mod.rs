@@ -243,6 +243,7 @@ fn finish(
         description: Some("imported — split into real stacks as needed".to_string()),
     };
     let manifest = Manifest {
+        defaults: Default::default(),
         remotes,
         repos,
         stacks: IndexMap::from([(DEFAULT_STACK.to_string(), stack)]),

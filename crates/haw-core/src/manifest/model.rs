@@ -14,6 +14,10 @@ use super::ManifestError;
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
+    /// Workspace-wide defaults (clone tuning, etc.). Config-driven so fleets
+    /// pick a clone strategy once in `haw.toml` instead of per-invocation.
+    #[serde(default, skip_serializing_if = "Defaults::is_empty")]
+    pub defaults: Defaults,
     #[serde(default, rename = "remote", skip_serializing_if = "IndexMap::is_empty")]
     pub remotes: IndexMap<String, Remote>,
     #[serde(
@@ -49,6 +53,35 @@ pub struct Manifest {
     /// ```
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub plugins: IndexMap<String, Vec<String>>,
+}
+
+/// Workspace-wide `[defaults]`: the fallback clone tuning applied when a
+/// `haw sync`/`switch` invocation doesn't pass the matching CLI flag.
+///
+/// ```toml
+/// [defaults]
+/// filter = "blob:none"   # partial clone: keeps all commits, lazy blobs
+/// depth = 1              # shallow clone: truncated history (may need deepen)
+/// ```
+///
+/// `--filter=blob:none` is the reproducibility-safe default for pinned revs;
+/// `depth` trades reachability of old locked SHAs for size.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Defaults {
+    /// Default partial-clone filter (`git clone --filter=<spec>`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    /// Default shallow-clone depth (`git clone --depth <N>`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<u32>,
+}
+
+impl Defaults {
+    /// True when no default is set (so serialization can omit the section).
+    pub fn is_empty(&self) -> bool {
+        self.filter.is_none() && self.depth.is_none()
+    }
 }
 
 /// A named base URL repos can be cloned from.

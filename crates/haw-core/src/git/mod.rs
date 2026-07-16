@@ -42,6 +42,39 @@ pub struct ResolvedRev {
     pub kind: RevKind,
 }
 
+/// Options that shape a `git clone`, so `haw` scales to thousands of repos.
+///
+/// The three levers are independent and compose:
+/// - `reference`: share objects with a local bare mirror (`--reference`).
+/// - `filter`: partial clone (`--filter=<spec>`, e.g. `blob:none`). Keeps
+///   ALL commits, so any locked SHA is reachable; blobs fetch lazily. This is
+///   the reproducibility-safe lever for pinned revs.
+/// - `depth`: shallow clone (`--depth <N>`). Smaller/faster, but the truncated
+///   history may not contain an old locked SHA — see [`CloneOpts::depth`] and
+///   the shallow-recovery path in the checkout step.
+#[derive(Debug, Clone, Default)]
+pub struct CloneOpts {
+    /// Shared bare mirror to reference at clone time (`--reference`).
+    pub reference: Option<PathBuf>,
+    /// Partial-clone filter spec passed to `--filter=<spec>`.
+    pub filter: Option<String>,
+    /// Shallow-clone depth passed to `--depth <N>`.
+    pub depth: Option<u32>,
+}
+
+impl CloneOpts {
+    /// A plain clone with no reference, filter, or depth.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// Set the shared-mirror reference (builder style).
+    pub fn with_reference(mut self, reference: Option<PathBuf>) -> Self {
+        self.reference = reference;
+        self
+    }
+}
+
 /// Directory of the shared bare mirror for `url` under `cache_root`.
 /// Stable, filesystem-safe, collision-resistant (FNV-1a 64 over the URL).
 pub fn mirror_dir(cache_root: &Path, url: &str) -> PathBuf {
@@ -66,14 +99,27 @@ pub fn mirror_dir(cache_root: &Path, url: &str) -> PathBuf {
 pub trait GitBackend: Sync {
     /// Resolve a rev (branch, tag, or SHA) to a commit SHA without cloning.
     fn resolve_rev(&self, url: &str, rev: &str) -> Result<ResolvedRev, GitError>;
-    /// Clone `url` to `dest`; `reference` shares objects with a local mirror
-    /// via git alternates (a text file — no symlinks).
-    fn clone_repo(&self, url: &str, dest: &Path, reference: Option<&Path>) -> Result<(), GitError>;
+    /// Clone `url` to `dest`. [`CloneOpts`] carries the optional shared-mirror
+    /// reference (git alternates — a text file, no symlinks), a partial-clone
+    /// `--filter`, and a shallow `--depth`.
+    fn clone_repo(&self, url: &str, dest: &Path, opts: &CloneOpts) -> Result<(), GitError>;
     /// Create or refresh the bare mirror of `url` at `mirror`.
     fn ensure_mirror(&self, url: &str, mirror: &Path) -> Result<(), GitError>;
     fn fetch(&self, repo: &Path) -> Result<(), GitError>;
     /// Check out `sha` on a real local branch named `branch` (never detached).
-    fn checkout(&self, repo: &Path, sha: &str, branch: &str) -> Result<(), GitError>;
+    ///
+    /// `shallow_depth` is `Some(N)` when the repo was cloned with `--depth N`:
+    /// the target SHA may be outside the truncated history, so the backend must
+    /// recover (deepen or unshallow) to reach the locked SHA before checking
+    /// out. `None` means a full or partial clone, where the SHA is always
+    /// present. Never leaves the repo off `sha` silently.
+    fn checkout(
+        &self,
+        repo: &Path,
+        sha: &str,
+        branch: &str,
+        shallow_depth: Option<u32>,
+    ) -> Result<(), GitError>;
     fn create_branch(&self, repo: &Path, name: &str) -> Result<(), GitError>;
     /// Push `branch` to origin (sets upstream on first push).
     fn push_branch(&self, repo: &Path, branch: &str) -> Result<(), GitError>;

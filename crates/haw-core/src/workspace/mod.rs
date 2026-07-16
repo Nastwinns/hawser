@@ -75,6 +75,22 @@ pub struct RepoTask {
     pub branch: String,
     /// Shared bare mirror to reference at clone time (`--shared` mode).
     pub mirror: Option<PathBuf>,
+    /// Partial-clone `--filter` spec (e.g. `blob:none`); keeps all commits.
+    pub filter: Option<String>,
+    /// Shallow-clone `--depth`; may need deepening to reach an old locked SHA.
+    pub depth: Option<u32>,
+}
+
+/// Clone-mode tuning applied to every task in a sync plan.
+///
+/// Resolved by the binary as CLI-flag-over-manifest-`[defaults]`, then handed
+/// to [`Workspace::plan_sync`] which copies it onto each [`RepoTask`].
+#[derive(Debug, Clone, Default)]
+pub struct CloneTuning {
+    /// Partial-clone `--filter` spec (e.g. `blob:none`, `tree:0`).
+    pub filter: Option<String>,
+    /// Shallow-clone `--depth`.
+    pub depth: Option<u32>,
 }
 
 /// The full set of repo tasks for one stack.
@@ -301,6 +317,7 @@ impl Workspace {
         overlays: &[String],
         groups: &[String],
         cache_root: Option<&std::path::Path>,
+        tuning: &CloneTuning,
         backend: &dyn GitBackend,
     ) -> Result<SyncPlan, SyncError> {
         let mut resolution = resolver::resolve(&self.manifest, stack, overlays)?;
@@ -328,6 +345,8 @@ impl Workspace {
                 source_rev: locked.source_rev.clone(),
                 branch: locked.branch.clone(),
                 mirror: cache_root.map(|root| crate::git::mirror_dir(root, &locked.url)),
+                filter: tuning.filter.clone(),
+                depth: tuning.depth,
             });
         }
         Ok(SyncPlan {
@@ -417,8 +436,13 @@ pub fn sync_repo(task: &RepoTask, backend: &dyn GitBackend) -> Result<SyncOutcom
         if let Some(mirror) = &task.mirror {
             backend.ensure_mirror(&task.url, mirror)?;
         }
-        backend.clone_repo(&task.url, &task.path, task.mirror.as_deref())?;
-        backend.checkout(&task.path, &task.target, &task.branch)?;
+        let opts = crate::git::CloneOpts {
+            reference: task.mirror.clone(),
+            filter: task.filter.clone(),
+            depth: task.depth,
+        };
+        backend.clone_repo(&task.url, &task.path, &opts)?;
+        backend.checkout(&task.path, &task.target, &task.branch, task.depth)?;
         return Ok(SyncOutcome::Cloned);
     }
     if backend.is_dirty(&task.path)? {
@@ -432,6 +456,8 @@ pub fn sync_repo(task: &RepoTask, backend: &dyn GitBackend) -> Result<SyncOutcom
         return Ok(SyncOutcome::AlreadySynced);
     }
     backend.fetch(&task.path)?;
-    backend.checkout(&task.path, &task.target, &task.branch)?;
+    // An existing checkout may itself be a shallow clone; pass the depth so
+    // checkout can deepen to the locked SHA if the fetch didn't bring it in.
+    backend.checkout(&task.path, &task.target, &task.branch, task.depth)?;
     Ok(SyncOutcome::Updated)
 }

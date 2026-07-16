@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use haw_core::change::{ChangeRepo, Changeset};
-use haw_core::git::{GitBackend, GitError, ResolvedRev, RevKind};
+use haw_core::git::{CloneOpts, GitBackend, GitError, ResolvedRev, RevKind};
 use haw_core::workspace::Workspace;
 use haw_forge::orchestrate::{self, RepoFailure};
 use haw_forge::{Forge, ForgeError, ForgeFactory, PrHandle, PrSpec, PrState, PrStatus};
@@ -18,12 +18,7 @@ impl GitBackend for FakeGit {
             kind: RevKind::Branch,
         })
     }
-    fn clone_repo(
-        &self,
-        _url: &str,
-        _dest: &Path,
-        _reference: Option<&Path>,
-    ) -> Result<(), GitError> {
+    fn clone_repo(&self, _url: &str, _dest: &Path, _opts: &CloneOpts) -> Result<(), GitError> {
         Ok(())
     }
     fn ensure_mirror(&self, _url: &str, _mirror: &Path) -> Result<(), GitError> {
@@ -32,7 +27,13 @@ impl GitBackend for FakeGit {
     fn fetch(&self, _repo: &Path) -> Result<(), GitError> {
         Ok(())
     }
-    fn checkout(&self, _repo: &Path, _sha: &str, _branch: &str) -> Result<(), GitError> {
+    fn checkout(
+        &self,
+        _repo: &Path,
+        _sha: &str,
+        _branch: &str,
+        _shallow_depth: Option<u32>,
+    ) -> Result<(), GitError> {
         Ok(())
     }
     fn create_branch(&self, _repo: &Path, _name: &str) -> Result<(), GitError> {

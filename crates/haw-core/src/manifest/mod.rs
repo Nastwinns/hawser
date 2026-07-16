@@ -5,7 +5,7 @@ pub mod import;
 mod model;
 mod toml_loader;
 
-pub use model::{Manifest, Overlay, Remote, Repo, RepoOverride, Stack};
+pub use model::{Defaults, Manifest, Overlay, Remote, Repo, RepoOverride, Stack};
 pub use toml_loader::TomlLoader;
 
 use std::path::{Path, PathBuf};
