@@ -12,12 +12,48 @@ On top of composition, `haw` drives the day-to-day multi-repo workflow: branch a
 feature across all affected repos at once, open the linked PRs/MRs on GitHub **and**
 GitLab, and track review + CI state from one keyboard-driven cockpit.
 
+## Why haw
+
+- **Reproducible by default.** The committed `haw.lock` pins every repo to an exact
+  revision. `haw sync` reconstructs the identical tree on any machine — no drift,
+  no "works on my laptop."
+- **No submodules, no Python.** A single static binary. No `.gitmodules` foot-guns,
+  no detached HEADs, no runtime to install on CI.
+- **One changeset, many repos.** Start a feature across every affected repo, open
+  the linked PRs/MRs on GitHub and GitLab, and watch review + CI land — from one
+  keyboard-driven TUI.
+- **Honest scope.** Git mutations shell out to `git`; reads go through gitoxide.
+  Formats and forges sit behind traits, so new manifest formats or forges are just
+  new implementations.
+
+## Install
+
+```sh
+brew install hawser          # macOS / Linux (Homebrew)
+cargo install hawser         # from crates.io
+curl -L … | tar xz           # prebuilt static musl binary
+```
+
+See the [project README](https://github.com/Nastwinns/keelson#readme) for the full
+install matrix, a manifest walkthrough, and recorded demos.
+
+## Try it in your browser
+
+The landing page renders the live cockpit TUI in WebAssembly — no install required:
+<https://nastwinns.github.io/keelson/>
+
 ## Where to go next
 
-- **[Architecture](ARCHITECTURE.md)** — crate layout, data flows, the phased plan.
+- **[Architecture](ARCHITECTURE.md)** — crate layout (`haw-core`, `hawser`,
+  `haw-tui`), data flows, and the phased plan.
 - **[CLI design & TUI keymap](CLI-DESIGN.md)** — the full verb lexicon and the
   cockpit keymap.
-- **[Extending](EXTENDING.md)** — plugins, hooks, auth, CI/CD integration.
+- **[Extending](EXTENDING.md)** — plugins, hooks, auth, and CI/CD integration.
+- **[Plugin ecosystem](PLUGIN-ECOSYSTEM.md)** — the plugin study and roadmap.
+- **[Production-fit validation](PROD-VALIDATION.md)** — how haw is validated for
+  real-world use.
+- **[Qualification kit](QUALIFICATION-KIT.md)** — the tool-qualification skeleton
+  for regulated environments.
 - **[Compliance](COMPLIANCE.md)** — tool qualification, SBOM/CRA, signing, GDPR.
 - **[Commercialization](COMMERCIALIZATION.md)** — editions, licensing, pricing, GTM.
 - **[Launch playbook](LAUNCH.md)** — timing, assets, copy.

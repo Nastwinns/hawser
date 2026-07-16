@@ -1,14 +1,23 @@
-# Embedded/BSP example: a Zephyr-style firmware stack.
-# Branch revs follow their head until `haw lock` pins them.
+# Embedded / BSP example: a Zephyr-style firmware stack laid out the way west
+# workspaces are — the kernel plus HAL and bootloader modules at fixed paths.
+#
+# Branch revs (`main`) follow their head until `haw lock` pins them to a SHA;
+# the tagged kernel (`v3.6.0`) is already reproducible. `build =` shows how
+# `haw build` shells out to the Zephyr / gcc toolchain per repo.
+#
+# URLs point at the real zephyrproject-rtos org so the layout is recognizable;
+# this manifest is primarily a reading/teaching artifact (`haw tree`).
 
 [remote.zephyr]
 url = "https://github.com/zephyrproject-rtos"
+forge = "github"
 
 [repo.zephyr]
 remote = "zephyr"
 repo = "zephyr"
 rev = "v3.6.0"
 groups = ["core"]
+build = "west build -b qemu_cortex_m3 samples/hello_world"
 
 [repo.hal_stm32]
 remote = "zephyr"
@@ -25,13 +34,17 @@ rev = "main"
 path = "bootloader/mcuboot"
 groups = ["boot"]
 deps = ["zephyr"]
+build = "make -C boot/zephyr"
 
 [stack.stm32-board]
 repos = ["zephyr", "hal_stm32", "mcuboot"]
+description = "STM32 target board: kernel + STM32 HAL + MCUboot bootloader."
 
 [stack.qemu-sim]
 repos = ["zephyr"]
+description = "QEMU simulation: just the kernel, no board HAL."
 
-# `haw lock --overlay bleeding-edge` re-resolves kernel deps on their heads.
+# `haw lock --overlay bleeding-edge` re-resolves the kernel on its head instead
+# of the pinned tag — handy for tracking upstream before promoting a baseline.
 [overlay.bleeding-edge.repo.zephyr]
 rev = "main"

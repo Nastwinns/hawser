@@ -5,6 +5,7 @@
 
 # local AI tooling (BMAD install + generated skills)
 /_bmad/
+/_bmad-output/
 /bmad-output/
-/.claude/skills/
+/.claude/
 dist/

@@ -57,3 +57,9 @@ haw runs `haw-<name>` from `PATH` and passes the workspace context — the same
 
 `haw-hello` reads `HAW_JSON` to find the workspace `root`. See
 [docs/PLUGINS.md](../../docs/PLUGINS.md) for the full contract and a Rust version.
+
+## See also
+
+- The [examples index](../README.md) — all runnable and reading examples.
+- [`../governance`](../governance/) — registering plugins on lifecycle phases via
+  the `[plugins]` manifest table.

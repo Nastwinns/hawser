@@ -1,0 +1,169 @@
+# Installing hawser
+
+`hawser` ships as a single binary named `haw`. This page is the full install
+matrix: every channel, how to verify the signed release, the air-gap workflow, and
+building from source. For the short version, see the
+[README Install section](https://github.com/Nastwinns/keelson#install).
+
+The current release is **v0.1.0**, published with signed, reproducible archives for
+every supported platform.
+
+## Channel matrix
+
+| Channel | Platform | Command / source | Prerequisites |
+|---------|----------|------------------|---------------|
+| **crates.io** | any (Rust) | `cargo install hawser` | Rust 1.90+ toolchain |
+| **Homebrew** | macOS + Linux | `brew install nastwinns/tap/hawser` | Homebrew |
+| **Scoop** | Windows | `scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket` then `scoop install hawser` | Scoop |
+| **Static musl binary** | Linux x86_64 | download `haw-0.1.0-x86_64-unknown-linux-musl.tar.gz` (see below) | none (zero-dependency) |
+| **Prebuilt archive** | Linux gnu (x86_64/aarch64), Linux musl (x86_64), macOS (x86_64/aarch64), Windows (x86_64) | [GitHub Release](https://github.com/Nastwinns/keelson/releases/latest) | none (optional: `cosign`, `sha256sum` to verify) |
+| **Docker** | any (with Docker) | `docker build -t haw .` | Docker + the repo |
+| **From source** | any (Rust) | `cargo install --git …` or `cargo build --release` | Rust 1.90+ toolchain |
+
+All channels install the same `haw` binary. `cargo install hawser` is the canonical
+Rust install.
+
+## Package managers
+
+### crates.io (Rust)
+
+```bash
+cargo install hawser
+```
+
+Builds from source against your local toolchain and drops `haw` into
+`~/.cargo/bin`. Requires a Rust 1.90+ toolchain.
+
+### Homebrew (macOS + Linux)
+
+```bash
+brew install nastwinns/tap/hawser
+```
+
+The tap lives at [`Nastwinns/homebrew-tap`](https://github.com/Nastwinns/homebrew-tap).
+Homebrew pulls the prebuilt archive for your platform, so no compiler is needed.
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket
+scoop install hawser
+```
+
+## Static musl binary (Linux, zero-dependency, air-gap friendly)
+
+The recommended universal Linux install. The musl build is fully static — no glibc,
+no runtime — so it runs identically on any Linux host, drops into minimal containers,
+and installs cleanly on air-gapped machines as a single file.
+
+```bash
+curl -sSL https://github.com/Nastwinns/keelson/releases/download/v0.1.0/haw-0.1.0-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz && sudo install haw /usr/local/bin/
+```
+
+For air-gapped hosts, download the archive (plus its `.sha256`, `.sig`, and `.pem`)
+on a connected machine, verify it (below), copy all four files across, then install.
+
+## Prebuilt archives (signed)
+
+Every platform ships an archive on the
+[GitHub Release](https://github.com/Nastwinns/keelson/releases/latest):
+
+- `haw-0.1.0-x86_64-unknown-linux-gnu.tar.gz`
+- `haw-0.1.0-aarch64-unknown-linux-gnu.tar.gz`
+- `haw-0.1.0-x86_64-unknown-linux-musl.tar.gz` (static)
+- `haw-0.1.0-x86_64-apple-darwin.tar.gz`
+- `haw-0.1.0-aarch64-apple-darwin.tar.gz`
+- `haw-0.1.0-x86_64-pc-windows-msvc.zip`
+
+Each archive is accompanied by:
+
+- `<archive>.sha256` — a SHA-256 checksum
+- `<archive>.sig` and `<archive>.pem` — a [cosign](https://github.com/sigstore/cosign)
+  keyless signature and its certificate
+
+The release is **reproducible and signed**. Verifying is optional but recommended,
+and it is the whole point on locked-down or air-gapped hosts.
+
+### Verify the checksum
+
+```bash
+sha256sum -c haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.sha256
+```
+
+Expect `… OK`. (On macOS, `shasum -a 256 -c` is the equivalent.)
+
+### Verify the cosign signature
+
+Keyless verification checks the signature against the Sigstore transparency log. You
+need [`cosign`](https://github.com/sigstore/cosign) installed:
+
+```bash
+cosign verify-blob \
+  --certificate haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.pem \
+  --signature   haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.sig \
+  --certificate-identity-regexp 'https://github.com/Nastwinns/keelson' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  haw-0.1.0-x86_64-unknown-linux-musl.tar.gz
+```
+
+Expect `Verified OK`. Once verified, unpack and install:
+
+```bash
+tar xzf haw-0.1.0-x86_64-unknown-linux-musl.tar.gz
+sudo install haw /usr/local/bin/
+```
+
+### Air-gap workflow
+
+1. On a connected machine, download the archive and its `.sha256`, `.sig`, and
+   `.pem` companions.
+2. Verify the checksum and the cosign signature (above) — this establishes trust
+   while you still have network access to the transparency log.
+3. Copy all four files to the air-gapped host.
+4. Verify the checksum again offline (`sha256sum -c …`), unpack, and install.
+
+The static musl binary has no runtime dependencies, so nothing else needs to cross
+the air gap.
+
+## Docker
+
+An image builds directly from the repository `Dockerfile`:
+
+```bash
+docker build -t haw .
+docker run --rm haw --version
+```
+
+Requires Docker and a checkout of the repo.
+
+## From source
+
+Requires a Rust 1.90+ toolchain.
+
+Install the latest `main` straight from Git:
+
+```bash
+cargo install --git https://github.com/Nastwinns/keelson hawser
+```
+
+Or clone and build a release binary:
+
+```bash
+git clone https://github.com/Nastwinns/keelson
+cd keelson
+cargo build --release
+# binary at target/release/haw
+```
+
+## Verify the install
+
+Whichever channel you used:
+
+```bash
+haw --version
+```
+
+---
+
+Back to the [README](https://github.com/Nastwinns/keelson#readme).

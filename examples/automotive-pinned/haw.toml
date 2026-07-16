@@ -1,6 +1,12 @@
-# Automotive-style example: everything pinned to tags/SHAs for a
-# reproducible, auditable baseline (commit haw.lock next to this file).
-# `deps` drives the merge order of `haw change land`.
+# Automotive-style example: every repo pinned to a tag or exact SHA for a
+# reproducible, auditable baseline. Commit `haw.lock` next to this file so a
+# clone years from now resolves the identical tree (ASPICE / ISO 26262 evidence).
+#
+# `deps` drives the merge order of `haw change land`; `build =` lets `haw build`
+# compile each ECU with its declared toolchain command.
+#
+# The URLs are illustrative internal-style hosts — this manifest is a *reading*
+# artifact (`haw tree`, `haw build`), not something you clone anonymously.
 
 [remote.internal]
 url = "git@gitlab.company.com:platform"
@@ -10,28 +16,36 @@ forge = "gitlab"
 remote = "internal"
 repo = "bsw.git"
 rev = "R23-11.2"
-groups = ["autosar"]
+groups = ["autosar", "baseline"]
+build = "cmake --build build --target bsw"
 
 [repo.mcal]
 remote = "internal"
 repo = "mcal.git"
 rev = "8f4e2a91c6b3d7e0f1a5b9c8d2e6f3a7b1c4d8e2"
-groups = ["autosar"]
+groups = ["autosar", "baseline"]
+build = "make -C mcal all"
 
 [repo.ecu-gateway]
 remote = "internal"
 repo = "ecu-gateway.git"
 rev = "v2.4.0"
+groups = ["ecu"]
 deps = ["bsw", "mcal"]
+build = "cmake -S . -B build && cmake --build build"
 
 [repo.ecu-body]
 remote = "internal"
 repo = "ecu-body.git"
 rev = "v1.9.3"
+groups = ["ecu"]
 deps = ["bsw", "mcal"]
+build = "cmake -S . -B build && cmake --build build"
 
 [stack.gateway-ecu]
 repos = ["bsw", "mcal", "ecu-gateway"]
+description = "Central gateway ECU: AUTOSAR base software + MCAL + gateway app."
 
 [stack.body-ecu]
 repos = ["bsw", "mcal", "ecu-body"]
+description = "Body-control ECU: same base + MCAL + body app."

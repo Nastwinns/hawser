@@ -1,0 +1,45 @@
+# Governance example: wire out-of-process plugins onto lifecycle phases.
+#
+# Each `[plugins]` key names a `haw-<name>` executable on your PATH; the value
+# lists the lifecycle phases at which haw dispatches it. Phases are the kebab-
+# case hook names: pre-sync, post-sync, pre-lock, post-lock, post-switch,
+# post-change-start, pre-build, post-build, pre-test, post-test, pre-request,
+# post-land.
+#
+# This turns haw into a governance backbone: builds emit an SBOM, changes are
+# gated before they open a PR, and merges get signed — all without haw itself
+# knowing anything about SBOMs or signatures (it just shells out to the plugins).
+#
+# This manifest is a reading artifact: `haw tree --manifest` proves it parses.
+
+[remote.internal]
+url = "git@github.com:acme"
+forge = "github"
+
+[repo.libcore]
+remote = "internal"
+repo = "libcore.git"
+rev = "v3.2.0"
+groups = ["release"]
+build = "cmake -S . -B build && cmake --build build"
+
+[repo.service-api]
+remote = "internal"
+repo = "service-api.git"
+rev = "v1.8.0"
+groups = ["release"]
+deps = ["libcore"]
+build = "cargo build --release"
+
+[stack.release]
+repos = ["libcore", "service-api"]
+description = "Release train governed by compliance, artifact, and git-gate plugins."
+
+# --- Governance plugins ------------------------------------------------------
+# haw-compliance : policy/license check before a build and before a PR opens.
+# haw-artifact   : generate an SBOM/attestation after every successful build.
+# haw-git-gate   : enforce signed-off, gated merges when a changeset lands.
+[plugins]
+haw-compliance = ["pre-build", "pre-request"]
+haw-artifact   = ["post-build", "post-land"]
+haw-git-gate   = ["post-change-start", "post-land"]

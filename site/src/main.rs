@@ -281,6 +281,9 @@ fn draw_status(frame: &mut ratzilla::ratatui::Frame, area: Rect, tick: u32) {
         "wrote haw.lock (4 repos pinned)",
         "→ haw change start FEAT-42 --repos kernel,hal",
         "changeset `FEAT-42` started across 2 repo(s)",
+        "→ haw pr open FEAT-42",
+        "opened PR #128 (kernel) + MR !47 (hal) — CI queued",
+        "review: 1 approval · CI green on 2/2 repos",
         "ready — press ? for help",
     ];
     let message = messages[(tick / 40) as usize % messages.len()];

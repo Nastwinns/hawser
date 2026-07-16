@@ -1,0 +1,39 @@
+# quickstart — a runnable haw workspace built from real public GitHub repos.
+#
+# Everything here clones over HTTPS with no auth, so you can actually run
+# `haw sync`, `haw status`, `haw run`, and `haw change` end-to-end.
+#
+# Two stacks share the `Hello-World` repo, which is exactly the point of haw:
+# one repo, composed into several products, tracked as a fleet.
+
+[remote.gh]
+url = "https://github.com/octocat"
+forge = "github"
+
+[repo.hello-world]
+remote = "gh"
+repo = "Hello-World.git"
+rev = "master"
+groups = ["core"]
+
+[repo.spoon-knife]
+remote = "gh"
+repo = "Spoon-Knife.git"
+rev = "main"
+groups = ["web"]
+
+[repo.git-consortium]
+remote = "gh"
+repo = "git-consortium.git"
+rev = "master"
+groups = ["core"]
+
+# `site` composes the shared core repo with the web front end.
+[stack.site]
+repos = ["hello-world", "spoon-knife"]
+description = "Public-facing site: shared core + the fork demo front end."
+
+# `tooling` reuses the same core repo alongside the consortium docs repo.
+[stack.tooling]
+repos = ["hello-world", "git-consortium"]
+description = "Internal tooling: shared core + consortium reference."

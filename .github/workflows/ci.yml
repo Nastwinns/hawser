@@ -8,6 +8,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     strategy:
@@ -27,3 +31,45 @@ jobs:
         env:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_SYSTEM: /dev/null
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build rustdoc (catches broken intra-doc links)
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  examples:
+    name: examples smoke-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release binary
+        run: cargo build --release -p hawser
+      - name: Validate every shipped example manifest with `haw tree`
+        shell: bash
+        run: |
+          set -euo pipefail
+          HAW="$PWD/target/release/haw"
+          # Top-level manifest plus one-level-deep example manifests.
+          shopt -s nullglob
+          manifests=(examples/haw.toml examples/*/haw.toml)
+          if [ ${#manifests[@]} -eq 0 ]; then
+            echo "::error::no example manifests found under examples/"
+            exit 1
+          fi
+          fail=0
+          for m in "${manifests[@]}"; do
+            echo "── haw tree --manifest $m ──"
+            if ! "$HAW" tree --manifest "$m"; then
+              echo "::error file=$m::haw tree failed for $m"
+              fail=1
+            fi
+          done
+          exit $fail

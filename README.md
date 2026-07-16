@@ -7,6 +7,7 @@
 
 **Reproducible multi-repo stacks + cross-repo PR/MR orchestration. One binary, one TUI. In Rust.**
 
+[![crates.io](https://img.shields.io/crates/v/hawser)](https://crates.io/crates/hawser)
 [![CI](https://img.shields.io/badge/CI-Linux%20%7C%20macOS%20%7C%20Windows-brightgreen?logo=github)](.github/workflows/ci.yml)
 [![rust](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
@@ -82,13 +83,44 @@ workspace, git, or network — so the fleet PR/MR and CI views are always popula
 
 ## Install
 
+Quick install — pick your package manager (all install the `haw` binary):
+
 ```bash
-cargo install --git https://github.com/Nastwinns/keelson hawser   # from source (today)
-cargo install hawser                                              # from crates.io (soon)
+cargo install hawser                                              # Rust / crates.io (canonical)
+brew install nastwinns/tap/hawser                                 # macOS + Linux (Homebrew)
+scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket && scoop install hawser   # Windows (Scoop)
 ```
 
-Prebuilt archives land in [`dist/`](dist/) per release; Homebrew/Scoop are on the
-[roadmap](docs/COMMERCIALIZATION.md).
+**Linux / static / air-gap.** A zero-dependency **static musl** binary is the
+recommended universal Linux install — no glibc, no runtime, drops into containers
+and air-gapped hosts as a single file:
+
+```bash
+curl -sSL https://github.com/Nastwinns/keelson/releases/download/v0.1.0/haw-0.1.0-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz && sudo install haw /usr/local/bin/
+```
+
+**Prebuilt archives (signed).** Every platform — x86_64/aarch64 Linux (glibc), x86_64
+musl (static), x86_64/aarch64 macOS, x86_64 Windows — ships on the
+[GitHub Release](https://github.com/Nastwinns/keelson/releases/latest) with a `.sha256`
+and a **cosign signature** (`.sig`/`.pem`). The release is **reproducible and signed**;
+verify offline before installing on locked-down hosts.
+
+**Docker:**
+
+```bash
+docker build -t haw . && docker run --rm haw --version
+```
+
+**From source:**
+
+```bash
+cargo install --git https://github.com/Nastwinns/keelson hawser   # latest main
+cargo build --release                                             # in a clone
+```
+
+Full channel matrix, signature verification, and the air-gap workflow:
+**[docs/INSTALL.md](docs/INSTALL.md)**.
 
 ## Quick start
 
@@ -97,6 +129,9 @@ haw init haw.toml     # bootstrap a workspace from a manifest
 haw sync              # clone every repo, write haw.lock
 haw                   # open the TUI cockpit
 ```
+
+New here? The [`examples/`](examples/) directory has runnable, copy-pasteable
+manifests and workflows to learn from.
 
 A typical session — compose, inspect, branch across repos:
 

@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](index.md)
+[Install](INSTALL.md)
 
 - [Architecture](ARCHITECTURE.md)
 - [CLI design & TUI keymap](CLI-DESIGN.md)

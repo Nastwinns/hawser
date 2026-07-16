@@ -461,7 +461,7 @@ Examples:
         /// Repos to include (default: all repos in the manifest).
         #[arg(long = "repos", alias = "bricks", value_delimiter = ',')]
         repos: Option<Vec<String>>,
-        /// Branch name (default: change/<id>).
+        /// Branch name (default: `change/<id>`).
         #[arg(long)]
         branch: Option<String>,
         /// Adopt each repo's current branch instead of creating one.
