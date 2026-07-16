@@ -5,6 +5,7 @@
 - [Architecture](ARCHITECTURE.md)
 - [CLI design & TUI keymap](CLI-DESIGN.md)
 - [Extending](EXTENDING.md)
+- [Plugin ecosystem (study & roadmap)](PLUGIN-ECOSYSTEM.md)
 - [Compliance](COMPLIANCE.md)
 - [Commercialization](COMMERCIALIZATION.md)
 - [Launch playbook](LAUNCH.md)

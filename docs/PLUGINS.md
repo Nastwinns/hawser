@@ -217,3 +217,10 @@ Built something useful? Share it. See [CONTRIBUTING.md](../CONTRIBUTING.md) for 
 build/test checklist and PR etiquette, then open a PR that adds your plugin to the
 community list — one line: name, one-sentence description, and a link. We keep core
 small on purpose; the ecosystem lives in plugins.
+
+## Where the ecosystem is heading
+
+A validated design for lifecycle **phases** (`--haw-phase`), explicit `[plugins]`
+registration, an optional `haw-plugin` SDK, and first-party bundled plugins
+(SBOM, provenance) lives in
+[PLUGIN-ECOSYSTEM.md](PLUGIN-ECOSYSTEM.md) — with the roadmap and effort estimate.
