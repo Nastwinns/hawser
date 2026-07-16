@@ -1,0 +1,24 @@
+[package]
+name = "haw-aspice"
+description = "haw plugin: haw-aspice (ASPICE/qualification traceability from the pinned fleet)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "haw-aspice"
+path = "src/main.rs"
+
+[dependencies]
+haw-core.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

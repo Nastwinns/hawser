@@ -802,6 +802,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "haw-aspice"
+version = "0.1.3-beta.1"
+dependencies = [
+ "anyhow",
+ "haw-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "haw-compliance"
 version = "0.1.3-beta.1"
 dependencies = [
@@ -851,6 +862,18 @@ dependencies = [
 name = "haw-git-gate"
 version = "0.1.3-beta.1"
 dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "haw-jira"
+version = "0.1.3-beta.1"
+dependencies = [
+ "anyhow",
+ "haw-core",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

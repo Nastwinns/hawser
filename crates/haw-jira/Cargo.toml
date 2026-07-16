@@ -1,0 +1,25 @@
+[package]
+name = "haw-jira"
+description = "haw plugin: haw-jira (link a haw changeset to a Jira issue and transition it as the change lands)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "haw-jira"
+path = "src/main.rs"
+
+[dependencies]
+haw-core.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

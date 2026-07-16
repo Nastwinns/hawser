@@ -16,6 +16,8 @@ haw-forge = { path = "crates/haw-forge", version = "0.1.3-beta.1" }
 haw-merge = { path = "crates/haw-merge", version = "0.1.3-beta.1" }
 haw-tui = { path = "crates/haw-tui", version = "0.1.3-beta.1" }
 haw-plugin = { path = "crates/haw-plugin", version = "0.1.3-beta.1" }
+haw-aspice = { path = "crates/haw-aspice", version = "0.1.3-beta.1" }
+haw-jira = { path = "crates/haw-jira", version = "0.1.3-beta.1" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
