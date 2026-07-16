@@ -11,7 +11,7 @@
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use haw_core::workspace::RepoStatus;
 use ratatui::Frame;
@@ -182,6 +182,8 @@ pub trait Controller: Send {
     fn fleet_ci(&mut self) -> io::Result<Vec<FleetCiRun>>;
     /// The plugin/governance surface (read-only; fetched on entering `v`).
     fn governance(&mut self) -> io::Result<Governance>;
+    /// A live, plain-text git detail report for one repo (drill-in on `Enter`).
+    fn repo_detail(&mut self, repo: &str) -> io::Result<String>;
 }
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -196,6 +198,7 @@ enum View {
     Prs,
     Ci,
     Governance,
+    RepoDetail,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -212,6 +215,7 @@ enum Job {
     FleetPrs,
     FleetCi,
     Governance,
+    RepoDetail(String),
     Action(&'static str, ActionKind),
 }
 
@@ -235,6 +239,7 @@ enum Outcome {
     FleetPrs(Box<io::Result<Vec<FleetPr>>>),
     FleetCi(Box<io::Result<Vec<FleetCiRun>>>),
     Governance(Box<io::Result<Governance>>),
+    RepoDetail(Box<io::Result<String>>),
     Action(&'static str, io::Result<String>),
 }
 
@@ -265,6 +270,12 @@ struct App {
     ci: Option<Vec<FleetCiRun>>,
     /// Plugin/governance surface; `None` until first fetched (`v` view).
     gov: Option<Governance>,
+    /// Live git detail report for the drilled-in repo; `None` while loading.
+    repo_detail: Option<String>,
+    /// Which repo the detail view is showing (`repo:<name>` in crumbs).
+    detail_repo: Option<String>,
+    /// Scroll offset for the repo detail (and reused nowhere else).
+    detail_scroll: u16,
 }
 
 /// Case-insensitive substring match; an empty needle matches everything.
@@ -373,6 +384,7 @@ impl App {
             View::Prs => self.pr_rows().len(),
             View::Ci => self.ci_rows().len(),
             View::Governance => self.gov_rows().len(),
+            View::RepoDetail => 0,
         }
     }
 
@@ -476,6 +488,9 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                 Job::FleetPrs => Outcome::FleetPrs(Box::new(controller.fleet_prs())),
                 Job::FleetCi => Outcome::FleetCi(Box::new(controller.fleet_ci())),
                 Job::Governance => Outcome::Governance(Box::new(controller.governance())),
+                Job::RepoDetail(name) => {
+                    Outcome::RepoDetail(Box::new(controller.repo_detail(&name)))
+                }
                 Job::Action(label, kind) => {
                     let result = match kind {
                         ActionKind::SyncStack(stack) => controller.sync_stack(&stack),
@@ -524,6 +539,18 @@ fn open_changeset(app: &mut App, jobs: &Sender<Job>, id: &str) {
     if app.busy.is_none() {
         app.busy = Some("PR status");
         let _ = jobs.send(Job::ChangesetPrs(id.to_string()));
+    }
+}
+
+/// Navigate into a repo's live git detail view and fetch its report.
+fn open_repo_detail(app: &mut App, jobs: &Sender<Job>, repo: &str) {
+    app.detail_repo = Some(repo.to_string());
+    app.repo_detail = None;
+    app.detail_scroll = 0;
+    app.goto_view(View::RepoDetail);
+    if app.busy.is_none() {
+        app.busy = Some("git detail");
+        let _ = jobs.send(Job::RepoDetail(repo.to_string()));
     }
 }
 
@@ -694,9 +721,13 @@ fn event_loop(
         prs: None,
         ci: None,
         gov: None,
+        repo_detail: None,
+        detail_repo: None,
+        detail_scroll: 0,
     };
     app.cursor.select(Some(0));
     request_refresh(&mut app, jobs);
+    let mut last_refresh = Instant::now();
 
     loop {
         while let Ok(outcome) = outcomes.try_recv() {
@@ -776,6 +807,20 @@ fn event_loop(
                         Err(err) => app.message = format!("governance fetch failed: {err}"),
                     }
                 }
+                Outcome::RepoDetail(result) => {
+                    app.busy = None;
+                    app.detail_scroll = 0;
+                    match *result {
+                        Ok(report) => {
+                            app.repo_detail = Some(report);
+                            app.message = "git detail loaded".to_string();
+                        }
+                        Err(err) => {
+                            app.repo_detail = Some(format!("failed to load git detail: {err}"));
+                            app.message = format!("git detail failed: {err}");
+                        }
+                    }
+                }
                 Outcome::Action(label, result) => {
                     app.busy = None;
                     match result {
@@ -787,8 +832,23 @@ fn event_loop(
                         Err(err) => app.message = format!("{label} failed: {err}"),
                     }
                     request_refresh(&mut app, jobs);
+                    last_refresh = Instant::now();
                 }
             }
+        }
+
+        // Auto-refresh the fleet/status snapshot when idle and safe, k9s-style.
+        // Never disturbs input, overlays, or in-flight work; network views
+        // (Prs/Ci/Governance) stay strictly on-demand.
+        if app.busy.is_none()
+            && app.input == InputMode::None
+            && !app.help
+            && app.output.is_none()
+            && app.pending_confirm.is_none()
+            && last_refresh.elapsed() >= Duration::from_secs(5)
+        {
+            request_refresh(&mut app, jobs);
+            last_refresh = Instant::now();
         }
 
         app.tick = app.tick.wrapping_add(1);
@@ -814,6 +874,7 @@ fn event_loop(
         {
             app.message = "refreshing…".to_string();
             request_refresh(&mut app, jobs);
+            last_refresh = Instant::now();
             continue;
         }
 
@@ -918,6 +979,24 @@ fn event_loop(
                     app.go_back();
                 }
             }
+            KeyCode::Down | KeyCode::Char('j') if app.view == View::RepoDetail => {
+                app.detail_scroll = app
+                    .detail_scroll
+                    .saturating_add(1)
+                    .min(detail_max_scroll(&app));
+            }
+            KeyCode::Up | KeyCode::Char('k') if app.view == View::RepoDetail => {
+                app.detail_scroll = app.detail_scroll.saturating_sub(1);
+            }
+            KeyCode::PageDown if app.view == View::RepoDetail => {
+                app.detail_scroll = app
+                    .detail_scroll
+                    .saturating_add(10)
+                    .min(detail_max_scroll(&app));
+            }
+            KeyCode::PageUp if app.view == View::RepoDetail => {
+                app.detail_scroll = app.detail_scroll.saturating_sub(10);
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 app.cursor
                     .select(Some((selected + 1).min(app.rows_len().saturating_sub(1))));
@@ -965,6 +1044,11 @@ fn event_loop(
                 View::Changesets => {
                     if let Some(id) = app.changeset_rows().get(selected).map(|c| c.id.clone()) {
                         open_changeset(&mut app, jobs, &id);
+                    }
+                }
+                View::Fleet => {
+                    if let Some(repo) = app.cursor_repo() {
+                        open_repo_detail(&mut app, jobs, &repo);
                     }
                 }
                 _ => {}
@@ -1051,7 +1135,17 @@ fn view_name(app: &App, view: View) -> String {
         View::Prs => "pr/mr".to_string(),
         View::Ci => "ci".to_string(),
         View::Governance => "governance".to_string(),
+        View::RepoDetail => format!("repo:{}", app.detail_repo.as_deref().unwrap_or("—")),
     }
+}
+
+/// Max scroll offset for the repo detail: total lines minus a rough page.
+fn detail_max_scroll(app: &App) -> u16 {
+    let lines = app
+        .repo_detail
+        .as_deref()
+        .map_or(0, |report| report.lines().count());
+    u16::try_from(lines.saturating_sub(1)).unwrap_or(u16::MAX)
 }
 
 fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
@@ -1125,6 +1219,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("/", "filter"),
             ("?", "help"),
         ],
+        View::RepoDetail => &[("j/k", "scroll"), ("b", "back"), ("q", "quit")],
     }
 }
 
@@ -1149,6 +1244,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         View::Prs => draw_prs(frame, app, zones[1]),
         View::Ci => draw_ci(frame, app, zones[1]),
         View::Governance => draw_governance(frame, app, zones[1]),
+        View::RepoDetail => draw_repo_detail(frame, app, zones[1]),
     }
     draw_status(frame, app, zones[2]);
     draw_crumbs(frame, app, zones[3]);
@@ -2192,6 +2288,41 @@ fn draw_tree(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
+/// Style a single line of the plain-text git report, coloring section headers.
+fn detail_line(raw: &str) -> Line<'static> {
+    let style = if raw.starts_with("== ") {
+        Style::default()
+            .fg(theme::ACCENT)
+            .add_modifier(Modifier::BOLD)
+    } else if raw.starts_with("-- ") {
+        Style::default()
+            .fg(theme::MAUVE)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::TEXT)
+    };
+    Line::styled(raw.to_string(), style)
+}
+
+fn draw_repo_detail(frame: &mut Frame, app: &mut App, area: Rect) {
+    let title = format!("repo {}", app.detail_repo.as_deref().unwrap_or("—"));
+    match &app.repo_detail {
+        Some(report) => {
+            let text: Vec<Line> = report.lines().map(detail_line).collect();
+            frame.render_widget(
+                Paragraph::new(Text::from(text))
+                    .scroll((app.detail_scroll, 0))
+                    .block(panel(title)),
+                area,
+            );
+        }
+        None => {
+            frame.render_widget(panel(title), area);
+            draw_empty_hint(frame, area, "loading…");
+        }
+    }
+}
+
 /// Alternates every 4 ticks (~500ms at the 120ms poll cadence) for an input caret blink.
 fn cursor_glyph(app: &App) -> &'static str {
     if app.tick % 8 < 4 { "▏" } else { " " }
@@ -2331,6 +2462,10 @@ fn draw_help(frame: &mut Frame) {
         help_entry("F5", "refresh now · ctrl-r also works"),
         Line::raw(""),
         help_section("fleet"),
+        help_entry(
+            "enter",
+            "drill into the repo's live git detail (scrollable)",
+        ),
         help_entry("s", "sync repo under cursor (or stack)"),
         help_entry("S", "switch stack · p pin · l lock"),
         help_entry("t", "tree · c changesets · r run · g goto"),
@@ -2426,6 +2561,9 @@ mod tests {
             prs: None,
             ci: None,
             gov: None,
+            repo_detail: None,
+            detail_repo: None,
+            detail_scroll: 0,
         }
     }
 
@@ -2521,7 +2659,7 @@ mod tests {
         }
     }
 
-    const ALL_VIEWS: [View; 8] = [
+    const ALL_VIEWS: [View; 9] = [
         View::Stacks,
         View::Fleet,
         View::Changesets,
@@ -2530,6 +2668,7 @@ mod tests {
         View::Prs,
         View::Ci,
         View::Governance,
+        View::RepoDetail,
     ];
 
     /// Every key advertised in `key_hints` must be one the event loop actually
@@ -2550,6 +2689,7 @@ mod tests {
     fn key_is_handled(view: View, key: &str) -> bool {
         match key {
             "enter" | "space" | "?" | "/" | ":" | "b" | "q" | "j" | "k" => true,
+            "j/k" => view == View::RepoDetail,
             "t" | "c" | "m" | "i" | "v" | "r" | "g" => true,
             "s" => matches!(view, View::Fleet | View::Stacks),
             "S" => true,
@@ -2851,6 +2991,15 @@ mod tests {
         open_fleet_view(&mut app, &tx, View::Governance);
         assert_eq!(app.view, View::Governance);
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn repo_detail_view_has_no_rows() {
+        let mut app = fleet_app();
+        app.view = View::RepoDetail;
+        app.detail_repo = Some("kernel".to_string());
+        assert_eq!(app.rows_len(), 0);
+        assert_eq!(view_name(&app, View::RepoDetail), "repo:kernel");
     }
 
     #[test]

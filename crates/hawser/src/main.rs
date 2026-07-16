@@ -2530,6 +2530,66 @@ impl haw_tui::Controller for CliController {
             plan.source, plan.target
         ))
     }
+
+    fn repo_detail(&mut self, repo: &str) -> std::io::Result<String> {
+        let ws = self.workspace()?;
+        let spec = ws.manifest.repos.get(repo).ok_or_else(|| {
+            std::io::Error::other(format!("repo `{repo}` is not in the manifest"))
+        })?;
+        let path = ws.root.join(spec.checkout_path(repo));
+        Ok(git_detail_report(repo, &path))
+    }
+}
+
+/// Run `git -C <path> <args...>`, returning trimmed stdout or an error note.
+fn git_capture(path: &Path, args: &[&str]) -> String {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output();
+    match output {
+        Ok(out) if out.status.success() => {
+            String::from_utf8_lossy(&out.stdout).trim_end().to_string()
+        }
+        Ok(out) => {
+            let err = String::from_utf8_lossy(&out.stderr);
+            format!("(git {}: {})", args.join(" "), err.trim())
+        }
+        Err(err) => format!("(git {}: {err})", args.join(" ")),
+    }
+}
+
+/// Compose a readable, plain-text git report for one repo's checkout. Returns a
+/// "not cloned" note (not an error) when the path holds no git repository.
+fn git_detail_report(repo: &str, path: &Path) -> String {
+    if !ShellGit.is_repo(path) {
+        return format!(
+            "== {repo} ==\n\nnot cloned at {}\n\nrun `haw sync` to clone it.",
+            path.display()
+        );
+    }
+    let sha = git_capture(path, &["rev-parse", "--short", "HEAD"]);
+    let branch = git_capture(path, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    let status = git_capture(path, &["status", "-sb"]);
+    let log = git_capture(path, &["log", "--oneline", "--decorate", "-20"]);
+    let show = git_capture(path, &["show", "--stat", "--oneline", "HEAD"]);
+    let show: String = show.lines().take(40).collect::<Vec<_>>().join("\n");
+    let remotes = git_capture(path, &["remote", "-v"]);
+
+    let mut report = String::new();
+    report.push_str(&format!("== {repo} ==\n"));
+    report.push_str(&format!("branch {branch}  @ {sha}\n\n"));
+    report.push_str("-- status --\n");
+    report.push_str(&status);
+    report.push_str("\n\n-- recent commits --\n");
+    report.push_str(&log);
+    report.push_str("\n\n-- last commit --\n");
+    report.push_str(&show);
+    report.push_str("\n\n-- remotes --\n");
+    report.push_str(&remotes);
+    report.push('\n');
+    report
 }
 
 fn dash(demo: bool) -> Result<()> {
@@ -2971,6 +3031,33 @@ impl haw_tui::Controller for DemoController {
                 finding("haw-git-gate", "warn", "no signer on PATH"),
             ],
         })
+    }
+
+    fn repo_detail(&mut self, repo: &str) -> std::io::Result<String> {
+        Ok(format!(
+            "== {repo} ==\n\
+branch release/6.1  @ a1c9f4e\n\
+\n\
+-- status --\n\
+## release/6.1...origin/release/6.1\n\
+\n\
+-- recent commits --\n\
+a1c9f4e (HEAD -> release/6.1, origin/release/6.1) i2c: add DMA-backed transfers\n\
+7f3b21d hal: wire i2c DMA descriptors\n\
+d4e88a1 mqtt: reconnect backoff + jitter\n\
+9b0a1c2 drv: calibrate on cold boot\n\
+c0ffee1 build: bump toolchain to 1.79\n\
+\n\
+-- last commit --\n\
+a1c9f4e i2c: add DMA-backed transfers\n\
+ drivers/i2c/dma.c | 142 ++++++++++++++++++++++++++++\n\
+ drivers/i2c/i2c.h |  12 +++\n\
+ 2 files changed, 154 insertions(+)\n\
+\n\
+-- remotes --\n\
+origin\tgit@github.com:acme/{repo}.git (fetch)\n\
+origin\tgit@github.com:acme/{repo}.git (push)\n"
+        ))
     }
 }
 
