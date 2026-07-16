@@ -266,6 +266,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod runtime_check {
     // Building the octocrab client spawns a tower::buffer worker, which panicked
     // ("no reactor running") when done outside the Tokio runtime context. This
