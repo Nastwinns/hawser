@@ -11,10 +11,10 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_AUTHOR_NAME", "Keelson Test")
-        .env("GIT_AUTHOR_EMAIL", "test@keelson.dev")
-        .env("GIT_COMMITTER_NAME", "Keelson Test")
-        .env("GIT_COMMITTER_EMAIL", "test@keelson.dev")
+        .env("GIT_AUTHOR_NAME", "hawser Test")
+        .env("GIT_AUTHOR_EMAIL", "test@hawser.dev")
+        .env("GIT_COMMITTER_NAME", "hawser Test")
+        .env("GIT_COMMITTER_EMAIL", "test@hawser.dev")
         .output()
         .expect("git runs");
     assert!(
@@ -257,8 +257,8 @@ fn init_repo(root: &Path) -> PathBuf {
     let repo = root.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     git(&repo, &["init", "-b", "main"]);
-    git(&repo, &["config", "user.email", "test@keelson.dev"]);
-    git(&repo, &["config", "user.name", "Keelson Test"]);
+    git(&repo, &["config", "user.email", "test@hawser.dev"]);
+    git(&repo, &["config", "user.name", "hawser Test"]);
     git(&repo, &["config", "commit.gpgsign", "false"]);
     repo
 }

@@ -4,15 +4,15 @@
 
 DEMO_LAB="/tmp/haw-demo"
 rm -rf "$DEMO_LAB"
-export GIT_AUTHOR_NAME="Keelson Demo" GIT_AUTHOR_EMAIL="demo@keelson.dev"
-export GIT_COMMITTER_NAME="Keelson Demo" GIT_COMMITTER_EMAIL="demo@keelson.dev"
+export GIT_AUTHOR_NAME="hawser Demo" GIT_AUTHOR_EMAIL="demo@hawser.dev"
+export GIT_COMMITTER_NAME="hawser Demo" GIT_COMMITTER_EMAIL="demo@hawser.dev"
 
 for repo in kernel hal app-mqtt; do
     mkdir -p "$DEMO_LAB/$repo"
     cd "$DEMO_LAB/$repo" || exit 1
     git init -q -b main
-    git config user.email demo@keelson.dev
-    git config user.name "Keelson Demo"
+    git config user.email demo@hawser.dev
+    git config user.name "hawser Demo"
     echo "$repo sources" > README.md
     git add . && git commit -qm "init $repo"
 done

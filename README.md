@@ -12,11 +12,11 @@
 [![rust](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![unsafe](https://img.shields.io/badge/unsafe-forbidden-success.svg)](Cargo.toml)
-[![docs](https://img.shields.io/badge/docs-github%20pages-8A2BE2)](https://nastwinns.github.io/keelson/docs/)
+[![docs](https://img.shields.io/badge/docs-github%20pages-8A2BE2)](https://nastwinns.github.io/hawser/docs/)
 
 [Install](#install) · [Quick start](#quick-start) · [Demos](#demos) ·
-[Docs](https://nastwinns.github.io/keelson/docs/) ·
-[Try the TUI in your browser](https://nastwinns.github.io/keelson/)
+[Docs](https://nastwinns.github.io/hawser/docs/) ·
+[Try the TUI in your browser](https://nastwinns.github.io/hawser/)
 
 </div>
 
@@ -63,7 +63,7 @@ Rendered with [VHS](https://github.com/charmbracelet/vhs) from the tapes in
 
 ![haw TUI demo](demo/haw-tui.gif)
 
-**[Try the cockpit in your browser →](https://nastwinns.github.io/keelson/)** — real
+**[Try the cockpit in your browser →](https://nastwinns.github.io/hawser/)** — real
 ratatui widgets over [Ratzilla](https://github.com/ratatui/ratzilla), Rust compiled
 to WASM, no server. Source: [`site/`](site/).
 
@@ -96,13 +96,13 @@ recommended universal Linux install — no glibc, no runtime, drops into contain
 and air-gapped hosts as a single file:
 
 ```bash
-curl -sSL https://github.com/Nastwinns/keelson/releases/download/v0.1.0/haw-0.1.0-x86_64-unknown-linux-musl.tar.gz \
+curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.0/haw-0.1.0-x86_64-unknown-linux-musl.tar.gz \
   | tar xz && sudo install haw /usr/local/bin/
 ```
 
 **Prebuilt archives (signed).** Every platform — x86_64/aarch64 Linux (glibc), x86_64
 musl (static), x86_64/aarch64 macOS, x86_64 Windows — ships on the
-[GitHub Release](https://github.com/Nastwinns/keelson/releases/latest) with a `.sha256`
+[GitHub Release](https://github.com/Nastwinns/hawser/releases/latest) with a `.sha256`
 and a **cosign signature** (`.sig`/`.pem`). The release is **reproducible and signed**;
 verify offline before installing on locked-down hosts.
 
@@ -115,7 +115,7 @@ docker build -t haw . && docker run --rm haw --version
 **From source:**
 
 ```bash
-cargo install --git https://github.com/Nastwinns/keelson hawser   # latest main
+cargo install --git https://github.com/Nastwinns/hawser hawser   # latest main
 cargo build --release                                             # in a clone
 ```
 
@@ -341,7 +341,7 @@ Workspace layout:
 
 ## Documentation
 
-Published at **[nastwinns.github.io/keelson/docs](https://nastwinns.github.io/keelson/docs/)**
+Published at **[nastwinns.github.io/hawser/docs](https://nastwinns.github.io/hawser/docs/)**
 (mdBook, rebuilt on every push). Sources:
 
 | Doc | What |

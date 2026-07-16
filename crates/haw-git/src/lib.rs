@@ -17,7 +17,7 @@ pub struct ShellGit;
 
 /// Platform cache directory for shared bare mirrors (`--shared` mode).
 pub fn default_cache_root() -> Option<std::path::PathBuf> {
-    directories::ProjectDirs::from("dev", "keelson", "keelson")
+    directories::ProjectDirs::from("dev", "hawser", "hawser")
         .map(|dirs| dirs.cache_dir().join("mirrors"))
 }
 

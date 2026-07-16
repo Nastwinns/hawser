@@ -34,13 +34,13 @@ cargo install hawser         # from crates.io
 curl -L … | tar xz           # prebuilt static musl binary
 ```
 
-See the [project README](https://github.com/Nastwinns/keelson#readme) for the full
+See the [project README](https://github.com/Nastwinns/hawser#readme) for the full
 install matrix, a manifest walkthrough, and recorded demos.
 
 ## Try it in your browser
 
 The landing page renders the live cockpit TUI in WebAssembly — no install required:
-<https://nastwinns.github.io/keelson/>
+<https://nastwinns.github.io/hawser/>
 
 ## Where to go next
 
@@ -60,7 +60,7 @@ The landing page renders the live cockpit TUI in WebAssembly — no install requ
 
 ## Links
 
-- **Repository:** <https://github.com/Nastwinns/keelson>
-- **Try the TUI in your browser:** <https://nastwinns.github.io/keelson/>
-- **README:** the [project README](https://github.com/Nastwinns/keelson#readme)
+- **Repository:** <https://github.com/Nastwinns/hawser>
+- **Try the TUI in your browser:** <https://nastwinns.github.io/hawser/>
+- **README:** the [project README](https://github.com/Nastwinns/hawser#readme)
   has install instructions, demos, and the manifest walkthrough.

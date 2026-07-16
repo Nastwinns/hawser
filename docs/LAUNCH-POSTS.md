@@ -12,11 +12,11 @@ gif must exist and be readable on mobile. See the timing note at the bottom.
 
 Real links to use (all live):
 
-- Repo: <https://github.com/Nastwinns/keelson>
-- Docs (mdBook): <https://nastwinns.github.io/keelson/docs/>
-- Browser TUI demo (ratatui → WASM, no server): <https://nastwinns.github.io/keelson/>
-- CLI gif: <https://github.com/Nastwinns/keelson/blob/main/demo/haw-cli.gif>
-- TUI gif: <https://github.com/Nastwinns/keelson/blob/main/demo/haw-tui.gif>
+- Repo: <https://github.com/Nastwinns/hawser>
+- Docs (mdBook): <https://nastwinns.github.io/hawser/docs/>
+- Browser TUI demo (ratatui → WASM, no server): <https://nastwinns.github.io/hawser/>
+- CLI gif: <https://github.com/Nastwinns/hawser/blob/main/demo/haw-cli.gif>
+- TUI gif: <https://github.com/Nastwinns/hawser/blob/main/demo/haw-tui.gif>
 - Guided tapes: `demo/cli-compose.gif`, `demo/cli-changeset.gif`,
   `demo/cli-run-verify.gif`, `demo/cli-merge.gif`
 
@@ -65,8 +65,8 @@ Status: v0.1.0, Rust, #![forbid(unsafe_code)], Linux/macOS/Windows. It's young �
 the commercial/compliance surface (SBOM, signed lockfile, qualification evidence)
 is on the roadmap, not shipped. Dual MIT/Apache-2.0.
 
-Repo: https://github.com/Nastwinns/keelson
-Try the TUI in your browser (Rust→WASM, no server): https://nastwinns.github.io/keelson/
+Repo: https://github.com/Nastwinns/hawser
+Try the TUI in your browser (Rust→WASM, no server): https://nastwinns.github.io/hawser/
 
 Feedback very welcome, especially from anyone living the multi-repo life.
 ```
@@ -105,9 +105,9 @@ The Rust angle:
 - Errors are thiserror enums in the libs, anyhow only in the binary; clap for the
   CLI. Workspace split into haw-core (all domain logic) + thin front-ends.
 
-It's v0.1.0 and young. Repo + gifs: https://github.com/Nastwinns/keelson
+It's v0.1.0 and young. Repo + gifs: https://github.com/Nastwinns/hawser
 You can even try the cockpit in your browser (ratatui compiled to WASM over
-Ratzilla, no server): https://nastwinns.github.io/keelson/
+Ratzilla, no server): https://nastwinns.github.io/hawser/
 
 Would love feedback on the crate split and the gitoxide/shell-out boundary.
 ```
@@ -153,8 +153,8 @@ provenance, and per-standard qualification evidence. So today it's the free,
 reproducible core — no compliance overclaim.
 
 Rust, one binary, Linux/macOS/Windows, dual MIT/Apache-2.0.
-Repo: https://github.com/Nastwinns/keelson
-Browser demo: https://nastwinns.github.io/keelson/
+Repo: https://github.com/Nastwinns/hawser
+Browser demo: https://nastwinns.github.io/hawser/
 
 Tell me what's missing for your toolchain — that's exactly the feedback I want.
 ```
@@ -188,13 +188,13 @@ Rust + ratatui, cross-platform. The gifs in the repo are rendered with VHS from 
 files and CI re-renders them on every CLI/TUI change, so they never drift from
 reality:
 
-- CLI: https://github.com/Nastwinns/keelson/blob/main/demo/haw-cli.gif
-- TUI: https://github.com/Nastwinns/keelson/blob/main/demo/haw-tui.gif
+- CLI: https://github.com/Nastwinns/hawser/blob/main/demo/haw-cli.gif
+- TUI: https://github.com/Nastwinns/hawser/blob/main/demo/haw-tui.gif
 
 And you can drive the actual cockpit in your browser (ratatui → WASM, no server):
-https://nastwinns.github.io/keelson/
+https://nastwinns.github.io/hawser/
 
-Repo: https://github.com/Nastwinns/keelson
+Repo: https://github.com/Nastwinns/hawser
 ```
 
 Gif first — on r/commandline a static repo link underperforms badly.

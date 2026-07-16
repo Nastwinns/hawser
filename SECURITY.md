@@ -28,4 +28,4 @@ token handling (`HAW_*`/`GITHUB_TOKEN`/`GITLAB_TOKEN` are read from the
 environment, never persisted), manifest/lockfile parsing, and shell-outs to
 `git`. Vulnerabilities in those paths are in scope.
 
-[advisories]: https://github.com/Nastwinns/keelson/security/advisories/new
+[advisories]: https://github.com/Nastwinns/hawser/security/advisories/new

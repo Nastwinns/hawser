@@ -49,7 +49,7 @@ jobs:
 
       - name: Build the browser cockpit (Ratzilla / WASM)
         working-directory: site
-        run: trunk build --release --public-url /keelson/
+        run: trunk build --release --public-url /hawser/
 
       - name: Build the docs (mdBook)
         working-directory: docs

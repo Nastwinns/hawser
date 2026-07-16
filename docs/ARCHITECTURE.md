@@ -1,4 +1,4 @@
-# Keelson — Architecture & Implementation Plan
+# hawser — Architecture & Implementation Plan
 
 ## 1. Crate architecture (Cargo workspace)
 
@@ -8,7 +8,7 @@ thin front-ends.** Formats and forges sit behind traits so a format or API chang
 impl swap, not a rewrite.
 
 ```
-keelson/
+hawser/
 ├── Cargo.toml                     # [workspace]
 ├── crates/
 │   ├── haw-core/                 # domain logic, no I/O opinions leaked
@@ -218,7 +218,7 @@ rather than completing one layer fully. Scope each item to the minimum that prov
   the target branch half-merged.
 
 ### Extensibility, auth & CI/CD (cross-phase)
-Keelson stays open at the edges: it orchestrates git, forges, and build tools without
+hawser stays open at the edges: it orchestrates git, forges, and build tools without
 reimplementing them. The extension surface — `forall`, lifecycle hooks, per-repo build
 commands, `haw-<name>` subcommand plugins, the `--format json` machine interface — plus the
 auth model (git-native transport + opt-in forge tokens / OAuth device flow) and the CI/CD
@@ -260,7 +260,7 @@ RepoFleet is the closest prior art on the MR side, so its concrete choices are w
 matching deliberately: a **workspace** grouping repos, an **issue/changeset** as the unit of
 cross-repo work, a **status dashboard** as the primary view, `goto` shell integration,
 **snapshots** of multi-repo state, and `--skip-branch` to adopt already-checked-out branches
-instead of forcing new ones. Keelson's edge is everything underneath and around that:
+instead of forcing new ones. hawser's edge is everything underneath and around that:
 a committed lockfile, stack composition, GitHub *and* GitLab, a real TUI, and a
 gitoxide-native Rust core.
 

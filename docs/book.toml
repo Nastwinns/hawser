@@ -11,8 +11,8 @@ build-dir = "book"
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/Nastwinns/keelson"
-edit-url-template = "https://github.com/Nastwinns/keelson/edit/main/docs/{path}"
+git-repository-url = "https://github.com/Nastwinns/hawser"
+edit-url-template = "https://github.com/Nastwinns/hawser/edit/main/docs/{path}"
 additional-css = []
 
 [output.html.fold]

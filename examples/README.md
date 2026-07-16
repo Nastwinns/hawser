@@ -52,6 +52,6 @@ themed manifests use illustrative internal-style URLs and are meant for reading.
 
 ## More
 
-- **Try the cockpit in your browser:** <https://nastwinns.github.io/keelson/>
+- **Try the cockpit in your browser:** <https://nastwinns.github.io/hawser/>
 - **Main README:** [`../README.md`](../README.md) — install, demos, full feature tour.
 - **Plugin contract:** [`../docs/PLUGINS.md`](../docs/PLUGINS.md).

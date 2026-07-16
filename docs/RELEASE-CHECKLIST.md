@@ -86,7 +86,7 @@ shasum -a 256 -c <(printf '%s  %s\n' "$(cat haw-*-linux-gnu.tar.gz.sha256)" haw-
 cosign verify-blob \
   --certificate haw-<ver>-x86_64-unknown-linux-gnu.tar.gz.pem \
   --signature   haw-<ver>-x86_64-unknown-linux-gnu.tar.gz.sig \
-  --certificate-identity-regexp 'https://github.com/Nastwinns/keelson/.github/workflows/release.yml@.*' \
+  --certificate-identity-regexp 'https://github.com/Nastwinns/hawser/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   haw-<ver>-x86_64-unknown-linux-gnu.tar.gz
 
@@ -165,7 +165,7 @@ cd homebrew-tap
 mkdir -p Formula
 
 # Grab the rendered formula from the release and commit it
-gh release download v0.1.0 -R Nastwinns/keelson -p hawser.rb -O Formula/hawser.rb
+gh release download v0.1.0 -R Nastwinns/hawser -p hawser.rb -O Formula/hawser.rb
 git add Formula/hawser.rb
 git commit -m "hawser 0.1.0"
 git push
@@ -190,7 +190,7 @@ gh repo create Nastwinns/scoop-bucket --public \
 git clone https://github.com/Nastwinns/scoop-bucket
 cd scoop-bucket
 mkdir -p bucket
-gh release download v0.1.0 -R Nastwinns/keelson -p hawser.json -O bucket/hawser.json
+gh release download v0.1.0 -R Nastwinns/hawser -p hawser.json -O bucket/hawser.json
 git add bucket/hawser.json
 git commit -m "hawser 0.1.0"
 git push
@@ -229,8 +229,8 @@ docker push ghcr.io/nastwinns/haw:latest
 - [ ] Update the README **Install** section if this release changed an install path
       (e.g. flip `cargo install hawser` from "soon" to live; add the `brew` line once
       the tap exists). Do this in a normal PR — not part of this checklist's file set.
-- [ ] Sanity-check the docs site rebuilt: <https://nastwinns.github.io/keelson/docs/>
-- [ ] Confirm the browser demo still loads: <https://nastwinns.github.io/keelson/>
+- [ ] Sanity-check the docs site rebuilt: <https://nastwinns.github.io/hawser/docs/>
+- [ ] Confirm the browser demo still loads: <https://nastwinns.github.io/hawser/>
 - [ ] **Trigger the launch** (🔑 Reddit/HN accounts): only now, with v0.1.0 actually
       installable, work through [`LAUNCH-POSTS.md`](LAUNCH-POSTS.md) — post Show HN +
       Reddit the same day and engage the first 2 hours. The timing gate lives in

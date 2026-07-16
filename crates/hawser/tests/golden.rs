@@ -46,8 +46,8 @@ fn workspace(root: &Path) -> PathBuf {
         let repo = root.join(name);
         std::fs::create_dir_all(&repo).unwrap();
         git(&repo, &["init", "-q", "-b", "main"]);
-        git(&repo, &["config", "user.email", "test@keelson.dev"]);
-        git(&repo, &["config", "user.name", "Keelson Test"]);
+        git(&repo, &["config", "user.email", "test@hawser.dev"]);
+        git(&repo, &["config", "user.name", "hawser Test"]);
         git(&repo, &["config", "commit.gpgsign", "false"]);
         std::fs::write(repo.join("README.md"), format!("{name}\n")).unwrap();
         git(&repo, &["add", "."]);

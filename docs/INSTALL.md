@@ -3,7 +3,7 @@
 `hawser` ships as a single binary named `haw`. This page is the full install
 matrix: every channel, how to verify the signed release, the air-gap workflow, and
 building from source. For the short version, see the
-[README Install section](https://github.com/Nastwinns/keelson#install).
+[README Install section](https://github.com/Nastwinns/hawser#install).
 
 The current release is **v0.1.0**, published with signed, reproducible archives for
 every supported platform.
@@ -16,7 +16,7 @@ every supported platform.
 | **Homebrew** | macOS + Linux | `brew install nastwinns/tap/hawser` | Homebrew |
 | **Scoop** | Windows | `scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket` then `scoop install hawser` | Scoop |
 | **Static musl binary** | Linux x86_64 | download `haw-0.1.0-x86_64-unknown-linux-musl.tar.gz` (see below) | none (zero-dependency) |
-| **Prebuilt archive** | Linux gnu (x86_64/aarch64), Linux musl (x86_64), macOS (x86_64/aarch64), Windows (x86_64) | [GitHub Release](https://github.com/Nastwinns/keelson/releases/latest) | none (optional: `cosign`, `sha256sum` to verify) |
+| **Prebuilt archive** | Linux gnu (x86_64/aarch64), Linux musl (x86_64), macOS (x86_64/aarch64), Windows (x86_64) | [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest) | none (optional: `cosign`, `sha256sum` to verify) |
 | **Docker** | any (with Docker) | `docker build -t haw .` | Docker + the repo |
 | **From source** | any (Rust) | `cargo install --git …` or `cargo build --release` | Rust 1.90+ toolchain |
 
@@ -57,7 +57,7 @@ no runtime — so it runs identically on any Linux host, drops into minimal cont
 and installs cleanly on air-gapped machines as a single file.
 
 ```bash
-curl -sSL https://github.com/Nastwinns/keelson/releases/download/v0.1.0/haw-0.1.0-x86_64-unknown-linux-musl.tar.gz \
+curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.0/haw-0.1.0-x86_64-unknown-linux-musl.tar.gz \
   | tar xz && sudo install haw /usr/local/bin/
 ```
 
@@ -67,7 +67,7 @@ on a connected machine, verify it (below), copy all four files across, then inst
 ## Prebuilt archives (signed)
 
 Every platform ships an archive on the
-[GitHub Release](https://github.com/Nastwinns/keelson/releases/latest):
+[GitHub Release](https://github.com/Nastwinns/hawser/releases/latest):
 
 - `haw-0.1.0-x86_64-unknown-linux-gnu.tar.gz`
 - `haw-0.1.0-aarch64-unknown-linux-gnu.tar.gz`
@@ -102,7 +102,7 @@ need [`cosign`](https://github.com/sigstore/cosign) installed:
 cosign verify-blob \
   --certificate haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.pem \
   --signature   haw-0.1.0-x86_64-unknown-linux-musl.tar.gz.sig \
-  --certificate-identity-regexp 'https://github.com/Nastwinns/keelson' \
+  --certificate-identity-regexp 'https://github.com/Nastwinns/hawser' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   haw-0.1.0-x86_64-unknown-linux-musl.tar.gz
 ```
@@ -144,14 +144,14 @@ Requires a Rust 1.90+ toolchain.
 Install the latest `main` straight from Git:
 
 ```bash
-cargo install --git https://github.com/Nastwinns/keelson hawser
+cargo install --git https://github.com/Nastwinns/hawser hawser
 ```
 
 Or clone and build a release binary:
 
 ```bash
-git clone https://github.com/Nastwinns/keelson
-cd keelson
+git clone https://github.com/Nastwinns/hawser
+cd hawser
 cargo build --release
 # binary at target/release/haw
 ```
@@ -166,4 +166,4 @@ haw --version
 
 ---
 
-Back to the [README](https://github.com/Nastwinns/keelson#readme).
+Back to the [README](https://github.com/Nastwinns/hawser#readme).

@@ -25,8 +25,8 @@ fn make_source_repo(root: &Path) -> PathBuf {
     let src = root.join("source");
     std::fs::create_dir_all(&src).unwrap();
     git(&src, &["init", "-b", "main"]);
-    git(&src, &["config", "user.email", "test@keelson.dev"]);
-    git(&src, &["config", "user.name", "Keelson Test"]);
+    git(&src, &["config", "user.email", "test@hawser.dev"]);
+    git(&src, &["config", "user.name", "hawser Test"]);
     std::fs::write(src.join("README.md"), "hello\n").unwrap();
     git(&src, &["add", "."]);
     git(&src, &["commit", "-m", "initial"]);
@@ -102,8 +102,8 @@ fn refuses_to_discard_local_commits() {
     ShellGit.clone_repo(&url, &dest, None).unwrap();
     ShellGit.checkout(&dest, &old, "main").unwrap();
 
-    git(&dest, &["config", "user.email", "test@keelson.dev"]);
-    git(&dest, &["config", "user.name", "Keelson Test"]);
+    git(&dest, &["config", "user.email", "test@hawser.dev"]);
+    git(&dest, &["config", "user.name", "hawser Test"]);
     std::fs::write(dest.join("local.txt"), "local work\n").unwrap();
     git(&dest, &["add", "."]);
     git(&dest, &["commit", "-m", "local only"]);
