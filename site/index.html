@@ -6,243 +6,60 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, user-scalable=no"
     />
-    <title>haw — reproducible multi-repo stacks, cross-repo PRs, in Rust</title>
     <meta
       name="description"
-      content="haw (hawser) composes reproducible multi-repo software stacks from many independent Git repos and orchestrates cross-repo PRs/MRs on GitHub and GitLab. One Rust binary, one keyboard-driven TUI. No submodules, no Python runtime."
+      content="haw — reproducible multi-repo stack composition + cross-repo MR orchestration, in Rust. This page IS the TUI."
     />
-    <meta name="theme-color" content="#10141a" />
-    <meta property="og:type" content="website" />
-    <meta
-      property="og:title"
-      content="haw — reproducible multi-repo stacks, cross-repo PRs, in Rust"
-    />
-    <meta
-      property="og:description"
-      content="Compose reproducible multi-repo stacks and drive cross-repo PRs/MRs from one Rust TUI. This page IS the cockpit — drive it with your keyboard, running in your browser via WebAssembly."
-    />
-    <meta property="og:url" content="https://nastwinns.github.io/hawser/" />
-    <link rel="canonical" href="https://nastwinns.github.io/hawser/" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/fira_code.min.css"
     />
     <link data-trunk rel="rust" />
     <base data-trunk-public-url />
+    <title>haw — the beam that binds the repos</title>
     <style>
-      :root {
-        --bg: #10141a;
-        --surface: #181c25;
-        --text: #cdd6f4;
-        --dim: #7f849c;
-        --accent: #89b4fa;
-        --mauve: #cba6f7;
-        --green: #a6e3a1;
-      }
-      * {
-        box-sizing: border-box;
-      }
       body {
-        margin: 0 auto;
+        margin: 0;
         width: 100%;
-        max-width: 900px;
         min-height: 100vh;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        text-align: center;
-        background-color: var(--bg);
-        color: var(--text);
-        gap: 14px;
-        padding: 24px 16px;
-        font-family: "Fira Code", ui-monospace, monospace;
+        align-content: center;
+        background-color: #10141a;
+        gap: 16px;
+        padding: 16px 0;
       }
-      /* Ratzilla injects its terminal grid as a <pre> child of <body>.
-         Center it as a flex item, cap its width, and give it a framed,
-         dark card so it reads as the focal "cockpit" on the page. */
       pre {
-        font-family: "Fira Code", ui-monospace, monospace;
+        font-family: "Fira Code", monospace;
         font-size: 15px;
-        line-height: 1.15;
-        margin: 0 auto;
-        max-width: 100%;
-        align-self: center;
-        text-align: left;
-        padding: 14px 18px;
-        background: var(--surface);
-        border: 1px solid #313244;
-        border-radius: 10px;
-        overflow-x: auto;
+        margin: 0px;
       }
-      .demo-hint {
-        margin: 0;
+      footer {
+        font-family: "Fira Code", monospace;
         font-size: 13px;
-        color: var(--dim);
-        text-align: center;
+        color: #7f849c;
       }
-      .demo-hint kbd {
-        background: var(--surface);
-        border: 1px solid #313244;
-        border-radius: 5px;
-        padding: 1px 6px;
-        font-family: "Fira Code", ui-monospace, monospace;
-        font-size: 12px;
-        color: var(--mauve);
-      }
-      header {
-        text-align: center;
-        max-width: 760px;
-      }
-      header h1 {
-        margin: 0;
-        font-size: 22px;
-        letter-spacing: 0.5px;
-      }
-      header h1 .anchor {
-        color: var(--mauve);
-      }
-      header h1 .name {
-        color: var(--text);
-      }
-      .tagline {
-        margin: 6px 0 0;
-        font-size: 14px;
-        color: var(--accent);
-      }
-      .lede {
-        margin: 10px auto 0;
-        font-size: 13px;
-        line-height: 1.6;
-        color: var(--dim);
-        max-width: 640px;
-      }
-      .install {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-        margin-top: 12px;
-      }
-      .install code {
-        background: var(--surface);
-        border: 1px solid #313244;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 13px;
-        color: var(--green);
-        white-space: nowrap;
-      }
-      nav {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 6px 18px;
-        margin-top: 12px;
-        font-size: 13px;
-      }
-      nav a,
       footer a {
-        color: var(--accent);
+        color: #89b4fa;
         text-decoration: none;
       }
-      nav a:hover,
       footer a:hover {
         text-decoration: underline;
       }
-      footer {
-        font-size: 13px;
-        color: var(--dim);
-        text-align: center;
-      }
-      footer code {
-        color: var(--green);
-      }
-      noscript,
-      .wasm-fallback {
-        display: block;
-        max-width: 640px;
-        text-align: center;
-        font-size: 13px;
-        color: var(--dim);
-        line-height: 1.6;
+      noscript {
+        font-family: "Fira Code", monospace;
+        color: #cdd6f4;
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1><span class="anchor">⚓</span> <span class="name">haw</span></h1>
-      <p class="tagline">
-        reproducible multi-repo stacks · cross-repo PRs · one Rust binary
-      </p>
-      <p class="lede">
-        <strong>haw</strong> (hawser) assembles a software stack out of many
-        independent Git repositories — no submodules, no detached HEADs, no
-        Python runtime. A declarative <code>haw.toml</code> describes the stack;
-        a committed <code>haw.lock</code> pins every repo to an exact revision,
-        so any teammate or CI machine reproduces the same tree. Then it drives
-        the day-to-day: branch a feature across every affected repo, open the
-        linked PRs/MRs on GitHub and GitLab, and track review + CI from one
-        keyboard-driven cockpit.
-      </p>
-      <div class="install">
-        <code>brew install hawser</code>
-        <code>cargo install hawser</code>
-        <code>curl -L … | tar xz  # static musl</code>
-      </div>
-      <nav>
-        <a href="https://github.com/Nastwinns/hawser">GitHub repo</a>
-        <a href="https://nastwinns.github.io/hawser/book/">Docs</a>
-        <a href="https://github.com/Nastwinns/hawser/releases">Releases</a>
-      </nav>
-    </header>
-
-    <p class="lede" style="margin-top: 14px">
-      <strong>Try the cockpit in your browser — drive it with your keyboard.</strong>
-      Real ratatui widgets, compiled to WebAssembly. No screenshot: this IS the
-      TUI, running live below.
-    </p>
-
-    <noscript>
-      This page renders a live, interactive TUI cockpit in your browser via
-      WebAssembly, so it needs JavaScript + WebAssembly enabled. The screenshot
-      below the fold on GitHub shows the same view. Install the real thing with
-      <code>cargo install hawser</code>.
-    </noscript>
-
-    <p class="demo-hint">
-      ⌨ use your keyboard: <kbd>j</kbd>/<kbd>k</kbd> move ·
-      <kbd>↑</kbd>/<kbd>↓</kbd> move · <kbd>Tab</kbd> switch view
-    </p>
-
-    <!-- The Ratzilla WASM app appends its <pre> terminal grid here (to <body>).
-         If WASM never boots, this fallback line stays visible. -->
-    <p class="wasm-fallback">
-      Booting the cockpit demo… if this message persists, your browser blocked
-      WebAssembly. The real cockpit runs in your terminal:
-      <code>cargo install hawser</code>.
-    </p>
-
+    <noscript>This demo needs JavaScript + WebAssembly enabled.</noscript>
     <footer>
-      <a href="https://github.com/Nastwinns/hawser">source</a> · an interactive
-      demo — the real cockpit runs on your terminal:
+      <a href="https://github.com/Nastwinns/hawser">source</a>
+      · a scripted demo — the real cockpit runs on your terminal:
       <code>cargo install hawser</code>
     </footer>
-
-    <script>
-      // Hide the "Booting…" fallback once Ratzilla appends its <pre> terminal
-      // grid to <body>. If WASM never boots, the fallback stays visible.
-      (function () {
-        var fallback = document.querySelector(".wasm-fallback");
-        if (!fallback) return;
-        var obs = new MutationObserver(function () {
-          if (document.body.querySelector("pre")) {
-            fallback.style.display = "none";
-            obs.disconnect();
-          }
-        });
-        obs.observe(document.body, { childList: true });
-      })();
-    </script>
   </body>
 </html>

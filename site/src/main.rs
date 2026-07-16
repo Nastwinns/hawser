@@ -1,22 +1,13 @@
 //! haw.dev — the fleet cockpit, rendered in the browser with Ratzilla.
 //!
-//! A standalone showcase: real ratatui widgets, real Ratzilla DOM backend, and
-//! real keyboard interaction. A visitor DRIVES the cockpit — moving a cursor
-//! through the fleet, switching between the fleet / PR / CI views — over a set
-//! of sample data (a real git backend can't run inside a wasm sandbox). Colors
-//! mirror `haw-tui`'s theme.
-//!
-//! Interactivity is wired via Ratzilla 0.3's `WebRenderer::on_key_event`
-//! (`terminal.on_key_event(cb)`), which the `DomBackend` implements. The
-//! callback receives `ratzilla::event::KeyEvent { code: KeyCode, .. }`.
-//! Shared mutable state lives in `Rc<RefCell<Cockpit>>`: the key callback
-//! mutates it, the `draw_web` render closure reads it each frame. A small
-//! free-running spinner keeps a subtle ambient animation without driving state.
+//! A standalone showcase: real ratatui widgets, real Ratzilla DOM backend, a
+//! scripted fleet of repos cycling through sync/dirty/drift states so the
+//! page demonstrates the TUI's look without needing a real git backend
+//! (which can't run inside a wasm sandbox). Colors mirror `haw-tui`'s theme.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ratzilla::event::{KeyCode, KeyEvent};
 use ratzilla::ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratzilla::ratatui::style::{Modifier, Style};
 use ratzilla::ratatui::text::{Line, Span, Text};
@@ -39,7 +30,7 @@ mod theme {
     pub const SURFACE0: Color = Color::Rgb(49, 50, 68);
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum RepoState {
     Clean,
     Dirty,
@@ -54,114 +45,30 @@ struct Repo {
     state: RepoState,
 }
 
-/// The fleet — fixed sample data. The visitor's cursor moves over these rows.
-const FLEET: &[(&str, &str, &str, RepoState)] = &[
-    ("kernel", "v6.1.2", "a1b2c3d4", RepoState::Clean),
-    ("hal", "main", "9f8e7d6c", RepoState::Dirty),
-    ("app-mqtt", "release/2.x", "4d5e6f7a", RepoState::Drift),
-    ("sensor-fw", "main", "eeff0011", RepoState::Clean),
-    ("bootloader", "main", "77aa2200", RepoState::Missing),
+const SCRIPT: &[(&str, &str, &str, u32)] = &[
+    ("kernel", "v6.1.2", "a1b2c3d4", 0),
+    ("hal", "main", "9f8e7d6c", 40),
+    ("app-mqtt", "release/2.x", "4d5e6f7a", 90),
+    ("sensor-fw", "main", "eeff0011", 140),
 ];
 
-/// Open cross-repo pull/merge requests.
-const PRS: &[(&str, &str, &str, &str)] = &[
-    ("#128", "kernel", "FEAT-42: dma ring resize", "approved · CI green"),
-    ("!47", "hal", "FEAT-42: gpio mux table", "1 approval · CI green"),
-    ("#131", "app-mqtt", "fix: reconnect backoff", "review requested"),
-    ("!49", "sensor-fw", "chore: bump toolchain", "CI running"),
-];
-
-/// CI pipelines across the fleet.
-const CI: &[(&str, &str, &str, &str)] = &[
-    ("kernel", "build+test", "passed", "1m42s"),
-    ("hal", "build+test", "passed", "0m58s"),
-    ("app-mqtt", "build+test", "running", "0m31s"),
-    ("sensor-fw", "lint+build", "queued", "—"),
-];
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum View {
-    Fleet,
-    Prs,
-    Ci,
-}
-
-impl View {
-    fn next(self) -> Self {
-        match self {
-            View::Fleet => View::Prs,
-            View::Prs => View::Ci,
-            View::Ci => View::Fleet,
-        }
-    }
-
-    fn title(self) -> &'static str {
-        match self {
-            View::Fleet => "fleet",
-            View::Prs => "pull / merge requests",
-            View::Ci => "ci pipelines",
-        }
-    }
-
-    /// Number of selectable rows in this view.
-    fn len(self) -> usize {
-        match self {
-            View::Fleet => FLEET.len(),
-            View::Prs => PRS.len(),
-            View::Ci => CI.len(),
-        }
-    }
-}
-
-/// Shared, key-driven state. Mutated by the key callback, read by the render
-/// closure. Only `spinner` advances on its own (ambient animation).
-struct Cockpit {
-    view: View,
-    cursor: usize,
-    spinner: u32,
-}
-
-impl Cockpit {
-    fn new() -> Self {
-        Cockpit {
-            view: View::Fleet,
-            cursor: 0,
-            spinner: 0,
-        }
-    }
-
-    fn move_down(&mut self) {
-        let len = self.view.len();
-        if len > 0 {
-            self.cursor = (self.cursor + 1) % len;
-        }
-    }
-
-    fn move_up(&mut self) {
-        let len = self.view.len();
-        if len > 0 {
-            self.cursor = (self.cursor + len - 1) % len;
-        }
-    }
-
-    fn cycle_view(&mut self) {
-        self.view = self.view.next();
-        // Keep the cursor in range for the new view.
-        let len = self.view.len();
-        if len > 0 && self.cursor >= len {
-            self.cursor = len - 1;
-        }
-    }
-}
-
-fn fleet_repos() -> Vec<Repo> {
-    FLEET
+fn repos_at(tick: u32) -> Vec<Repo> {
+    SCRIPT
         .iter()
-        .map(|(name, branch, head, state)| Repo {
-            name,
-            branch,
-            head,
-            state: *state,
+        .map(|(name, branch, head, offset)| {
+            let phase = (tick + offset) % 200;
+            let state = match phase {
+                0..=119 => RepoState::Clean,
+                120..=149 => RepoState::Dirty,
+                150..=169 => RepoState::Drift,
+                _ => RepoState::Missing,
+            };
+            Repo {
+                name,
+                branch,
+                head,
+                state,
+            }
         })
         .collect()
 }
@@ -211,28 +118,7 @@ fn panel(title: &str) -> Block<'static> {
         ))
 }
 
-fn header_cell(label: &str) -> Cell<'static> {
-    Cell::from(Span::styled(
-        label.to_string(),
-        Style::default()
-            .fg(theme::ACCENT)
-            .add_modifier(Modifier::BOLD),
-    ))
-}
-
-/// Style for the currently-selected row's leading label.
-fn cursor_style(selected: bool) -> Style {
-    if selected {
-        Style::default()
-            .fg(theme::TEXT)
-            .add_modifier(Modifier::BOLD)
-            .bg(theme::SURFACE0)
-    } else {
-        Style::default().fg(theme::TEXT)
-    }
-}
-
-fn draw(frame: &mut ratzilla::ratatui::Frame, cockpit: &Cockpit) {
+fn draw(frame: &mut ratzilla::ratatui::Frame, tick: u32) {
     let zones = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -243,26 +129,22 @@ fn draw(frame: &mut ratzilla::ratatui::Frame, cockpit: &Cockpit) {
         ])
         .split(frame.area());
 
-    draw_header(frame, zones[0], cockpit);
-    match cockpit.view {
-        View::Fleet => draw_fleet(frame, zones[1], cockpit),
-        View::Prs => draw_prs(frame, zones[1], cockpit),
-        View::Ci => draw_ci(frame, zones[1], cockpit),
-    }
-    draw_status(frame, zones[2], cockpit);
+    draw_header(frame, zones[0], tick);
+    draw_fleet(frame, zones[1], tick);
+    draw_status(frame, zones[2], tick);
     draw_footer(frame, zones[3]);
 }
 
-fn draw_header(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpit) {
+fn draw_header(frame: &mut ratzilla::ratatui::Frame, area: Rect, tick: u32) {
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(20), Constraint::Length(20)])
         .split(area);
 
-    let repos = fleet_repos();
+    let repos = repos_at(tick);
     let clean = repos
         .iter()
-        .filter(|r| r.state == RepoState::Clean)
+        .filter(|r| matches!(r.state, RepoState::Clean))
         .count();
     let info = vec![Line::from(vec![
         Span::styled(" context: ", Style::default().fg(theme::DIM)),
@@ -279,13 +161,8 @@ fn draw_header(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockp
                 .fg(theme::ACCENT)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("   view: ", Style::default().fg(theme::DIM)),
-        Span::styled(
-            cockpit.view.title(),
-            Style::default()
-                .fg(theme::MAUVE)
-                .add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("   lock: ", Style::default().fg(theme::DIM)),
+        Span::styled("✓ committed", Style::default().fg(theme::GREEN)),
         Span::styled("   in sync: ", Style::default().fg(theme::DIM)),
         Span::styled(
             format!("{clean}/{}", repos.len()),
@@ -297,19 +174,12 @@ fn draw_header(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockp
         columns[0],
     );
 
-    // Ambient spinner — the only self-advancing animation. State (cursor, view)
-    // is driven purely by keys.
-    const FRAMES: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
-    let spin = FRAMES[(cockpit.spinner / 6) as usize % FRAMES.len()];
-    let logo = vec![Line::from(vec![
-        Span::styled(
-            "HAW ⚓ ",
-            Style::default()
-                .fg(theme::MAUVE)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(spin, Style::default().fg(theme::TEAL)),
-    ])];
+    let logo = vec![Line::styled(
+        "HAW ⚓",
+        Style::default()
+            .fg(theme::MAUVE)
+            .add_modifier(Modifier::BOLD),
+    )];
     frame.render_widget(
         Paragraph::new(Text::from(logo))
             .alignment(Alignment::Center)
@@ -323,16 +193,42 @@ fn draw_header(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockp
     );
 }
 
-fn draw_fleet(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpit) {
-    let repos = fleet_repos();
+fn draw_fleet(frame: &mut ratzilla::ratatui::Frame, area: Rect, tick: u32) {
+    let repos = repos_at(tick);
+    let cursor = (tick / 25) as usize % repos.len();
 
     let header = Row::new(vec![
         Cell::from(""),
-        header_cell("REPO"),
-        header_cell("BRANCH"),
-        header_cell("HEAD"),
-        header_cell("DIRTY"),
-        header_cell("DRIFT"),
+        Cell::from(Span::styled(
+            "REPO",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "BRANCH",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "HEAD",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "DIRTY",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "DRIFT",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )),
     ]);
 
     let rows: Vec<Row> = repos
@@ -340,10 +236,17 @@ fn draw_fleet(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpi
         .enumerate()
         .map(|(i, repo)| {
             let (dirty, drift) = state_cells(repo.state);
-            let selected = i == cockpit.cursor;
+            let name_style = if i == cursor {
+                Style::default()
+                    .fg(theme::TEXT)
+                    .add_modifier(Modifier::BOLD)
+                    .bg(theme::SURFACE0)
+            } else {
+                Style::default().fg(theme::TEXT)
+            };
             Row::new(vec![
                 Cell::from(state_dot(repo.state)),
-                Cell::from(Span::styled(repo.name, cursor_style(selected))),
+                Cell::from(Span::styled(repo.name, name_style)),
                 Cell::from(Span::styled(
                     repo.branch,
                     Style::default().fg(theme::YELLOW),
@@ -372,139 +275,32 @@ fn draw_fleet(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpi
     frame.render_widget(table, area);
 }
 
-fn draw_prs(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpit) {
-    let header = Row::new(vec![
-        header_cell("PR/MR"),
-        header_cell("REPO"),
-        header_cell("TITLE"),
-        header_cell("STATUS"),
-    ]);
-
-    let rows: Vec<Row> = PRS
-        .iter()
-        .enumerate()
-        .map(|(i, (id, repo, title, status))| {
-            let selected = i == cockpit.cursor;
-            let status_color = if status.contains("green") || status.contains("approv") {
-                theme::GREEN
-            } else if status.contains("running") {
-                theme::YELLOW
-            } else {
-                theme::DIM
-            };
-            Row::new(vec![
-                Cell::from(Span::styled(*id, cursor_style(selected))),
-                Cell::from(Span::styled(*repo, Style::default().fg(theme::ACCENT))),
-                Cell::from(Span::styled(*title, Style::default().fg(theme::TEXT))),
-                Cell::from(Span::styled(*status, Style::default().fg(status_color))),
-            ])
-        })
-        .collect();
-
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(6),
-            Constraint::Length(10),
-            Constraint::Min(20),
-            Constraint::Length(22),
-        ],
-    )
-    .header(header)
-    .block(panel(&format!("pull / merge requests({})", PRS.len())));
-
-    frame.render_widget(table, area);
-}
-
-fn draw_ci(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpit) {
-    let header = Row::new(vec![
-        header_cell("REPO"),
-        header_cell("PIPELINE"),
-        header_cell("RESULT"),
-        header_cell("DURATION"),
-    ]);
-
-    let rows: Vec<Row> = CI
-        .iter()
-        .enumerate()
-        .map(|(i, (repo, pipeline, result, dur))| {
-            let selected = i == cockpit.cursor;
-            let (glyph, color) = match *result {
-                "passed" => ("✓", theme::GREEN),
-                "running" => ("»", theme::YELLOW),
-                "queued" => ("·", theme::DIM),
-                _ => ("✗", theme::RED),
-            };
-            Row::new(vec![
-                Cell::from(Span::styled(*repo, cursor_style(selected))),
-                Cell::from(Span::styled(*pipeline, Style::default().fg(theme::TEXT))),
-                Cell::from(Span::styled(
-                    format!("{glyph} {result}"),
-                    Style::default().fg(color),
-                )),
-                Cell::from(Span::styled(*dur, Style::default().fg(theme::DIM))),
-            ])
-        })
-        .collect();
-
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(12),
-            Constraint::Min(12),
-            Constraint::Length(14),
-            Constraint::Length(10),
-        ],
-    )
-    .header(header)
-    .block(panel(&format!("ci pipelines({})", CI.len())));
-
-    frame.render_widget(table, area);
-}
-
-fn draw_status(frame: &mut ratzilla::ratatui::Frame, area: Rect, cockpit: &Cockpit) {
-    let message = match cockpit.view {
-        View::Fleet => {
-            let repo = &FLEET[cockpit.cursor.min(FLEET.len() - 1)];
-            format!(
-                " selected {} · {} @ {} — j/k move · Tab switch view",
-                repo.0, repo.1, repo.2
-            )
-        }
-        View::Prs => {
-            let pr = &PRS[cockpit.cursor.min(PRS.len() - 1)];
-            format!(
-                " selected {} ({}) — {} · j/k move · Tab switch view",
-                pr.0, pr.1, pr.3
-            )
-        }
-        View::Ci => {
-            let job = &CI[cockpit.cursor.min(CI.len() - 1)];
-            format!(
-                " selected {} · {} — {} · j/k move · Tab switch view",
-                job.0, job.1, job.2
-            )
-        }
-    };
+fn draw_status(frame: &mut ratzilla::ratatui::Frame, area: Rect, tick: u32) {
+    let messages = [
+        "→ haw sync --stack gateway",
+        "wrote haw.lock (4 repos pinned)",
+        "→ haw change start FEAT-42 --repos kernel,hal",
+        "changeset `FEAT-42` started across 2 repo(s)",
+        "ready — press ? for help",
+    ];
+    let message = messages[(tick / 40) as usize % messages.len()];
     frame.render_widget(
-        Paragraph::new(Line::styled(message, Style::default().fg(theme::TEAL))),
+        Paragraph::new(Line::styled(
+            format!(" {message}"),
+            Style::default().fg(theme::TEAL),
+        )),
         area,
     );
 }
 
 fn draw_footer(frame: &mut ratzilla::ratatui::Frame, area: Rect) {
     let lines = vec![
-        Line::from(vec![
-            Span::styled("⌨ ", Style::default().fg(theme::TEAL)),
-            Span::styled(
-                "j/k · ↑/↓ move    Tab / m switch view",
-                Style::default()
-                    .fg(theme::TEXT)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
         Line::styled(
-            "interactive demo — the real cockpit: cargo install hawser",
+            "<s> sync  <S> stacks  <p> pin  <l> lock  <c> changesets  <r> run  <g> goto",
+            Style::default().fg(theme::DIM),
+        ),
+        Line::styled(
+            "scripted demo — the real cockpit: cargo install hawser",
             Style::default().fg(theme::SURFACE),
         ),
     ];
@@ -522,36 +318,13 @@ unsafe impl critical_section::Impl for NoPreemption {
 }
 
 fn main() {
-    let cockpit = Rc::new(RefCell::new(Cockpit::new()));
-
+    let tick = Rc::new(RefCell::new(0u32));
     let backend = DomBackend::new().expect("DOM backend");
-    let mut terminal = Terminal::new(backend).expect("terminal");
-
-    // Wire real keyboard interaction via Ratzilla's `on_key_event` hook. The
-    // callback mutates the shared `Cockpit`; the render closure reads it.
-    {
-        let cockpit = cockpit.clone();
-        terminal
-            .on_key_event(move |event: KeyEvent| {
-                let mut c = cockpit.borrow_mut();
-                match event.code {
-                    KeyCode::Char('j') | KeyCode::Down => c.move_down(),
-                    KeyCode::Char('k') | KeyCode::Up => c.move_up(),
-                    KeyCode::Tab | KeyCode::Char('m') | KeyCode::Char('i') => c.cycle_view(),
-                    _ => {}
-                }
-            })
-            .expect("register key handler");
-    }
+    let terminal = Terminal::new(backend).expect("terminal");
 
     terminal.draw_web(move |frame| {
-        {
-            // Advance only the ambient spinner each frame; cursor/view are
-            // key-driven and left untouched here.
-            let mut c = cockpit.borrow_mut();
-            c.spinner = c.spinner.wrapping_add(1);
-        }
-        let c = cockpit.borrow();
-        draw(frame, &c);
+        let mut t = tick.borrow_mut();
+        *t = t.wrapping_add(1);
+        draw(frame, *t);
     });
 }
