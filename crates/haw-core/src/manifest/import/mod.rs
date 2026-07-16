@@ -247,6 +247,7 @@ fn finish(
         repos,
         stacks: IndexMap::from([(DEFAULT_STACK.to_string(), stack)]),
         overlays: IndexMap::new(),
+        plugins: IndexMap::new(),
     };
     manifest.validate()?;
     Ok(manifest)

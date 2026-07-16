@@ -211,3 +211,54 @@ rev = "next"
     let reparsed: Manifest = out.parse().unwrap();
     assert_eq!(manifest, reparsed);
 }
+
+#[test]
+fn plugins_table_parses_and_round_trips() {
+    let manifest: Manifest = r#"
+[repo.kernel]
+url = "git@github.com:acme/kernel.git"
+rev = "main"
+
+[plugins]
+sbom = ["post-build", "pre-request"]
+sign = ["post-land"]
+"#
+    .parse()
+    .unwrap();
+    assert_eq!(
+        manifest.plugins["sbom"],
+        vec!["post-build".to_string(), "pre-request".to_string()]
+    );
+    assert_eq!(manifest.plugins["sign"], vec!["post-land".to_string()]);
+
+    let out = toml::to_string(&manifest).unwrap();
+    assert!(out.contains("[plugins]"), "plugins table serialized");
+    let reparsed: Manifest = out.parse().unwrap();
+    assert_eq!(manifest, reparsed);
+}
+
+#[test]
+fn plugins_reject_unknown_phase() {
+    let err = r#"
+[repo.kernel]
+url = "git@github.com:acme/kernel.git"
+rev = "main"
+
+[plugins]
+sbom = ["post-build", "not-a-phase"]
+"#
+    .parse::<Manifest>()
+    .unwrap_err();
+    match err {
+        ManifestError::UnknownPluginPhase {
+            plugin,
+            phase,
+            valid,
+        } => {
+            assert_eq!(plugin, "sbom");
+            assert_eq!(phase, "not-a-phase");
+            assert!(valid.contains("post-build"), "lists valid phases");
+        }
+        other => panic!("expected UnknownPluginPhase, got {other:?}"),
+    }
+}

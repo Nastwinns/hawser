@@ -8,6 +8,7 @@ pub mod git;
 pub mod hooks;
 pub mod lock;
 pub mod manifest;
+pub mod plugin;
 pub mod resolver;
 pub mod snapshot;
 pub mod workspace;

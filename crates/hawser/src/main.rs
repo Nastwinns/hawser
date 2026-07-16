@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use haw_core::git::GitBackend;
 use haw_core::manifest::{ManifestLoader, TomlLoader, edit, import};
+use haw_core::plugin::{self, Dispatch, ProcessRunner, RepoContext};
 use haw_core::workspace::{MANIFEST_FILE, RepoStatus, SyncOutcome, Workspace, sync_repo};
 use haw_core::{audit, change, hooks, resolver, snapshot};
 use haw_forge::{PrState, Tokens, orchestrate};
@@ -1431,6 +1432,11 @@ fn change_status(id: &str) -> Result<()> {
 
 fn change_request(id: &str, base: Option<&str>) -> Result<()> {
     let ws = open_workspace()?;
+    fire_phase(
+        &ws,
+        hooks::Hook::PreRequest,
+        json!({"id": id, "base": base}),
+    )?;
     let tokens = Tokens::from_env();
     let outcomes = orchestrate::request(&ws, &ShellGit, &tokens, id, base, None)?;
     let c = Palette::new();
@@ -1478,6 +1484,11 @@ fn change_land(id: &str) -> Result<()> {
     if failed {
         bail!("landing stopped at the first failure; later repos stay unmerged");
     }
+    fire_phase(
+        &ws,
+        hooks::Hook::PostLand,
+        json!({"id": id, "repos": outcomes.len()}),
+    )?;
     println!("changeset `{id}` landed ({} repos)", outcomes.len());
     Ok(())
 }
@@ -1791,6 +1802,12 @@ fn build_or_test(build: bool, groups: &[String], jobs: Option<usize>) -> Result<
     let ws = open_workspace()?;
     let backend = ShellGit;
     let verb = if build { "build" } else { "test" };
+    let (pre, post) = if build {
+        (hooks::Hook::PreBuild, hooks::Hook::PostBuild)
+    } else {
+        (hooks::Hook::PreTest, hooks::Hook::PostTest)
+    };
+    fire_phase(&ws, pre, json!({"groups": groups}))?;
     let targets: Vec<(String, PathBuf, String)> = ws
         .manifest
         .repos
@@ -1837,6 +1854,7 @@ fn build_or_test(build: bool, groups: &[String], jobs: Option<usize>) -> Result<
         }
     }
     println!("{verb} ran in {}/{} repos", total - failures, total);
+    fire_phase(&ws, post, json!({"failures": failures, "total": total}))?;
     if failures > 0 {
         bail!("{verb} failed in {failures} repo(s)");
     }
@@ -1873,16 +1891,9 @@ fn hooks_install() -> Result<()> {
 fn hooks_list() -> Result<()> {
     let ws = open_workspace()?;
     let dir = ws.state_dir().join("hooks");
-    let known = [
-        "pre-sync",
-        "post-sync",
-        "pre-lock",
-        "post-lock",
-        "post-switch",
-        "post-change-start",
-    ];
     let mut any = false;
-    for name in known {
+    for hook in hooks::Hook::ALL {
+        let name = hook.name();
         let path = dir.join(name);
         if path.exists() {
             any = true;
@@ -1945,6 +1956,86 @@ fn evidence(out: &Path) -> Result<()> {
         Some(&out.display().to_string()),
     );
     println!("wrote evidence bundle {}", out.display());
+    Ok(())
+}
+
+/// Fire a lifecycle phase: run the `.haw/hooks/<phase>` script (if any) and
+/// dispatch every `[plugins]` entry subscribed to it.
+///
+/// `pre-*` failures return `Err` (the caller aborts); `post-*` failures are
+/// printed as warnings and swallowed. Missing plugin binaries are skipped
+/// (fail-open). `extra` is merged into the plugin context for diagnostics.
+fn fire_phase(ws: &Workspace, hook: hooks::Hook, extra: serde_json::Value) -> Result<()> {
+    let is_pre = hook.is_pre();
+
+    match hooks::fire(ws, hook, &extra) {
+        Ok(()) => {}
+        Err(err) if is_pre => return Err(err.into()),
+        Err(err) => eprintln!("  ! {} hook: {err} (continuing)", hook.name()),
+    }
+
+    let subscriptions = &ws.manifest.plugins;
+    if subscriptions.is_empty() {
+        return Ok(());
+    }
+
+    let repos: Vec<RepoContext> = ws
+        .manifest
+        .repos
+        .iter()
+        .map(|(name, repo)| RepoContext {
+            name: name.clone(),
+            path: ws.root.join(repo.checkout_path(name)),
+            rev: repo.rev.clone(),
+            groups: repo.groups.clone(),
+        })
+        .collect();
+    let mut context =
+        plugin::phase_context(&ws.root, ws.current_stack().as_deref(), &repos, hook.name());
+    if let (Some(obj), serde_json::Value::Object(extra)) = (context.as_object_mut(), extra) {
+        for (key, value) in extra {
+            obj.entry(key).or_insert(value);
+        }
+    }
+
+    let c = Palette::new();
+    let dispatches = plugin::dispatch(&ProcessRunner, subscriptions, hook.name(), &context);
+    let mut blocked: Vec<String> = Vec::new();
+    for dispatch in dispatches {
+        match dispatch {
+            Dispatch::Ran(report) => {
+                let mark = if report.ok { c.ok("✓") } else { c.err("✗") };
+                println!(
+                    "  {mark} {} {}",
+                    c.name(&report.plugin),
+                    c.dim(&report.summary)
+                );
+                for finding in &report.findings {
+                    println!("      [{}] {}", finding.level, finding.message);
+                }
+                if !report.ok && is_pre {
+                    blocked.push(report.plugin);
+                }
+            }
+            Dispatch::Missing { plugin } => {
+                eprintln!(
+                    "  {} {plugin} (no haw-{plugin} on PATH — skipped)",
+                    c.dim("·")
+                );
+            }
+            Dispatch::Unparseable { plugin, detail } => {
+                eprintln!("  {} {plugin}: {detail}", c.err("!"));
+            }
+        }
+    }
+    if !blocked.is_empty() {
+        bail!(
+            "{} plugin(s) vetoed `{}`: {}",
+            blocked.len(),
+            hook.name(),
+            blocked.join(", ")
+        );
+    }
     Ok(())
 }
 

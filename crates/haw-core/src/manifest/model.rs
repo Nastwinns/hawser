@@ -36,6 +36,19 @@ pub struct Manifest {
         skip_serializing_if = "IndexMap::is_empty"
     )]
     pub overlays: IndexMap<String, Overlay>,
+    /// Out-of-process plugins and the lifecycle phases they subscribe to.
+    ///
+    /// Each key is a plugin name; haw dispatches the `haw-<name>` executable
+    /// when it reaches one of the listed phases (see [`crate::hooks::Hook`]).
+    /// Phase names are the kebab-case hook names (`pre-build`, `post-land`, …).
+    ///
+    /// ```toml
+    /// [plugins]
+    /// sbom = ["post-build", "pre-request"]
+    /// sign = ["post-land"]
+    /// ```
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub plugins: IndexMap<String, Vec<String>>,
 }
 
 /// A named base URL repos can be cloned from.
@@ -186,6 +199,22 @@ impl Manifest {
                     return Err(ManifestError::UnknownRepoInOverlay {
                         overlay: name.clone(),
                         repo: repo.clone(),
+                    });
+                }
+            }
+        }
+        for (plugin, phases) in &self.plugins {
+            for phase in phases {
+                if !crate::hooks::Hook::ALL.iter().any(|h| h.name() == phase) {
+                    let valid = crate::hooks::Hook::ALL
+                        .iter()
+                        .map(|h| h.name())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(ManifestError::UnknownPluginPhase {
+                        plugin: plugin.clone(),
+                        phase: phase.clone(),
+                        valid,
                     });
                 }
             }

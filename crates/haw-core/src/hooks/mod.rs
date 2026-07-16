@@ -17,9 +17,17 @@ pub enum Hook {
     PostLock,
     PostSwitch,
     PostChangeStart,
+    PreBuild,
+    PostBuild,
+    PreTest,
+    PostTest,
+    PreRequest,
+    PostLand,
 }
 
 impl Hook {
+    /// The kebab-case name used for the hook script, the `HAW_HOOK` env var,
+    /// and the `--haw-phase` argument passed to subscribed plugins.
     pub fn name(self) -> &'static str {
         match self {
             Hook::PreSync => "pre-sync",
@@ -28,7 +36,35 @@ impl Hook {
             Hook::PostLock => "post-lock",
             Hook::PostSwitch => "post-switch",
             Hook::PostChangeStart => "post-change-start",
+            Hook::PreBuild => "pre-build",
+            Hook::PostBuild => "post-build",
+            Hook::PreTest => "pre-test",
+            Hook::PostTest => "post-test",
+            Hook::PreRequest => "pre-request",
+            Hook::PostLand => "post-land",
         }
+    }
+
+    /// Every lifecycle hook, in declaration order. Used by the manifest to
+    /// validate `[plugins]` phase subscriptions and by `haw hooks list`.
+    pub const ALL: [Hook; 12] = [
+        Hook::PreSync,
+        Hook::PostSync,
+        Hook::PreLock,
+        Hook::PostLock,
+        Hook::PostSwitch,
+        Hook::PostChangeStart,
+        Hook::PreBuild,
+        Hook::PostBuild,
+        Hook::PreTest,
+        Hook::PostTest,
+        Hook::PreRequest,
+        Hook::PostLand,
+    ];
+
+    /// Whether this is a `pre-*` hook (its failure may abort the operation).
+    pub fn is_pre(self) -> bool {
+        self.name().starts_with("pre-")
     }
 }
 
@@ -87,4 +123,41 @@ pub fn fire(ws: &Workspace, hook: Hook, context: &serde_json::Value) -> Result<(
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_hooks_have_kebab_names() {
+        let names: Vec<&str> = Hook::ALL.iter().map(|h| h.name()).collect();
+        assert_eq!(names.len(), 12);
+        assert!(names.contains(&"pre-build"));
+        assert!(names.contains(&"post-build"));
+        assert!(names.contains(&"pre-test"));
+        assert!(names.contains(&"post-test"));
+        assert!(names.contains(&"pre-request"));
+        assert!(names.contains(&"post-land"));
+        for name in &names {
+            assert!(!name.contains('_'), "{name} should be kebab-case");
+        }
+    }
+
+    #[test]
+    fn hook_names_are_unique() {
+        let mut names: Vec<&str> = Hook::ALL.iter().map(|h| h.name()).collect();
+        names.sort_unstable();
+        let count = names.len();
+        names.dedup();
+        assert_eq!(names.len(), count, "hook names must be unique");
+    }
+
+    #[test]
+    fn is_pre_matches_name_prefix() {
+        assert!(Hook::PreBuild.is_pre());
+        assert!(Hook::PreRequest.is_pre());
+        assert!(!Hook::PostBuild.is_pre());
+        assert!(!Hook::PostLand.is_pre());
+    }
 }

@@ -35,6 +35,12 @@ pub enum ManifestError {
     UnknownForge { remote: String, forge: String },
     #[error("repo `{repo}` depends on unknown repo `{dep}`")]
     UnknownDep { repo: String, dep: String },
+    #[error("plugin `{plugin}` subscribes to unknown phase `{phase}` (valid phases: {valid})")]
+    UnknownPluginPhase {
+        plugin: String,
+        phase: String,
+        valid: String,
+    },
 }
 
 /// Anything that can produce a [`Manifest`] from a file on disk.
