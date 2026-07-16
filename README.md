@@ -386,6 +386,18 @@ The governance features ship this way — `haw`'s own SBOM, signing/provenance, 
 secret-gate are plugins (`haw-compliance`, `haw-artifact`, `haw-git-gate`), so the
 extension model is the same one the core is built on.
 
+**Reference plugins in this repo** — real, tested, ready to copy:
+
+| Plugin | What it does |
+|--------|--------------|
+| [`haw-aspice`](crates/haw-aspice) | Generates Automotive-SPICE **traceability** (repo → pinned SHA → process area) from the fleet — audit evidence, as a `post-land` hook or `haw aspice` |
+| [`haw-jira`](crates/haw-jira) | Links a changeset to a **Jira** issue and transitions it as the change lands (`pre-request` → *In Review*, `post-land` → *Done*); fail-open dry-run without creds |
+
+**Reach into the TUI, too.** A plugin's `Report` — its findings and artifacts — surfaces
+in the cockpit's **governance view** (`v`), whether the hook fired from the CLI or the
+TUI. (Plugins can feed that view today; rendering their *own* TUI panels is on the
+roadmap.)
+
 Write your own: **[docs/PLUGINS.md](docs/PLUGINS.md)** (the dispatch contract + the JSON
 schema) and **[docs/EXTENDING.md](docs/EXTENDING.md)**.
 
