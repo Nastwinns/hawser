@@ -108,6 +108,43 @@ pub struct FleetPr {
     pub ci: Option<bool>,
 }
 
+/// One registered plugin for the governance view (`v`).
+#[derive(Debug, Clone)]
+pub struct GovPlugin {
+    pub name: String,
+    /// Lifecycle phases the plugin subscribes to (e.g. `post-build`).
+    pub phases: Vec<String>,
+}
+
+/// One artifact a plugin produced or is expected to produce.
+#[derive(Debug, Clone)]
+pub struct GovArtifact {
+    pub plugin: String,
+    /// `sbom`/`provenance`/`signature`/…
+    pub kind: String,
+    /// Path to the artifact, relative to the workspace root.
+    pub path: String,
+    /// Whether the artifact currently exists on disk.
+    pub exists: bool,
+}
+
+/// One finding a plugin surfaced.
+#[derive(Debug, Clone)]
+pub struct GovFinding {
+    pub plugin: String,
+    /// `info`/`warn`/`error`.
+    pub level: String,
+    pub message: String,
+}
+
+/// The plugin/governance surface for the governance view (`v`).
+#[derive(Debug, Clone, Default)]
+pub struct Governance {
+    pub plugins: Vec<GovPlugin>,
+    pub artifacts: Vec<GovArtifact>,
+    pub findings: Vec<GovFinding>,
+}
+
 /// One CI run/pipeline for the fleet-wide CI view (`i`).
 #[derive(Debug, Clone)]
 pub struct FleetCiRun {
@@ -143,6 +180,8 @@ pub trait Controller: Send {
     fn fleet_prs(&mut self) -> io::Result<Vec<FleetPr>>;
     /// Recent CI runs/pipelines across the fleet (network; fetched on `i`).
     fn fleet_ci(&mut self) -> io::Result<Vec<FleetCiRun>>;
+    /// The plugin/governance surface (read-only; fetched on entering `v`).
+    fn governance(&mut self) -> io::Result<Governance>;
 }
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -156,6 +195,7 @@ enum View {
     Tree,
     Prs,
     Ci,
+    Governance,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -171,6 +211,7 @@ enum Job {
     ChangesetPrs(String),
     FleetPrs,
     FleetCi,
+    Governance,
     Action(&'static str, ActionKind),
 }
 
@@ -193,6 +234,7 @@ enum Outcome {
     ChangesetPrs(Box<io::Result<ChangesetSummary>>),
     FleetPrs(Box<io::Result<Vec<FleetPr>>>),
     FleetCi(Box<io::Result<Vec<FleetCiRun>>>),
+    Governance(Box<io::Result<Governance>>),
     Action(&'static str, io::Result<String>),
 }
 
@@ -221,6 +263,8 @@ struct App {
     prs: Option<Vec<FleetPr>>,
     /// Fleet-wide recent CI runs; `None` until first fetched (`i` view).
     ci: Option<Vec<FleetCiRun>>,
+    /// Plugin/governance surface; `None` until first fetched (`v` view).
+    gov: Option<Governance>,
 }
 
 /// A repo matches a filter if its name or any of its groups contains it.
@@ -304,6 +348,22 @@ impl App {
             .collect()
     }
 
+    fn gov_rows(&self) -> Vec<&GovPlugin> {
+        self.gov
+            .as_ref()
+            .map(|g| {
+                g.plugins
+                    .iter()
+                    .filter(|p| {
+                        self.filter.is_empty()
+                            || p.name.contains(&self.filter)
+                            || p.phases.iter().any(|ph| ph.contains(&self.filter))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     fn rows_len(&self) -> usize {
         match self.view {
             View::Stacks => self.stack_rows().len(),
@@ -313,6 +373,7 @@ impl App {
             View::Tree => 0,
             View::Prs => self.pr_rows().len(),
             View::Ci => self.ci_rows().len(),
+            View::Governance => self.gov_rows().len(),
         }
     }
 
@@ -324,6 +385,22 @@ impl App {
             View::Ci => self.ci_rows().get(index).map(|r| r.url.clone()),
             _ => None,
         }
+    }
+
+    /// Path of the first existing artifact for the plugin under the cursor in
+    /// the governance view, for `o` (open the artifact).
+    fn cursor_path(&self) -> Option<String> {
+        if self.view != View::Governance {
+            return None;
+        }
+        let index = self.cursor.selected()?;
+        let plugin = self.gov_rows().get(index).map(|p| p.name.clone())?;
+        let gov = self.gov.as_ref()?;
+        gov.artifacts
+            .iter()
+            .find(|a| a.plugin == plugin && a.exists)
+            .or_else(|| gov.artifacts.iter().find(|a| a.plugin == plugin))
+            .map(|a| a.path.clone())
     }
 
     fn cursor_repo(&self) -> Option<String> {
@@ -399,6 +476,7 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                 }
                 Job::FleetPrs => Outcome::FleetPrs(Box::new(controller.fleet_prs())),
                 Job::FleetCi => Outcome::FleetCi(Box::new(controller.fleet_ci())),
+                Job::Governance => Outcome::Governance(Box::new(controller.governance())),
                 Job::Action(label, kind) => {
                     let result = match kind {
                         ActionKind::SyncStack(stack) => controller.sync_stack(&stack),
@@ -464,6 +542,10 @@ fn open_fleet_view(app: &mut App, jobs: &Sender<Job>, view: View) {
         View::Ci => {
             app.busy = Some("CI runs");
             let _ = jobs.send(Job::FleetCi);
+        }
+        View::Governance => {
+            app.busy = Some("governance");
+            let _ = jobs.send(Job::Governance);
         }
         _ => {}
     }
@@ -551,6 +633,8 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
         ("tree", "") => app.goto_view(View::Tree),
         ("prs", "") => open_fleet_view(app, jobs, View::Prs),
         ("ci", "") => open_fleet_view(app, jobs, View::Ci),
+        ("governance" | "plugins", "") => open_fleet_view(app, jobs, View::Governance),
+        ("help", "") => app.help = true,
         ("merge", "") => {
             app.message = match app.snapshot.merges.len() {
                 0 => "no merges in progress".to_string(),
@@ -610,6 +694,7 @@ fn event_loop(
         output: None,
         prs: None,
         ci: None,
+        gov: None,
     };
     app.cursor.select(Some(0));
     request_refresh(&mut app, jobs);
@@ -674,6 +759,22 @@ fn event_loop(
                             app.clamp_cursor();
                         }
                         Err(err) => app.message = format!("CI fetch failed: {err}"),
+                    }
+                }
+                Outcome::Governance(result) => {
+                    app.busy = None;
+                    match *result {
+                        Ok(gov) => {
+                            app.message = format!(
+                                "{} plugin(s) · {} artifact(s) · {} finding(s)",
+                                gov.plugins.len(),
+                                gov.artifacts.len(),
+                                gov.findings.len()
+                            );
+                            app.gov = Some(gov);
+                            app.clamp_cursor();
+                        }
+                        Err(err) => app.message = format!("governance fetch failed: {err}"),
                     }
                 }
                 Outcome::Action(label, result) => {
@@ -829,6 +930,7 @@ fn event_loop(
             KeyCode::Char('c') => app.goto_view(View::Changesets),
             KeyCode::Char('m') => open_fleet_view(&mut app, jobs, View::Prs),
             KeyCode::Char('i') => open_fleet_view(&mut app, jobs, View::Ci),
+            KeyCode::Char('v') => open_fleet_view(&mut app, jobs, View::Governance),
             KeyCode::Char('o') if app.view == View::Prs || app.view == View::Ci => {
                 match app.cursor_url() {
                     Some(url) if !url.is_empty() => match open_in_browser(&url) {
@@ -838,6 +940,13 @@ fn event_loop(
                     _ => app.message = "open: put the cursor on a row".to_string(),
                 }
             }
+            KeyCode::Char('o') if app.view == View::Governance => match app.cursor_path() {
+                Some(path) if !path.is_empty() => match open_in_browser(&path) {
+                    Ok(()) => app.message = format!("→ opened {path}"),
+                    Err(err) => app.message = format!("open failed: {err}"),
+                },
+                _ => app.message = "open: no artifact for this plugin".to_string(),
+            },
             KeyCode::Char('g') => {
                 if let Some(repo) = app.cursor_repo()
                     && let Some(path) = app.repo_path(&repo)
@@ -942,6 +1051,7 @@ fn view_name(app: &App, view: View) -> String {
         View::Tree => "tree".to_string(),
         View::Prs => "pr/mr".to_string(),
         View::Ci => "ci".to_string(),
+        View::Governance => "governance".to_string(),
     }
 }
 
@@ -950,19 +1060,24 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         View::Stacks => &[
             ("enter", "open fleet"),
             ("s", "sync stack"),
-            ("S", "switch"),
+            ("S", "switch stack"),
             ("p", "pin"),
             ("l", "lock"),
             ("c", "changesets"),
             ("t", "tree"),
+            ("/", "filter"),
+            (":", "cmd"),
             ("?", "help"),
         ],
         View::Fleet => &[
             ("s", "sync"),
-            ("S", "stacks"),
+            ("S", "switch stack"),
             ("p", "pin"),
             ("l", "lock"),
             ("c", "changesets"),
+            ("m", "PRs"),
+            ("i", "CI"),
+            ("v", "governance"),
             ("r", "run"),
             ("g", "goto"),
             ("t", "tree"),
@@ -984,6 +1099,8 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("n", "new"),
             ("g", "goto"),
             ("b", "back"),
+            ("/", "filter"),
+            (":", "cmd"),
         ],
         View::Tree => &[("b", "back"), ("q", "quit")],
         View::Prs => &[
@@ -998,6 +1115,13 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("o", "open in browser"),
             ("i", "refetch"),
             ("m", "PR/MRs"),
+            ("b", "back"),
+            ("/", "filter"),
+            ("?", "help"),
+        ],
+        View::Governance => &[
+            ("o", "open artifact"),
+            ("v", "refetch"),
             ("b", "back"),
             ("/", "filter"),
             ("?", "help"),
@@ -1025,6 +1149,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         View::Tree => draw_tree(frame, app, zones[1]),
         View::Prs => draw_prs(frame, app, zones[1]),
         View::Ci => draw_ci(frame, app, zones[1]),
+        View::Governance => draw_governance(frame, app, zones[1]),
     }
     draw_status(frame, app, zones[2]);
     draw_crumbs(frame, app, zones[3]);
@@ -1106,7 +1231,7 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
     };
     let area = frame.area();
     let width = area.width.min(64);
-    let height = 7;
+    let height = 7.min(area.height);
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + (area.height.saturating_sub(height)) / 2,
@@ -1236,6 +1361,27 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         }
         key_lines.push(Line::from(spans));
     }
+    key_lines.push(Line::from(vec![
+        Span::styled(
+            "<q>",
+            Style::default().fg(theme::RED).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" quit ", Style::default().fg(theme::DIM)),
+        Span::styled(
+            "<:>",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" cmd ", Style::default().fg(theme::DIM)),
+        Span::styled(
+            "<?>",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" help", Style::default().fg(theme::DIM)),
+    ]));
     frame.render_widget(Paragraph::new(Text::from(key_lines)), columns[1]);
 
     let logo = vec![
@@ -1567,6 +1713,9 @@ fn draw_stacks(frame: &mut Frame, app: &mut App, area: Rect) {
         .block(panel(format!("stacks({count})")))
         .highlight_style(cursor_style());
     frame.render_stateful_widget(list, area, &mut app.cursor);
+    if count == 0 {
+        draw_empty_hint(frame, area, "no stacks — check haw.toml");
+    }
 }
 
 fn draw_changesets(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -1593,6 +1742,9 @@ fn draw_changesets(frame: &mut Frame, app: &mut App, area: Rect) {
         .block(panel(format!("changesets({count})")))
         .highlight_style(cursor_style());
     frame.render_stateful_widget(list, area, &mut app.cursor);
+    if count == 0 {
+        draw_empty_hint(frame, area, "no changesets — :change start <id>");
+    }
 }
 
 fn pr_span(text: &str) -> Span<'static> {
@@ -1785,8 +1937,10 @@ fn draw_prs(frame: &mut Frame, app: &mut App, area: Rect) {
             area,
             if fetched {
                 "no open PR/MRs across the fleet"
-            } else {
+            } else if app.busy.is_some() {
                 "fetching PR/MRs…"
+            } else {
+                "press m to fetch PR/MRs"
             },
         );
     }
@@ -1850,11 +2004,159 @@ fn draw_ci(frame: &mut Frame, app: &mut App, area: Rect) {
             area,
             if fetched {
                 "no recent CI runs across the fleet"
-            } else {
+            } else if app.busy.is_some() {
                 "fetching CI runs…"
+            } else {
+                "press i to fetch CI runs"
             },
         );
     }
+}
+
+/// Colored ✓/warn/✗ status for a plugin, derived from its findings' worst level.
+fn gov_status_span(gov: &Governance, plugin: &str) -> Span<'static> {
+    let mut worst = 0u8;
+    for finding in gov.findings.iter().filter(|f| f.plugin == plugin) {
+        let rank = match finding.level.as_str() {
+            "error" => 2,
+            "warn" => 1,
+            _ => 0,
+        };
+        worst = worst.max(rank);
+    }
+    match worst {
+        2 => ci_span("✗ error"),
+        1 => ci_span("⏳ warn"),
+        _ => ci_span("✓ ok"),
+    }
+}
+
+/// Color for a finding level: green info, yellow warn, red error.
+fn finding_color(level: &str) -> ratatui::style::Color {
+    match level {
+        "error" => theme::RED,
+        "warn" => theme::YELLOW,
+        _ => theme::GREEN,
+    }
+}
+
+fn draw_governance(frame: &mut Frame, app: &mut App, area: Rect) {
+    let zones = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(8)])
+        .split(area);
+
+    let fetched = app.gov.is_some();
+    let empty = Governance::default();
+    let gov = app.gov.as_ref().unwrap_or(&empty);
+    let rows: Vec<Row> = app
+        .gov_rows()
+        .iter()
+        .map(|plugin| {
+            let phases = if plugin.phases.is_empty() {
+                "—".to_string()
+            } else {
+                plugin.phases.join(", ")
+            };
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    plugin.name.clone(),
+                    Style::default()
+                        .fg(theme::TEXT)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Cell::from(Span::styled(phases, Style::default().fg(theme::TEAL))),
+                Cell::from(gov_status_span(gov, &plugin.name)),
+            ])
+        })
+        .collect();
+
+    let count = rows.len();
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Min(14),
+            Constraint::Min(20),
+            Constraint::Length(9),
+        ],
+    )
+    .header(header_row(&["PLUGIN", "PHASES", "STATUS"]))
+    .block(panel(format!("governance({count})")))
+    .row_highlight_style(cursor_style())
+    .highlight_symbol(Span::styled("▍", Style::default().fg(theme::ACCENT)));
+
+    let mut state = TableState::default();
+    state.select(app.cursor.selected());
+    frame.render_stateful_widget(table, zones[0], &mut state);
+
+    if count == 0 {
+        draw_empty_hint(
+            frame,
+            zones[0],
+            if fetched {
+                "no [plugins] registered — add them to haw.toml"
+            } else if app.busy.is_some() {
+                "fetching governance…"
+            } else {
+                "press v to fetch governance"
+            },
+        );
+    }
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::styled(
+        " artifacts",
+        Style::default()
+            .fg(theme::MAUVE)
+            .add_modifier(Modifier::BOLD),
+    ));
+    if gov.artifacts.is_empty() {
+        lines.push(Line::styled("   none", Style::default().fg(theme::DIM)));
+    } else {
+        for artifact in &gov.artifacts {
+            let (mark, color) = if artifact.exists {
+                ("✓", theme::GREEN)
+            } else {
+                ("✗", theme::RED)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("   {mark} "), Style::default().fg(color)),
+                Span::styled(
+                    format!("{:<10}", artifact.kind),
+                    Style::default().fg(theme::TEAL),
+                ),
+                Span::styled(artifact.path.clone(), Style::default().fg(theme::TEXT)),
+            ]));
+        }
+    }
+    lines.push(Line::styled(
+        " findings",
+        Style::default()
+            .fg(theme::MAUVE)
+            .add_modifier(Modifier::BOLD),
+    ));
+    if gov.findings.is_empty() {
+        lines.push(Line::styled("   none", Style::default().fg(theme::DIM)));
+    } else {
+        for finding in &gov.findings {
+            let color = finding_color(&finding.level);
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("   [{}] ", finding.level),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{}: ", finding.plugin),
+                    Style::default().fg(theme::DIM),
+                ),
+                Span::styled(finding.message.clone(), Style::default().fg(theme::TEXT)),
+            ]));
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).block(panel("artifacts & findings".to_string())),
+        zones[1],
+    );
 }
 
 /// Centered dim hint inside an empty table body.
@@ -1886,6 +2188,9 @@ fn draw_tree(frame: &mut Frame, app: &mut App, area: Rect) {
         Paragraph::new(Text::from(text)).block(panel("tree".to_string())),
         area,
     );
+    if app.snapshot.tree.trim().is_empty() {
+        draw_empty_hint(frame, area, "no tree — check haw.toml");
+    }
 }
 
 /// Alternates every 4 ticks (~500ms at the 120ms poll cadence) for an input caret blink.
@@ -1968,6 +2273,16 @@ fn draw_crumbs(frame: &mut Frame, app: &App, area: Rect) {
             .bg(theme::ACCENT)
             .add_modifier(Modifier::BOLD),
     ));
+    if app.input == InputMode::None && !app.filter.is_empty() {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(
+            format!(" filter: {} — esc clears ", app.filter),
+            Style::default()
+                .fg(theme::CRUST)
+                .bg(theme::YELLOW)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
     frame.render_widget(
         Paragraph::new(Line::styled(
@@ -2002,8 +2317,8 @@ fn help_section(title: &'static str) -> Line<'static> {
 
 fn draw_help(frame: &mut Frame) {
     let area = frame.area();
-    let width = area.width.min(60);
-    let height = area.height.min(29);
+    let width = area.width.min(64);
+    let height = area.height.min(38);
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + (area.height.saturating_sub(height)) / 2,
@@ -2018,22 +2333,33 @@ fn draw_help(frame: &mut Frame) {
         Line::raw(""),
         help_section("fleet"),
         help_entry("s", "sync repo under cursor (or stack)"),
-        help_entry("S", "stacks view · p pin · l lock"),
+        help_entry("S", "switch stack · p pin · l lock"),
         help_entry("t", "tree · c changesets · r run · g goto"),
         help_entry("/", "filter by name or group — reopens with your text"),
         Line::raw(""),
         help_section("fleet-wide (network)"),
         help_entry("m", "open PR/MRs across every repo"),
         help_entry("i", "recent CI runs across every repo"),
-        help_entry("o", "open the row's PR or run in the browser"),
+        help_entry("v", "governance — plugins, artifacts, findings"),
+        help_entry("o", "open the row's PR / run / artifact"),
         Line::raw(""),
         help_section("changeset"),
         help_entry("n", "new · space select repos"),
+        help_entry("space", "toggle a repo · R with no selection = all repos"),
         help_entry("R", "request PR/MRs (cross-linked, asks y/n)"),
         help_entry("L", "land in dependency order (asks y/n)"),
+        help_entry("g", "goto the repo under the cursor"),
+        Line::raw(""),
+        help_section("collaborative merge (MERGE column)"),
+        help_entry("MERGE", "resolved/total slices of an in-progress merge"),
+        help_entry(":merge", "list merges in progress"),
+        help_entry(":merge cleanup <repo>", "seal a resolved merge (asks y/n)"),
+        help_entry(":merge abort <repo>", "abort a planned merge"),
         Line::raw(""),
         help_section("command bar"),
-        help_entry(":sync", "· :stack NAME · :run CMD · :tree · :prs · :ci"),
+        help_entry(":sync", "· :switch NAME · :run CMD · :tree"),
+        help_entry(":prs", "· :ci · :governance · :plugins · :help"),
+        help_entry(":pin", "· :lock — pin HEADs / commit the lock"),
         help_entry(":change", "[ID | start ID | land ID | request ID]"),
         Line::raw(""),
         Line::styled(" press any key to close", Style::default().fg(theme::DIM)),
@@ -2100,6 +2426,7 @@ mod tests {
             output: None,
             prs: None,
             ci: None,
+            gov: None,
         }
     }
 
@@ -2189,17 +2516,49 @@ mod tests {
     #[test]
     fn view_name_and_key_hints_cover_all_views() {
         let app = fleet_app();
-        for v in [
-            View::Stacks,
-            View::Fleet,
-            View::Changesets,
-            View::Changeset,
-            View::Tree,
-            View::Prs,
-            View::Ci,
-        ] {
+        for v in ALL_VIEWS {
             assert!(!view_name(&app, v).is_empty());
             assert!(!key_hints(v).is_empty());
+        }
+    }
+
+    const ALL_VIEWS: [View; 8] = [
+        View::Stacks,
+        View::Fleet,
+        View::Changesets,
+        View::Changeset,
+        View::Tree,
+        View::Prs,
+        View::Ci,
+        View::Governance,
+    ];
+
+    /// Every key advertised in `key_hints` must be one the event loop actually
+    /// handles for that view — the hint bar must never lie.
+    #[test]
+    fn every_hinted_key_is_handled() {
+        for view in ALL_VIEWS {
+            for (key, label) in key_hints(view) {
+                assert!(
+                    key_is_handled(view, key),
+                    "view {view:?} advertises <{key}> ({label}) but never handles it"
+                );
+            }
+        }
+    }
+
+    /// Whether a hinted key resolves to a real handler for the given view.
+    fn key_is_handled(view: View, key: &str) -> bool {
+        match key {
+            "enter" | "space" | "?" | "/" | ":" | "b" | "q" | "j" | "k" => true,
+            "t" | "c" | "m" | "i" | "v" | "r" | "g" => true,
+            "s" => matches!(view, View::Fleet | View::Stacks),
+            "S" => true,
+            "p" | "l" => matches!(view, View::Fleet | View::Stacks),
+            "n" => matches!(view, View::Changesets | View::Changeset),
+            "R" | "L" => view == View::Changeset,
+            "o" => matches!(view, View::Prs | View::Ci | View::Governance),
+            _ => false,
         }
     }
 
@@ -2405,5 +2764,101 @@ mod tests {
         let (tx, _rx) = channel();
         run_command_bar(&mut app, &tx, "frobnicate");
         assert!(app.message.contains("unknown command"));
+    }
+
+    fn gov() -> Governance {
+        Governance {
+            plugins: vec![
+                GovPlugin {
+                    name: "haw-compliance".to_string(),
+                    phases: vec!["post-build".to_string()],
+                },
+                GovPlugin {
+                    name: "haw-git-gate".to_string(),
+                    phases: vec!["pre-request".to_string()],
+                },
+            ],
+            artifacts: vec![GovArtifact {
+                plugin: "haw-compliance".to_string(),
+                kind: "sbom".to_string(),
+                path: ".haw/sbom/app.cdx.json".to_string(),
+                exists: true,
+            }],
+            findings: vec![GovFinding {
+                plugin: "haw-git-gate".to_string(),
+                level: "warn".to_string(),
+                message: "no signer on PATH".to_string(),
+            }],
+        }
+    }
+
+    #[test]
+    fn gov_rows_len_and_filter() {
+        let mut app = fleet_app();
+        app.view = View::Governance;
+        assert_eq!(app.rows_len(), 0);
+        app.gov = Some(gov());
+        assert_eq!(app.rows_len(), 2);
+        app.filter = "compliance".to_string();
+        assert_eq!(app.rows_len(), 1);
+        app.filter = "pre-request".to_string();
+        assert_eq!(app.rows_len(), 1);
+        app.filter = "zzz".to_string();
+        assert_eq!(app.rows_len(), 0);
+    }
+
+    #[test]
+    fn gov_cursor_path_finds_existing_artifact() {
+        let mut app = fleet_app();
+        app.view = View::Governance;
+        app.gov = Some(gov());
+        app.cursor.select(Some(0));
+        assert_eq!(app.cursor_path().as_deref(), Some(".haw/sbom/app.cdx.json"));
+        app.cursor.select(Some(1));
+        assert_eq!(app.cursor_path(), None);
+    }
+
+    #[test]
+    fn gov_status_reflects_worst_finding() {
+        let g = gov();
+        assert_eq!(
+            gov_status_span(&g, "haw-git-gate").content.to_string(),
+            "⏳ warn"
+        );
+        assert_eq!(
+            gov_status_span(&g, "haw-compliance").content.to_string(),
+            "✓ ok"
+        );
+    }
+
+    #[test]
+    fn governance_command_opens_the_view() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        run_command_bar(&mut app, &tx, "governance");
+        assert_eq!(app.view, View::Governance);
+        assert!(matches!(rx.try_recv(), Ok(Job::Governance)));
+        app.busy = None;
+        app.go_back();
+        run_command_bar(&mut app, &tx, "plugins");
+        assert_eq!(app.view, View::Governance);
+    }
+
+    #[test]
+    fn open_fleet_view_skips_governance_fetch_while_busy() {
+        let mut app = fleet_app();
+        app.busy = Some("sync");
+        let (tx, rx) = channel();
+        open_fleet_view(&mut app, &tx, View::Governance);
+        assert_eq!(app.view, View::Governance);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn help_command_opens_the_overlay() {
+        let mut app = fleet_app();
+        let (tx, _rx) = channel();
+        run_command_bar(&mut app, &tx, "help");
+        assert!(app.help);
     }
 }

@@ -2474,6 +2474,52 @@ impl haw_tui::Controller for CliController {
         Ok(out)
     }
 
+    fn governance(&mut self) -> std::io::Result<haw_tui::Governance> {
+        let ws = self.workspace()?;
+        let root = &ws.root;
+        let plugins: Vec<haw_tui::GovPlugin> = ws
+            .manifest
+            .plugins
+            .iter()
+            .map(|(name, phases)| haw_tui::GovPlugin {
+                name: name.clone(),
+                phases: phases.clone(),
+            })
+            .collect();
+
+        let mut artifacts = Vec::new();
+        let state_dir = ws.state_dir();
+        for (kind, sub) in [("sbom", "sbom"), ("provenance", "provenance")] {
+            let dir = state_dir.join(sub);
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let rel = path
+                    .strip_prefix(root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .into_owned();
+                artifacts.push(haw_tui::GovArtifact {
+                    plugin: String::new(),
+                    kind: kind.to_string(),
+                    path: rel,
+                    exists: true,
+                });
+            }
+        }
+
+        Ok(haw_tui::Governance {
+            plugins,
+            artifacts,
+            findings: Vec::new(),
+        })
+    }
+
     fn merge_abort(&mut self, repo: &str) -> std::io::Result<String> {
         let ws = self.workspace()?;
         let (name, path) = merge_repo(&ws, Some(repo)).map_err(std::io::Error::other)?;
@@ -2880,6 +2926,51 @@ impl haw_tui::Controller for DemoController {
             run("sensor-drv", "nightly", "main", "schedule", "cancelled"),
             run("edge-daemon", "build", "main", "push", "passed"),
         ])
+    }
+
+    fn governance(&mut self) -> std::io::Result<haw_tui::Governance> {
+        let plugin = |name: &str, phases: &[&str]| haw_tui::GovPlugin {
+            name: name.to_string(),
+            phases: phases.iter().map(|p| p.to_string()).collect(),
+        };
+        let artifact = |plugin: &str, kind: &str, path: &str, exists: bool| haw_tui::GovArtifact {
+            plugin: plugin.to_string(),
+            kind: kind.to_string(),
+            path: path.to_string(),
+            exists,
+        };
+        let finding = |plugin: &str, level: &str, message: &str| haw_tui::GovFinding {
+            plugin: plugin.to_string(),
+            level: level.to_string(),
+            message: message.to_string(),
+        };
+        Ok(haw_tui::Governance {
+            plugins: vec![
+                plugin("haw-compliance", &["post-build"]),
+                plugin("haw-artifact", &["post-land"]),
+                plugin("haw-git-gate", &["pre-request"]),
+            ],
+            artifacts: vec![
+                artifact("haw-compliance", "sbom", ".haw/sbom/kernel.cdx.json", true),
+                artifact("haw-compliance", "sbom", ".haw/sbom/kernel.spdx.json", true),
+                artifact(
+                    "haw-artifact",
+                    "provenance",
+                    ".haw/provenance/kernel.intoto.jsonl",
+                    true,
+                ),
+                artifact(
+                    "haw-artifact",
+                    "signature",
+                    ".haw/provenance/kernel.sig",
+                    false,
+                ),
+            ],
+            findings: vec![
+                finding("haw-compliance", "info", "SBOM generated for 4 repos"),
+                finding("haw-git-gate", "warn", "no signer on PATH"),
+            ],
+        })
     }
 }
 

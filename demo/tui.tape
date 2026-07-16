@@ -62,6 +62,14 @@ Sleep 1s
 Type "b"
 Sleep 800ms
 
+# Governance — registered plugins, SBOM/provenance artifacts, findings.
+Type "v"
+Sleep 2.5s
+Type "j"
+Sleep 800ms
+Type "b"
+Sleep 800ms
+
 # Changesets — drill into one to show its PR/CI cells per repo.
 Type "c"
 Sleep 2s

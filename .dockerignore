@@ -1,0 +1,32 @@
+# Keep the Docker build context small and reproducible. Everything the build
+# doesn't need is excluded; the builder only requires the workspace sources +
+# Cargo.toml/Cargo.lock.
+
+# Rust build output (huge; rebuilt inside the image)
+target/
+**/target/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Rendered docs site + demo media (not needed to compile)
+site/
+docs/book/
+book/
+demo/*.gif
+media/
+
+# Release/dist artifacts
+dist/
+
+# CI / editor / OS cruft
+.github/
+.vscode/
+.idea/
+**/.DS_Store
+
+# The image build files themselves
+Dockerfile
+.dockerignore
