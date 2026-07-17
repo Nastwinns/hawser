@@ -1,25 +1,32 @@
 # hawser
 
-**Compose a software stack from many Git repos, pin it to a lockfile, and drive every
-cross-repo PR, review, and CI run from one keyboard cockpit. One binary. In Rust.**
+**Pin a stack of Git repos to a lockfile — so a teammate, a CI runner, or an
+auditor checks out the _identical_ tree, everywhere. One binary. In Rust.**
 
-`haw` is the layer above git: the manifest, the lockfile, the fleet-wide build/test/CI,
-the cross-forge change flow, and the audit trail. It assembles a software stack out of
-many independent Git repositories — without submodules, without detached HEADs, without
-a Python runtime. A declarative manifest (`haw.toml`) describes **stacks** and the
-**repos** they compose; a committed lockfile (`haw.lock`) pins every repo to an exact
-revision, so any teammate or CI machine reproduces the identical tree.
+`haw` composes many independent Git repos into one reproducible stack. A declarative
+manifest (`haw.toml`) describes **stacks** and the **repos** they compose; a committed
+lockfile (`haw.lock`) pins every repo to an exact revision — so any teammate or CI
+machine rebuilds the byte-identical tree. No submodules, no detached HEADs, no Python
+runtime — one static binary.
 
-This is the reference documentation for **hawser 0.1.3**. New to the project? Start with
+```sh
+haw init haw.toml   # declare the repos
+haw sync            # clone every repo, write haw.lock (exact SHAs)
+haw verify          # CI gate: exit 3 if the tree drifts from the lock
+```
+
+This is the reference documentation for **hawser 0.1.4**. New to the project? Start with
 the [Learn course](learn/00-what-is-hawser.md) for a guided, hands-on path; use the pages below as
 reference.
 
-## Five capabilities, one binary
+## Beyond the core
 
-- **Compose.** `haw.toml` + `haw.lock` pin a reproducible tree. Stacks and overlays
-  compose repos into named variants. Built to scale: shallow (`--depth`) and partial
-  (`--filter=blob:none`) clone, plus a shared object store via git `alternates`
-  (`--shared`) — no symlinks, so it runs on Windows.
+Reproducible **compose** (above) is the foundation. Built on it, four more capabilities —
+one binary:
+
+- **Compose, at scale.** Stacks and overlays compose repos into named variants. Shallow
+  (`--depth`) and partial (`--filter=blob:none`) clone, plus a shared object store via
+  git `alternates` (`--shared`) — no symlinks, so it runs on Windows.
 - **Orchestrate.** Run `build`, `test`, or any command across the whole fleet in
   parallel (`-j N`); `haw grep` fans out across every repo; `haw verify` is a drift gate
   that exits 3 for CI.
