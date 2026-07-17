@@ -141,6 +141,45 @@ Swap QEMU for **Renode** with one line — `test = "renode --console -e 'include
 
 ---
 
+## More validated embedded fleets ✅ *executed*
+
+Beyond the single-repo cross-compile/QEMU recipes above, the
+[`examples/embedded-real/`](../examples/embedded-real/) manifest composes **five
+real public embedded/safety-critical upstreams** into one fleet and builds them
+all with a single `haw build -j4`. Every command in that manifest was actually
+run and seen to succeed on a clang/cmake/make host:
+
+| Repo | Domain | Result |
+| --- | --- | --- |
+| CoreMark | benchmark | builds **and runs** the benchmark |
+| cJSON | data | builds + `ctest` 19/19 |
+| Monocypher | crypto | builds `libmonocypher.a` |
+| libcanard | protocol | C11 compile-check passes |
+| Mbed-TLS | security | builds `libmbedcrypto/tls/x509.a` (needs submodules) |
+
+Real captured output (`haw test` over the fleet, exit 0):
+
+```console
+── coremark ──
+CoreMark 1.0 : 26021.337497 / Apple LLVM 17.0.0 (clang-1700.0.13.5) -O2 -DPERFORMANCE_RUN=1   / Heap
+COREMARK_RAN
+── cjson ──
+100% tests passed out of 19
+── monocypher ──
+MONOCYPHER_LIB_OK
+test ran in 3/3 repos
+```
+
+Mbed-TLS declares its `framework/` and `tf-psa-crypto/` as git submodules;
+`haw sync --recurse-submodules` initializes them (fault-tolerant — a broken
+submodule is skipped with a warning, not fatal). The same cJSON checkout also
+cross-compiles to a bare-metal **Cortex-M4** object via `haw-arm-emu`
+(`architecture: armv7e-m`), so one fleet spans a host build and a cross build.
+Full per-repo table, prerequisites, and the cross recipe are in the
+[example README](../examples/embedded-real/README.md).
+
+---
+
 ## Patterns for licensed / proprietary toolchains ⚠️ *not run here*
 
 These are the **exact wiring shapes** for commercial automotive/safety tools. We can't run

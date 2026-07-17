@@ -13,6 +13,7 @@ the loop maps onto each domain.
 | Example | Demonstrates | Runnable? | Key commands |
 | --- | --- | --- | --- |
 | [`quickstart/`](quickstart/) | Full loop on real public repos: shared repo across two stacks, groups, changesets | **Yes — clones over HTTPS, no auth** | `haw sync --stack site`, `haw status`, `haw run '…'`, `haw change start DEMO --repos …` |
+| [`embedded-real/`](embedded-real/) | **Real embedded fleet:** five genuine public upstreams (CoreMark, cJSON, Monocypher, libcanard, Mbed-TLS) built + tested with one `haw build`/`haw test` — every command actually executed | **Yes — clones over HTTPS, no auth** | `haw sync`, `haw build -j4`, `haw test` |
 | [`microservices/`](microservices/) | **Backend** domain: a feature across four services + a shared proto repo; heterogeneous `build`/`test`; land in `deps` order | Reading | `haw tree --manifest …`, `haw change start FEAT --repos …`, `haw change land` |
 | [`ml-platform/`](ml-platform/) | **ML / data** domain: model + data-pipeline + serving infra pinned as one reproducible baseline; two stacks; an overlay | Reading | `haw tree --manifest …`, `haw sync --overlay bleeding-edge`, `haw evidence` |
 | [`automotive/`](automotive/) | **Embedded** domain: AUTOSAR ARXML + shared HAL + ECU apps; toolchain-agnostic builds; **MISRA gate** as a `pre-request` hook | Reading | `haw tree --manifest …`, `haw misra`, `haw change request` |

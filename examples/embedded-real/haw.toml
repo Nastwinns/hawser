@@ -1,0 +1,84 @@
+# embedded-real — a fleet of REAL embedded / safety-critical upstreams.
+#
+# Unlike the themed reading manifests, every repo here is a genuine public
+# GitHub project that `haw sync` clones anonymously over HTTPS, and every
+# `build =` / `test =` command below was actually executed with haw and seen to
+# succeed (host: Apple clang / cmake / make). See README.md for captured output.
+#
+#   haw sync             # clones all five upstreams (needs network)
+#   haw build -j4        # builds all five in parallel
+#   haw test             # runs the three that ship quick tests
+#
+# Grouped by domain: benchmark / data / crypto / protocol / security.
+
+[remote.gh]
+url = "https://github.com"
+forge = "github"
+
+# --- benchmark ---------------------------------------------------------------
+# CoreMark, the iconic embedded CPU benchmark. `make` compiles AND runs it,
+# writing a CoreMark score + a CRC self-check to run1.log. ITERATIONS is bumped
+# so the run lasts >=10 s (EEMBC's validity rule) on a fast host; the test step
+# asserts "Correct operation validated" so a wrong result fails haw test.
+[repo.coremark]
+remote = "gh"
+repo = "eembc/coremark.git"
+rev = "main"
+groups = ["benchmark"]
+build = "make ITERATIONS=600000"
+test = "grep -q 'Correct operation validated' run1.log && grep 'CoreMark 1.0' run1.log && echo COREMARK_RAN"
+
+# --- data --------------------------------------------------------------------
+# cJSON, the ubiquitous embedded JSON parser. Full CMake build + its ctest suite.
+[repo.cjson]
+remote = "gh"
+repo = "DaveGamble/cJSON.git"
+rev = "master"
+groups = ["data"]
+build = "cmake -S . -B build -DENABLE_CJSON_TEST=On && cmake --build build -j4"
+test = "ctest --test-dir build --output-on-failure"
+
+# --- crypto ------------------------------------------------------------------
+# Monocypher, a compact embedded crypto library. Builds the static archive
+# (its `make test` needs libsodium to generate test vectors, which we don't have
+# offline, so this is a build-only recipe; the test step just asserts the .a).
+[repo.monocypher]
+remote = "gh"
+repo = "LoupVaillant/Monocypher.git"
+rev = "master"
+groups = ["crypto"]
+build = "make static-library"
+test = "test -f lib/libmonocypher.a && echo MONOCYPHER_LIB_OK"
+
+# --- protocol ----------------------------------------------------------------
+# libcanard, OpenCyphal's UAVCAN/DroneCAN CAN stack (aerospace/automotive).
+# Compile-checked with C11 (-fsyntax-only); its cavl2 helper header lives under
+# lib/cavl2, so that dir is on the include path.
+[repo.libcanard]
+remote = "gh"
+repo = "OpenCyphal/libcanard.git"
+rev = "master"
+groups = ["protocol"]
+build = "cc -std=c11 -Ilibcanard -Ilib/cavl2 -fsyntax-only libcanard/canard.c && echo LIBCANARD_SYNTAX_OK"
+
+# --- security ----------------------------------------------------------------
+# Mbed-TLS, the embedded TLS stack. Requires its `framework/` and
+# `tf-psa-crypto/` git submodules (run `haw sync --recurse-submodules`) plus the
+# Python codegen deps jinja2 + jsonschema. Builds the libraries, skips the huge
+# test suite. Point -DPython3_EXECUTABLE at an interpreter that has those deps
+# (e.g. a venv). Produces libmbedcrypto.a / libmbedtls.a / libmbedx509.a.
+[repo.mbedtls]
+remote = "gh"
+repo = "Mbed-TLS/mbedtls.git"
+rev = "development"
+groups = ["security"]
+build = "cmake -S . -B build -DENABLE_TESTING=Off && cmake --build build -j4"
+
+[stack.fleet]
+repos = ["coremark", "cjson", "monocypher", "libcanard", "mbedtls"]
+description = "Five real embedded/safety-critical upstreams: benchmark, data, crypto, protocol, security."
+
+# Just the pieces with fast, self-contained tests (no submodules/python needed).
+[stack.quick]
+repos = ["coremark", "cjson", "monocypher", "libcanard"]
+description = "The four repos that build+test with only host clang/cmake/make."
