@@ -532,7 +532,7 @@ Refuses to overwrite a non-empty target directory.")]
         /// Skeleton language.
         #[arg(long, value_name = "rust|python|go|shell")]
         lang: PluginLang,
-        /// Target directory (default: ./haw-<name>).
+        /// Target directory (default: `./haw-<name>`).
         #[arg(long)]
         dir: Option<PathBuf>,
     },
