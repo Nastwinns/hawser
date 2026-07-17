@@ -5,8 +5,13 @@
 
 # hawser
 
-**Pin a stack of Git repos to a lockfile — so a teammate, a CI runner, or an
-auditor checks out the _identical_ tree, everywhere. One binary. In Rust.**
+**Your product lives in 10 repos and nobody knows which commits go together.
+`haw` pins them all to one lockfile — so you, your CI, and your teammate check
+out the _identical_ tree, every time. One binary. In Rust.**
+
+```sh
+cargo install hawser        # or: brew, scoop, prebuilt binaries — see Install
+```
 
 ### 🌐 [**hawser.dev — website & interactive course →**](https://nastwinns.github.io/hawser/)
 
