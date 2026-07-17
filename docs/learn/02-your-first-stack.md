@@ -142,19 +142,25 @@ automatically (it honors `NO_COLOR`), so it's script-friendly by default.
 
 ## 🔒 4. Read the lockfile
 
-Open `haw.lock` in your editor. You'll see each repo pinned to a **full 40-character
-SHA** — not the branch name, the exact commit:
+Open `haw.lock` in your editor. Each repo is pinned to a **full 40-character SHA** in its
+`rev` field — the exact commit, not the branch name — while `source-rev` records what you
+*asked* for:
 
 ```toml
 # excerpt — your SHAs will differ
 [[repo]]
 name = "hello-world"
-rev  = "master"
-locked = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+url = "https://github.com/octocat/Hello-World.git"
+path = "hello-world"
+rev = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"   # the resolved commit — this is the pin
+source-rev = "master"                               # what you declared in haw.toml
+branch = "master"
+groups = ["core"]
 ```
 
 This is the whole reproducibility trick. Your manifest said "master" (a moving target),
-but the lock froze the *exact* commit master pointed at when you synced. Commit
+but the lock froze the *exact* commit master pointed at when you synced — that's the SHA
+now in `rev`. Commit
 `haw.lock` alongside `haw.toml`, and anyone who clones and runs `haw sync` gets
 **precisely these commits** — not whatever `master` happens to be today.
 
@@ -193,12 +199,14 @@ haw status
 ```
 
 ```console
-REPO          BRANCH   HEAD       DIRTY  DRIFT
-hello-world   master   553c2077   -      YES
-spoon-knife   main     d0dd1f61   -      -
+REPO          BRANCH       HEAD       DIRTY  DRIFT
+hello-world   (detached)   553c2077   -      YES
+spoon-knife   main         d0dd1f61   -      -
 ```
 
-There it is — **DRIFT: YES** on `hello-world`. Its HEAD no longer matches the locked SHA.
+There it is — **DRIFT: YES** on `hello-world`. Checking out a specific commit also
+detaches HEAD (hence `(detached)` in the BRANCH column), and its HEAD no longer matches
+the locked SHA.
 `haw status` flagged it, but for CI you want a command that *fails* on drift. That's
 `verify`:
 
@@ -214,11 +222,14 @@ haw verify; echo "exit code: $?"
 ```
 
 ```console
+  ✗ hello-world  drift (head != lock)
+verify failed: 1 repo(s) diverge from haw.lock
 exit code: 3
 ```
 
 That exit `3` is what a CI pipeline keys on: "the tree drifted from the lock — stop the
-build." (When everything matches, `verify` exits `0`.)
+build." (When everything matches, `verify` prints `verified: tree matches haw.lock` and
+exits `0`.)
 
 <img class="meme" src="https://media.giphy.com/media/IPjIcwdxtrNBIpL8f3/giphy.gif" alt="Wide-eyed, shocked reaction">
 
