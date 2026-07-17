@@ -20,8 +20,8 @@
 //!   traces are not served via cross-host redirects, the token header is never
 //!   replayed onto a foreign host through this policy.
 //!
-//! * **Unbounded response bodies (M1).** [`read_capped`] / [`json_capped`]
-//!   reject bodies whose `Content-Length` exceeds [`MAX_RESPONSE_BYTES`] and,
+//! * **Unbounded response bodies (M1).** `read_capped` / `json_capped`
+//!   reject bodies whose `Content-Length` exceeds `MAX_RESPONSE_BYTES` and,
 //!   when the header is absent (chunked/streaming), read through a limited
 //!   reader so a hostile endpoint cannot exhaust memory.
 

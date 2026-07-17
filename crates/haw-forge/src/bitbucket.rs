@@ -44,7 +44,7 @@ pub struct Bitbucket {
     http: Client,
 }
 
-/// Redacting `Debug`: delegates to [`Auth`]'s redacting impl (no raw token).
+/// Redacting `Debug`: delegates to `Auth`'s redacting impl (no raw token).
 impl std::fmt::Debug for Bitbucket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Bitbucket")
