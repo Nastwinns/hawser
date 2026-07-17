@@ -14,10 +14,14 @@
 - [Plugins and extending](learn/06-plugins-and-extending.md)
 - [Going to production](learn/07-going-to-production.md)
 
+# Examples
+
+- [Examples index](EXAMPLES.md)
+- [Integration recipes (embedded / AUTOSAR / QEMU)](INTEGRATION.md)
+
 # Reference
 
 - [Domains](DOMAINS.md)
-- [Integration recipes (embedded / AUTOSAR / QEMU)](INTEGRATION.md)
 - [Architecture](ARCHITECTURE.md)
 - [CLI design & TUI keymap](CLI-DESIGN.md)
 - [Extending](EXTENDING.md)
