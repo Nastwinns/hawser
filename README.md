@@ -5,8 +5,8 @@
 
 # hawser
 
-**Compose a software stack from many Git repos, pin it to a lockfile, and drive every
-cross-repo PR, review, and CI run from one keyboard cockpit. One binary. In Rust.**
+**Pin a stack of Git repos to a lockfile — so a teammate, a CI runner, or an
+auditor checks out the _identical_ tree, everywhere. One binary. In Rust.**
 
 ### 🌐 [**hawser.dev — website & interactive course →**](https://nastwinns.github.io/hawser/)
 
@@ -30,19 +30,27 @@ to productive, and you can even try the cockpit in your browser — no install r
 
 ---
 
-**`haw` is a multi-repo platform for teams that ship a product spread across many Git
-repositories.** It composes them into a reproducible stack, orchestrates work across the
-whole fleet, drives cross-repo PRs on GitHub, GitLab, and Bitbucket, and ships with supply-chain
-governance built in — all from one static binary and a k9s-style cockpit.
+**`haw` composes many Git repos into one reproducible stack.** A manifest
+(`haw.toml`) declares the repos; a lockfile (`haw.lock`) pins each to an exact SHA.
+Anyone — a teammate, a CI runner, an auditor — rebuilds the byte-identical tree.
 
-It's not a git wrapper. It's the layer above git: the manifest, the lockfile, the
-fleet-wide build/test/CI, the cross-forge change flow, and the audit trail.
+```sh
+haw init haw.toml   # declare the repos
+haw sync            # clone every repo, write haw.lock (exact SHAs)
+haw verify          # CI gate: exit 3 if the tree drifts from the lock
+```
+
+No submodules. No detached HEADs. No Python. One static binary.
+
+<sub>`haw` does more — fleet-wide `run`/`test`, cross-forge changesets, a k9s-style
+cockpit, and supply-chain evidence. **[See all capabilities →](#what-haw-does)**</sub>
 
 ![haw TUI cockpit](demo/haw-tui.gif)
 
 ## What haw does
 
-Five capabilities, one binary — each solving a slice of the multi-repo problem:
+Reproducible **compose** is the core (below). Built on it, four more capabilities —
+one binary, each solving a slice of the multi-repo problem:
 
 ### 🧱 Compose — a reproducible stack from many repos
 
