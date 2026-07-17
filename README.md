@@ -16,7 +16,8 @@ cargo install hawser        # or: brew, scoop, prebuilt binaries — see Install
 <img src="demo/hawser-promo.gif" alt="haw composes 5 real embedded upstreams into one reproducible, lockfile-pinned stack" width="820">
 
 <sub>Five real embedded upstreams — CoreMark · cJSON · Monocypher · libcanard · Mbed-TLS —
-composed, pinned, built &amp; verified. <a href="https://nastwinns.github.io/hawser/">Full demo on the site →</a></sub>
+declared, pinned to real SHAs, built &amp; tested (real output), then plugins and the
+cockpit. <a href="https://nastwinns.github.io/hawser/">Full demo on the site →</a></sub>
 
 ### 🌐 [**hawser.dev — website & interactive course →**](https://nastwinns.github.io/hawser/)
 

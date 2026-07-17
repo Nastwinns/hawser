@@ -6,7 +6,11 @@ import { Problem } from "./scenes/Problem";
 import { Manifest } from "./scenes/Manifest";
 import { Sync } from "./scenes/Sync";
 import { Build } from "./scenes/Build";
+import { Test } from "./scenes/Test";
 import { Verify } from "./scenes/Verify";
+import { Plugins } from "./scenes/Plugins";
+import { PluginNew } from "./scenes/PluginNew";
+import { Cockpit } from "./scenes/Cockpit";
 import { Payoff } from "./scenes/Payoff";
 
 export const DURATIONS = {
@@ -14,38 +18,40 @@ export const DURATIONS = {
   problem: 150,
   manifest: 150,
   sync: 150,
-  build: 180,
-  verify: 120,
+  build: 165,
+  test: 170,
+  verify: 105,
+  plugins: 175,
+  pluginNew: 140,
+  cockpit: 165,
   payoff: 150,
 };
 
 export const TOTAL = Object.values(DURATIONS).reduce((a, b) => a + b, 0);
 
+const scenes: [keyof typeof DURATIONS, React.FC][] = [
+  ["hook", Hook],
+  ["problem", Problem],
+  ["manifest", Manifest],
+  ["sync", Sync],
+  ["build", Build],
+  ["test", Test],
+  ["verify", Verify],
+  ["plugins", Plugins],
+  ["pluginNew", PluginNew],
+  ["cockpit", Cockpit],
+  ["payoff", Payoff],
+];
+
 export const Promo: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: theme.bg }}>
       <Series>
-        <Series.Sequence durationInFrames={DURATIONS.hook}>
-          <Hook />
-        </Series.Sequence>
-        <Series.Sequence durationInFrames={DURATIONS.problem}>
-          <Problem />
-        </Series.Sequence>
-        <Series.Sequence durationInFrames={DURATIONS.manifest}>
-          <Manifest />
-        </Series.Sequence>
-        <Series.Sequence durationInFrames={DURATIONS.sync}>
-          <Sync />
-        </Series.Sequence>
-        <Series.Sequence durationInFrames={DURATIONS.build}>
-          <Build />
-        </Series.Sequence>
-        <Series.Sequence durationInFrames={DURATIONS.verify}>
-          <Verify />
-        </Series.Sequence>
-        <Series.Sequence durationInFrames={DURATIONS.payoff}>
-          <Payoff />
-        </Series.Sequence>
+        {scenes.map(([key, Comp]) => (
+          <Series.Sequence key={key} durationInFrames={DURATIONS[key]}>
+            <Comp />
+          </Series.Sequence>
+        ))}
       </Series>
     </AbsoluteFill>
   );

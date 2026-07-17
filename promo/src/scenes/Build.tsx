@@ -98,13 +98,13 @@ export const Build: React.FC = () => {
           <div
             style={{
               marginTop: 18,
-              fontSize: 22,
-              color: theme.blue,
+              fontSize: 24,
+              color: theme.green,
+              fontWeight: 700,
               opacity: fadeIn(frame, 118),
             }}
           >
-            coremark → <span style={{ color: theme.text }}>CoreMark 1.0 : 26021.34</span>
-            <span style={{ color: theme.green }}>  ·  cJSON 100% tests passed (19)</span>
+            build ran in 5/5 repos
           </div>
         </div>
       </Terminal>

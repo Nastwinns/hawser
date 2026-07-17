@@ -22,7 +22,7 @@ export const fleet = [
     name: "coremark",
     repo: "eembc/coremark",
     group: "benchmark",
-    sha: "d5fad6b",
+    sha: "1f483d5",
     result: "CoreMark 1.0 : 26021.34",
     ok: "COREMARK_RAN",
     color: "#58a6ff",
@@ -31,7 +31,7 @@ export const fleet = [
     name: "cjson",
     repo: "DaveGamble/cJSON",
     group: "data",
-    sha: "12c4bf1",
+    sha: "fb16e5c",
     result: "100% tests passed (19)",
     ok: "ctest OK",
     color: "#3fb950",
@@ -40,7 +40,7 @@ export const fleet = [
     name: "monocypher",
     repo: "LoupVaillant/Monocypher",
     group: "crypto",
-    sha: "a1b9f4e",
+    sha: "ab2b16d",
     result: "libmonocypher.a",
     ok: "MONOCYPHER_LIB_OK",
     color: "#a371f7",
@@ -49,7 +49,7 @@ export const fleet = [
     name: "libcanard",
     repo: "OpenCyphal/libcanard",
     group: "protocol",
-    sha: "7e0d3c2",
+    sha: "1206003",
     result: "C11 -fsyntax-only",
     ok: "LIBCANARD_SYNTAX_OK",
     color: "#d29922",
@@ -58,9 +58,23 @@ export const fleet = [
     name: "mbedtls",
     repo: "Mbed-TLS/mbedtls",
     group: "security",
-    sha: "4f2b8a0",
+    sha: "c848d22",
     result: "libmbedcrypto.a",
     ok: "libmbed*.a",
     color: "#f85149",
   },
 ];
+
+// Real `haw plugins list` catalog (captured from the 0.1.7 binary).
+export const plugins = [
+  { name: "artifact", desc: "SLSA/in-toto provenance + cosign/minisign signing" },
+  { name: "aspice", desc: "ASPICE/qualification traceability from the pinned fleet" },
+  { name: "compliance", desc: "SBOM (CycloneDX + SPDX) generation" },
+  { name: "git-gate", desc: "secret / hygiene pre-commit & lifecycle gate" },
+  { name: "jira", desc: "link a changeset to a Jira issue, transition on land" },
+  { name: "misra", desc: "MISRA C static-analysis gate (cppcheck)" },
+];
+
+// Real cargo command printed by `haw plugins install aspice --dry-run`.
+export const installCmd =
+  "cargo install --locked --git https://github.com/Nastwinns/hawser --tag v0.1.7 haw-aspice";
