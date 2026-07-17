@@ -3,6 +3,19 @@
 **Pin a stack of Git repos to a lockfile — so a teammate, a CI runner, or an
 auditor checks out the _identical_ tree, everywhere. One binary. In Rust.**
 
+<video
+  src="assets/hawser-promo.mp4"
+  poster="assets/hawser-promo-poster.png"
+  autoplay
+  loop
+  muted
+  playsinline
+  controls
+  style="width:100%;max-width:960px;border-radius:12px;margin:1.2rem 0;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+  Your browser does not support the video tag.
+  <a href="assets/hawser-promo.mp4">Watch the demo</a>.
+</video>
+
 `haw` composes many independent Git repos into one reproducible stack. A declarative
 manifest (`haw.toml`) describes **stacks** and the **repos** they compose; a committed
 lockfile (`haw.lock`) pins every repo to an exact revision — so any teammate or CI
