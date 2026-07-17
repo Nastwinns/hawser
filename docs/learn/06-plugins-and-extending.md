@@ -113,6 +113,10 @@ haw-mycheck: inspected 2 repo(s) in /path/to/my-first-stack
 
 That's it — you extended the CLI, no fork, no rebuild of `haw`.
 
+<img class="meme" src="https://media.giphy.com/media/P0ATYBTX2Vr1eYnyeB/giphy.gif" alt="Mind blown — head exploding reaction">
+
+*Wait, my 20-line Python script is now a first-class `haw` command?*
+
 ## 📜 4. The contract: context in, report out
 
 Every plugin speaks the same tiny protocol. Understand these two shapes and you can write

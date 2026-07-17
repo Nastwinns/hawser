@@ -244,3 +244,27 @@
 }
 
 .your-turn a { color: var(--hw-teal); }
+
+/* ------------------------------------------------------------
+   Reaction memes — small, playful GIFs at comedic beats.
+   Hotlinked from Giphy (external). Used as:
+   <img class="meme" src="…giphy.gif" alt="…">
+   followed by a one-line italic caption.
+   Smaller and a touch more playful than .chapter-illus.
+   ------------------------------------------------------------ */
+.content img.meme {
+  display: block;
+  margin: 1.5em auto 0.4em auto;
+  max-width: 300px;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(179, 156, 255, 0.28);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* Tighten the italic caption that follows a meme. */
+.content img.meme + p > em:only-child {
+  margin-top: 0;
+  color: #b7bfd0;
+}

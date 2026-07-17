@@ -8,16 +8,23 @@
 **Compose a software stack from many Git repos, pin it to a lockfile, and drive every
 cross-repo PR, review, and CI run from one keyboard cockpit. One binary. In Rust.**
 
+### 🌐 [**hawser.dev — website & interactive course →**](https://nastwinns.github.io/hawser/)
+
+**New here? Start there.** A friendly, illustrated, step-by-step course takes you from zero
+to productive, and you can even try the cockpit in your browser — no install required.
+
+[![website](https://img.shields.io/badge/website%20%26%20course-nastwinns.github.io%2Fhawser-8A2BE2?logo=readthedocs&logoColor=white)](https://nastwinns.github.io/hawser/)
 [![crates.io](https://img.shields.io/crates/v/hawser)](https://crates.io/crates/hawser)
 [![CI](https://github.com/Nastwinns/hawser/actions/workflows/ci.yml/badge.svg)](https://github.com/Nastwinns/hawser/actions/workflows/ci.yml)
 [![rust](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)](https://www.rust-lang.org)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![unsafe](https://img.shields.io/badge/unsafe-forbidden-success.svg)](Cargo.toml)
-[![docs](https://img.shields.io/badge/docs-github%20pages-8A2BE2)](https://nastwinns.github.io/hawser/docs/)
 
+[**Website & course**](https://nastwinns.github.io/hawser/) ·
+[Learn (step by step)](https://nastwinns.github.io/hawser/docs/learn/00-what-is-hawser.html) ·
 [Install](#install) · [Quick start](#quick-start) · [The cockpit](#the-tui-cockpit) ·
 [Docs](https://nastwinns.github.io/hawser/docs/) ·
-[Try the TUI in your browser](https://nastwinns.github.io/hawser/)
+[Try the TUI in your browser](https://nastwinns.github.io/hawser/try/)
 
 </div>
 

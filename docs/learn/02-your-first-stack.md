@@ -220,6 +220,10 @@ exit code: 3
 That exit `3` is what a CI pipeline keys on: "the tree drifted from the lock — stop the
 build." (When everything matches, `verify` exits `0`.)
 
+<img class="meme" src="https://media.giphy.com/media/IPjIcwdxtrNBIpL8f3/giphy.gif" alt="Wide-eyed, shocked reaction">
+
+*`haw verify` finding drift in CI right before release.*
+
 Now put it back. `haw sync` restores every repo to its locked SHA:
 
 ```bash

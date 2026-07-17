@@ -146,6 +146,10 @@ changeset `FEAT-42` landed.
 `proto` merged first because everything depends on it; the services followed. One command,
 correct order, no broken `main`.
 
+<img class="meme" src="https://media.giphy.com/media/iyFmY2m2nfyAj5VFi8/giphy.gif" alt="Jubilant celebration reaction">
+
+*One command. Five repos merged in the right order. We did it.*
+
 ![Merging a changeset in dependency order](../assets/cli-merge.gif)
 
 *`change land` merges the linked PR/MRs in topological order — dependencies first — and stops at the first failure.*

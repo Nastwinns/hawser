@@ -1,3 +1,7 @@
+<!-- Maintainer note: the reaction GIFs in this course (class="meme") are
+     hotlinked directly from Giphy (external URLs). That's intentional and
+     fine — they render via <img>. If Giphy ever changes a URL, just swap it. -->
+
 # 0. What is hawser?
 
 <img src="../assets/hawser-comic.jpeg" alt="hawser — the beam that binds the repos" class="hero-banner">
@@ -42,6 +46,10 @@ That split is *good* engineering. But it comes with a tax:
   each one by hand, open four PRs, and pray you merge them in the right order.
 - **"It works on my machine."** Nobody can reproduce the exact set of commits that were
   live last March, because that set was never written down anywhere.
+
+<img class="meme" src="https://media.giphy.com/media/LBNbGeT9nwdEZdxNgj/giphy.gif" alt="This is fine — a cartoon dog sipping coffee as the room burns">
+
+*Managing ten repos and their versions by hand. This is fine. 🔥*
 
 Here's the thing: a *single* repo already solved these problems years ago. Your
 `package.json` (or `Cargo.toml`) declares what you depend on, and a lockfile
