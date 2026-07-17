@@ -2368,6 +2368,45 @@ fn verify(format: &str) -> Result<ExitCode> {
     }
 }
 
+/// Run one repo's build/test command, streaming stdout+stderr LIVE with a
+/// `<repo> │` prefix on every line. `lock` serializes whole lines so parallel
+/// repos never interleave mid-line. Returns the process exit status.
+fn stream_repo(
+    name: &str,
+    path: &Path,
+    cmd: &str,
+    lock: &std::sync::Mutex<()>,
+    c: &Palette,
+) -> std::io::Result<std::process::ExitStatus> {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    let mut child = shell_command(cmd)
+        .current_dir(path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let prefix = format!("{} {}", c.name(name), c.dim("│"));
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    std::thread::scope(|scope| {
+        if let Some(stderr) = stderr {
+            scope.spawn(|| {
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+                    eprintln!("{prefix} {line}");
+                }
+            });
+        }
+        if let Some(stdout) = stdout {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+                println!("{prefix} {line}");
+            }
+        }
+    });
+    child.wait()
+}
+
 fn build_or_test(build: bool, groups: &[String], jobs: Option<usize>) -> Result<()> {
     let ws = open_workspace()?;
     let backend = ShellGit;
@@ -2399,27 +2438,27 @@ fn build_or_test(build: bool, groups: &[String], jobs: Option<usize>) -> Result<
         bail!("no cloned repo declares a `{verb}` command in the manifest");
     }
 
+    let c = Palette::new();
+    // Stream each repo's output LIVE, prefixed with the repo name (docker-compose
+    // / k9s style), instead of buffering and printing after each finishes. A shared
+    // lock keeps whole lines atomic so parallel repos never interleave mid-line.
+    let print_lock = std::sync::Mutex::new(());
     let results = fan_out(&targets, default_jobs(jobs), |(name, path, cmd)| {
-        let output = shell_command(cmd).current_dir(path).output();
-        (name.clone(), output)
+        let status = stream_repo(name, path, cmd, &print_lock, &c);
+        (name.clone(), status)
     });
     let total = results.len();
     let mut failures = 0usize;
-    let c = Palette::new();
-    for (name, output) in results {
-        println!("{} {} {}", c.dim("──"), c.name(&name), c.dim("──"));
-        match output {
-            Ok(out) => {
-                print!("{}", String::from_utf8_lossy(&out.stdout));
-                eprint!("{}", String::from_utf8_lossy(&out.stderr));
-                if !out.status.success() {
-                    failures += 1;
-                    eprintln!("(exit: {})", out.status);
-                }
+    for (name, status) in &results {
+        match status {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                failures += 1;
+                eprintln!("{} {} {}", c.err("✗"), c.name(name), c.dim(&format!("({s})")));
             }
             Err(err) => {
                 failures += 1;
-                eprintln!("(failed to run: {err})");
+                eprintln!("{} {} {}", c.err("✗"), c.name(name), c.dim(&format!("(failed to run: {err})")));
             }
         }
     }
