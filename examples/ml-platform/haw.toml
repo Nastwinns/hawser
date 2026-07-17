@@ -1,0 +1,52 @@
+# ML / data platform example: a model repo, the data-pipeline that feeds it,
+# and the serving infra that deploys it — pinned together so "the model that
+# was live in March" is one reproducible baseline, not a guess across three
+# repos at three revisions.
+#
+# The URLs are illustrative GitHub-style hosts; this is a *reading* manifest.
+
+[remote.acme]
+url = "git@github.com:acme-ml"
+forge = "github"
+
+# The data pipeline: shared by training and serving, landed before its consumers.
+[repo.pipeline]
+remote = "acme"
+repo = "data-pipeline.git"
+rev = "v2.1.0"
+groups = ["data"]
+build = "dvc repro"
+test = "pytest tests/"
+
+# The model: training code + weights reference, pinned for reproducibility.
+[repo.model]
+remote = "acme"
+repo = "recommender-model.git"
+rev = "2024.11-rc3"
+groups = ["model"]
+deps = ["pipeline"]
+build = "python -m model.train --config configs/prod.yaml"
+test = "pytest tests/ && python -m model.eval --min-auc 0.82"
+
+# The serving infra that deploys the model behind an API.
+[repo.serving]
+remote = "acme"
+repo = "serving-infra.git"
+rev = "v1.7.2"
+groups = ["infra"]
+deps = ["model"]
+build = "terraform plan -out plan.tfplan"
+test = "terraform validate"
+
+[stack.training]
+repos = ["pipeline", "model"]
+description = "Training baseline: the data pipeline plus the model that consumes it."
+
+[stack.serving]
+repos = ["pipeline", "model", "serving"]
+description = "Full serving stack: pipeline + model + the infra that deploys it."
+
+# Follow the model's main branch while pipeline + serving stay pinned:
+# `haw sync --overlay bleeding-edge`.
+[overlay.bleeding-edge.repo.model]
+rev = "main"

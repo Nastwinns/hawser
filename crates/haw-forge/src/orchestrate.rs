@@ -8,6 +8,7 @@
 use haw_core::change::{ChangeError, Changeset};
 use haw_core::git::{GitBackend, GitError};
 use haw_core::workspace::Workspace;
+use haw_git::parallel::fan_out;
 
 use crate::{ForgeError, ForgeFactory, ForgeKind, PrSpec, PrStatus, kind_from_key};
 
@@ -304,29 +305,46 @@ pub fn land(
 /// clone URL or a recognized forge are skipped, not reported.
 pub type FleetRepoResult<T> = (String, Result<Vec<T>, RepoFailure>);
 
-/// Run `fetch` against every manifest repo that has a recognized forge,
-/// in manifest order. Per-repo failures are reported per repo.
+/// Cap on concurrent forge fetches in the fleet-wide views. Mirrors the CLI's
+/// `default_jobs` ceiling so a 1000-repo fleet issues at most this many API
+/// calls in flight — bounding both the thread count and the rate-limit hit.
+const FLEET_FETCH_JOBS: usize = 8;
+
+/// Run `fetch` against every manifest repo that has a recognized forge, with
+/// bounded parallelism (at most [`FLEET_FETCH_JOBS`] concurrent calls). Results
+/// come back in manifest order; per-repo failures are reported per repo.
 fn for_each_forge_repo<T>(
     ws: &Workspace,
     forges: &dyn ForgeFactory,
-    fetch: impl Fn(&dyn crate::Forge, &str) -> Result<Vec<T>, ForgeError>,
-) -> Vec<FleetRepoResult<T>> {
-    let mut out = Vec::new();
-    for name in ws.manifest.repos.keys() {
-        let Ok(url) = clone_url(ws, name) else {
-            continue;
-        };
-        let hint = forge_hint(ws, name);
-        if hint.unwrap_or_else(|| crate::detect(&url)) == ForgeKind::Unknown {
-            continue;
-        }
+    fetch: impl Fn(&dyn crate::Forge, &str) -> Result<Vec<T>, ForgeError> + Sync,
+) -> Vec<FleetRepoResult<T>>
+where
+    T: Send,
+{
+    // Resolve the eligible repos serially (cheap; touches only the manifest),
+    // then fan the network fetches out under a fixed concurrency cap.
+    let targets: Vec<(String, String, Option<ForgeKind>)> = ws
+        .manifest
+        .repos
+        .keys()
+        .filter_map(|name| {
+            let url = clone_url(ws, name).ok()?;
+            let hint = forge_hint(ws, name);
+            if hint.unwrap_or_else(|| crate::detect(&url)) == ForgeKind::Unknown {
+                return None;
+            }
+            Some((name.clone(), url, hint))
+        })
+        .collect();
+
+    let jobs = FLEET_FETCH_JOBS.min(targets.len().max(1));
+    fan_out(&targets, jobs, |(name, url, hint)| {
         let result = forges
-            .client_for(&url, hint)
-            .and_then(|forge| fetch(forge.as_ref(), &url))
+            .client_for(url, *hint)
+            .and_then(|forge| fetch(forge.as_ref(), url))
             .map_err(RepoFailure::from);
-        out.push((name.clone(), result));
-    }
-    out
+        (name.clone(), result)
+    })
 }
 
 /// Every open PR/MR across the fleet, in manifest repo order

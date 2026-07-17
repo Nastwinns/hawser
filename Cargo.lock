@@ -850,6 +850,7 @@ name = "haw-forge"
 version = "0.1.3-beta.3"
 dependencies = [
  "haw-core",
+ "haw-git",
  "octocrab",
  "reqwest",
  "serde_json",
@@ -896,6 +897,15 @@ dependencies = [
  "tempfile",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "haw-misra"
+version = "0.1.3-beta.3"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

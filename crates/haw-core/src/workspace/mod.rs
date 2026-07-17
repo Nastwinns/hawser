@@ -363,25 +363,21 @@ impl Workspace {
         })
     }
 
-    /// Observed state of every repo (lock order when a lock exists).
-    /// A non-empty `groups` filter limits the report to matching repos.
-    pub fn status(
-        &self,
-        groups: &[String],
-        backend: &dyn GitBackend,
-    ) -> Result<Vec<RepoStatus>, SyncError> {
-        let entries: Vec<(String, PathBuf, Option<String>, Vec<String>)> = match self.read_lock()? {
+    /// The repos to report on (lock order when a lock exists), before any git
+    /// state is observed. A non-empty `groups` filter limits the set. Splitting
+    /// this out lets callers fingerprint/cache and re-stat only what changed
+    /// (see [`Self::status_entry`]).
+    pub fn status_entries(&self, groups: &[String]) -> Result<Vec<StatusEntry>, SyncError> {
+        let entries = match self.read_lock()? {
             Some(lock) => lock
                 .repos
                 .iter()
                 .filter(|b| resolver::group_match(&b.groups, groups))
-                .map(|b| {
-                    (
-                        b.name.clone(),
-                        b.path.clone(),
-                        Some(b.rev.clone()),
-                        b.groups.clone(),
-                    )
+                .map(|b| StatusEntry {
+                    name: b.name.clone(),
+                    path: b.path.clone(),
+                    locked_rev: Some(b.rev.clone()),
+                    groups: b.groups.clone(),
                 })
                 .collect(),
             None => self
@@ -389,52 +385,82 @@ impl Workspace {
                 .repos
                 .iter()
                 .filter(|(_, repo)| resolver::group_match(&repo.groups, groups))
-                .map(|(name, repo)| {
-                    (
-                        name.clone(),
-                        repo.checkout_path(name),
-                        None,
-                        repo.groups.clone(),
-                    )
+                .map(|(name, repo)| StatusEntry {
+                    name: name.clone(),
+                    path: repo.checkout_path(name),
+                    locked_rev: None,
+                    groups: repo.groups.clone(),
                 })
                 .collect(),
         };
+        Ok(entries)
+    }
 
-        let mut statuses = Vec::with_capacity(entries.len());
-        for (name, path, locked_rev, repo_groups) in entries {
-            let abs = self.root.join(&path);
-            if !backend.is_repo(&abs) {
-                statuses.push(RepoStatus {
-                    name,
-                    path,
-                    missing: true,
-                    branch: None,
-                    head: None,
-                    dirty: false,
-                    locked_rev,
-                    drift: false,
-                    ahead_behind: None,
-                    groups: repo_groups,
-                });
-                continue;
-            }
-            let head = backend.head_sha(&abs)?;
-            let drift = locked_rev.as_deref().is_some_and(|rev| rev != head);
-            statuses.push(RepoStatus {
-                name,
-                path,
-                missing: false,
-                branch: backend.current_branch(&abs)?,
-                head: Some(head),
-                dirty: backend.is_dirty(&abs)?,
-                locked_rev,
-                drift,
-                ahead_behind: backend.ahead_behind(&abs)?,
-                groups: repo_groups,
+    /// Observe the git state of one [`StatusEntry`]. This is the expensive part
+    /// (up to four git subprocesses per repo) — safe to run in parallel across
+    /// repos.
+    pub fn status_entry(
+        &self,
+        entry: &StatusEntry,
+        backend: &dyn GitBackend,
+    ) -> Result<RepoStatus, SyncError> {
+        let abs = self.root.join(&entry.path);
+        if !backend.is_repo(&abs) {
+            return Ok(RepoStatus {
+                name: entry.name.clone(),
+                path: entry.path.clone(),
+                missing: true,
+                branch: None,
+                head: None,
+                dirty: false,
+                locked_rev: entry.locked_rev.clone(),
+                drift: false,
+                ahead_behind: None,
+                groups: entry.groups.clone(),
             });
+        }
+        let head = backend.head_sha(&abs)?;
+        let drift = entry.locked_rev.as_deref().is_some_and(|rev| rev != head);
+        Ok(RepoStatus {
+            name: entry.name.clone(),
+            path: entry.path.clone(),
+            missing: false,
+            branch: backend.current_branch(&abs)?,
+            head: Some(head),
+            dirty: backend.is_dirty(&abs)?,
+            locked_rev: entry.locked_rev.clone(),
+            drift,
+            ahead_behind: backend.ahead_behind(&abs)?,
+            groups: entry.groups.clone(),
+        })
+    }
+
+    /// Observed state of every repo (lock order when a lock exists).
+    /// A non-empty `groups` filter limits the report to matching repos.
+    pub fn status(
+        &self,
+        groups: &[String],
+        backend: &dyn GitBackend,
+    ) -> Result<Vec<RepoStatus>, SyncError> {
+        let entries = self.status_entries(groups)?;
+        let mut statuses = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            statuses.push(self.status_entry(entry, backend)?);
         }
         Ok(statuses)
     }
+}
+
+/// One repo to report on, before its git state is observed. Produced by
+/// [`Workspace::status_entries`] and consumed by [`Workspace::status_entry`].
+#[derive(Debug, Clone)]
+pub struct StatusEntry {
+    pub name: String,
+    /// Workspace-relative checkout path.
+    pub path: PathBuf,
+    /// The locked rev this repo is pinned to, when a lock exists.
+    pub locked_rev: Option<String>,
+    pub groups: Vec<String>,
 }
 
 /// Bring one repo to its target state. Safe to run in parallel across repos.

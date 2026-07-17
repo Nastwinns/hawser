@@ -404,6 +404,16 @@ pub trait Controller: Send {
     fn fleet_prs(&mut self) -> io::Result<Vec<FleetPr>>;
     /// Recent CI runs/pipelines across the fleet (network; fetched on `i`).
     fn fleet_ci(&mut self) -> io::Result<Vec<FleetCiRun>>;
+    /// Fleet PR/MRs, honoring a controller-side cache. `force` (a manual `m`
+    /// refetch) bypasses the cache; the default ignores it and always fetches.
+    fn fleet_prs_refresh(&mut self, _force: bool) -> io::Result<Vec<FleetPr>> {
+        self.fleet_prs()
+    }
+    /// Fleet CI runs, honoring a controller-side cache. `force` (a manual `i`
+    /// refetch) bypasses the cache; the default ignores it and always fetches.
+    fn fleet_ci_refresh(&mut self, _force: bool) -> io::Result<Vec<FleetCiRun>> {
+        self.fleet_ci()
+    }
     /// The plugin/governance surface (read-only; fetched on entering `v`).
     fn governance(&mut self) -> io::Result<Governance>;
     /// A live, plain-text git detail report for one repo (drill-in on `Enter`).
@@ -461,8 +471,14 @@ enum InputMode {
 enum Job {
     Refresh,
     ChangesetPrs(String),
-    FleetPrs,
-    FleetCi,
+    /// `force` bypasses the controller's TTL cache (a manual `m` refetch).
+    FleetPrs {
+        force: bool,
+    },
+    /// `force` bypasses the controller's TTL cache (a manual `i` refetch).
+    FleetCi {
+        force: bool,
+    },
     Governance,
     RepoDetail(String),
     PrDetail(String, u64),
@@ -997,8 +1013,12 @@ fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: 
                 Job::ChangesetPrs(id) => {
                     Outcome::ChangesetPrs(Box::new(controller.changeset_prs(&id)))
                 }
-                Job::FleetPrs => Outcome::FleetPrs(Box::new(controller.fleet_prs())),
-                Job::FleetCi => Outcome::FleetCi(Box::new(controller.fleet_ci())),
+                Job::FleetPrs { force } => {
+                    Outcome::FleetPrs(Box::new(controller.fleet_prs_refresh(force)))
+                }
+                Job::FleetCi { force } => {
+                    Outcome::FleetCi(Box::new(controller.fleet_ci_refresh(force)))
+                }
                 Job::Governance => Outcome::Governance(Box::new(controller.governance())),
                 Job::RepoDetail(name) => Outcome::Detail(
                     format!("repo {name}"),
@@ -1278,7 +1298,11 @@ fn run_exec(app: &mut App, jobs: &Sender<Job>, repo: &str, cmd: &str) {
 }
 
 /// Navigate to a fleet-wide network view (`m`/`i`) and (re)fetch its rows.
+/// Pressing the key while already on the view is a manual refetch, which
+/// `force`s the controller's TTL cache to refresh; merely entering the view
+/// reuses a fresh cached fetch.
 fn open_fleet_view(app: &mut App, jobs: &Sender<Job>, view: View) {
+    let force = app.view == view;
     app.goto_view(view);
     // Read-only fetches always enqueue — the single worker runs them serially,
     // so navigating while busy is never refused (it just queues behind the
@@ -1286,11 +1310,11 @@ fn open_fleet_view(app: &mut App, jobs: &Sender<Job>, view: View) {
     match view {
         View::Prs => {
             app.busy = Some("PR/MRs");
-            let _ = jobs.send(Job::FleetPrs);
+            let _ = jobs.send(Job::FleetPrs { force });
         }
         View::Ci => {
             app.busy = Some("CI runs");
-            let _ = jobs.send(Job::FleetCi);
+            let _ = jobs.send(Job::FleetCi { force });
         }
         View::Governance => {
             app.busy = Some("governance");
@@ -1715,7 +1739,8 @@ fn event_loop(
                         && app.busy.is_none()
                     {
                         app.busy = Some("PR/MRs");
-                        let _ = jobs.send(Job::FleetPrs);
+                        // The list just changed on the forge — bypass the cache.
+                        let _ = jobs.send(Job::FleetPrs { force: true });
                     } else {
                         request_refresh(&mut app, jobs);
                     }
@@ -4532,11 +4557,25 @@ mod tests {
         let (tx, rx) = channel();
         run_command_bar(&mut app, &tx, "prs");
         assert_eq!(app.view, View::Prs);
-        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs)));
+        // Entering the view from elsewhere reuses the cache (force = false).
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs { force: false })));
         app.busy = None;
         run_command_bar(&mut app, &tx, "ci");
         assert_eq!(app.view, View::Ci);
-        assert!(matches!(rx.try_recv(), Ok(Job::FleetCi)));
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetCi { force: false })));
+    }
+
+    #[test]
+    fn refetch_key_on_the_view_forces_a_cache_bypass() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        // Enter the PR view first (cached fetch).
+        open_fleet_view(&mut app, &tx, View::Prs);
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs { force: false })));
+        app.busy = None;
+        // Pressing `m` again while already on the view is a manual refetch.
+        open_fleet_view(&mut app, &tx, View::Prs);
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs { force: true })));
     }
 
     #[test]
@@ -4548,7 +4587,7 @@ mod tests {
         assert_eq!(app.view, View::Prs);
         // The read-only fetch still enqueues — the serial worker runs it after
         // the in-flight job, so navigation is never refused.
-        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs)));
+        assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs { force: false })));
     }
 
     #[test]

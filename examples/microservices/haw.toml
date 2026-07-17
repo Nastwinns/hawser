@@ -1,0 +1,60 @@
+# Backend microservices example: one feature spans several services plus a
+# shared proto/lib repo. This is the everyday multi-repo case outside embedded —
+# haw composes the services, branches a feature across exactly the ones it
+# touches, and lands the PRs in dependency order (shared lib first).
+#
+# The URLs are illustrative GitHub-style hosts; this is a *reading* manifest
+# (`haw tree`, `haw build`), not something you clone anonymously.
+
+[remote.acme]
+url = "git@github.com:acme"
+forge = "github"
+
+# Shared contract/library every service depends on — landed before its consumers.
+[repo.proto]
+remote = "acme"
+repo = "proto.git"
+rev = "v1.4.0"
+groups = ["shared"]
+build = "buf generate"
+test = "buf lint"
+
+[repo.gateway]
+remote = "acme"
+repo = "gateway.git"
+rev = "main"
+groups = ["service"]
+deps = ["proto"]
+build = "go build ./..."
+test = "go test ./..."
+
+[repo.billing]
+remote = "acme"
+repo = "billing.git"
+rev = "main"
+groups = ["service"]
+deps = ["proto"]
+build = "cargo build --release"
+test = "cargo test"
+
+[repo.accounts]
+remote = "acme"
+repo = "accounts.git"
+rev = "main"
+groups = ["service"]
+deps = ["proto"]
+build = "npm ci && npm run build"
+test = "npm test"
+
+[repo.notifications]
+remote = "acme"
+repo = "notifications.git"
+rev = "main"
+groups = ["service"]
+deps = ["proto"]
+build = "./gradlew assemble"
+test = "./gradlew test"
+
+[stack.platform]
+repos = ["proto", "gateway", "billing", "accounts", "notifications"]
+description = "The backend platform: four services over one shared proto/lib repo."

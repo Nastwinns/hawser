@@ -1,9 +1,11 @@
 mod publish;
 
+use std::collections::HashMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
@@ -3032,11 +3034,163 @@ fn import_manifest(from: &Path) -> Result<()> {
 
 /// TUI controller: adapts cockpit actions to `haw-core`/`haw-forge`.
 /// Runs on the TUI worker thread.
-struct CliController;
+/// Cheap change-fingerprint of a repo's git state: the mtimes of the files a
+/// commit/checkout/stage touches (`.git/HEAD`, the index, and `packed-refs`),
+/// plus the locked rev. Re-stat (the 4 git subprocesses per repo) only runs
+/// when this changes; an unchanged repo reuses its cached [`RepoStatus`].
+#[derive(Clone, PartialEq, Eq)]
+struct RepoFingerprint {
+    head_mtime: Option<Duration>,
+    index_mtime: Option<Duration>,
+    packed_refs_mtime: Option<Duration>,
+    locked_rev: Option<String>,
+}
+
+/// `path`'s modified-time as a `Duration` since the epoch, or `None` when the
+/// file is absent/unreadable. Absent maps to `None` (not an error) so a repo
+/// with no packed-refs still fingerprints stably.
+fn file_mtime(path: &Path) -> Option<Duration> {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+}
+
+impl RepoFingerprint {
+    /// Fingerprint the repo checked out at `abs` (workspace-absolute), pinned to
+    /// `locked_rev`. Stats only `.git` metadata — no subprocess.
+    fn of(abs: &Path, locked_rev: Option<&str>) -> Self {
+        let git = abs.join(".git");
+        Self {
+            head_mtime: file_mtime(&git.join("HEAD")),
+            index_mtime: file_mtime(&git.join("index")),
+            packed_refs_mtime: file_mtime(&git.join("packed-refs")),
+            locked_rev: locked_rev.map(str::to_string),
+        }
+    }
+}
+
+/// TTL for the fleet PR/CI caches: re-opening the view within this window
+/// reuses the last fetch instead of re-hitting the forge. A manual refetch
+/// (`m`/`i`) bypasses it.
+const FLEET_CACHE_TTL: Duration = Duration::from_secs(45);
+
+/// A TTL'd fleet-forge result: the fetched rows and when they were fetched.
+struct FleetCacheEntry<T> {
+    fetched_at: Instant,
+    rows: Vec<T>,
+}
+
+impl<T> FleetCacheEntry<T> {
+    fn is_fresh(&self) -> bool {
+        self.fetched_at.elapsed() < FLEET_CACHE_TTL
+    }
+}
+
+/// Serve a fleet-forge result through its TTL cache. When `force` is false and
+/// `cache` holds a still-fresh entry, its rows are returned without calling
+/// `fetch` (no forge hit). Otherwise `fetch` runs and its result is cached.
+/// A failed fetch leaves any existing (stale) entry untouched.
+fn cached_fleet<T: Clone>(
+    cache: &mut Option<FleetCacheEntry<T>>,
+    force: bool,
+    fetch: impl FnOnce() -> std::io::Result<Vec<T>>,
+) -> std::io::Result<Vec<T>> {
+    if !force
+        && let Some(entry) = cache
+        && entry.is_fresh()
+    {
+        return Ok(entry.rows.clone());
+    }
+    let rows = fetch()?;
+    *cache = Some(FleetCacheEntry {
+        fetched_at: Instant::now(),
+        rows: rows.clone(),
+    });
+    Ok(rows)
+}
+
+#[derive(Default)]
+struct CliController {
+    /// Skip-unchanged snapshot cache: repo checkout path -> its last
+    /// fingerprint and the `RepoStatus` computed then.
+    status_cache: HashMap<PathBuf, (RepoFingerprint, RepoStatus)>,
+    /// TTL cache for `fleet_prs` (keyed by kind = the PR view).
+    prs_cache: Option<FleetCacheEntry<haw_tui::FleetPr>>,
+    /// TTL cache for `fleet_ci` (keyed by kind = the CI view).
+    ci_cache: Option<FleetCacheEntry<haw_tui::FleetCiRun>>,
+}
 
 impl CliController {
     fn workspace(&self) -> std::io::Result<Workspace> {
         open_workspace().map_err(std::io::Error::other)
+    }
+
+    /// Bounded, skip-unchanged fleet re-stat. Fingerprints every repo (cheap fs
+    /// stats), reuses the cached status for repos whose `.git` metadata and
+    /// locked rev are unchanged, and re-stats only the changed ones — in
+    /// parallel, capped at [`default_jobs`]. Returns statuses in manifest/lock
+    /// order and refreshes the cache.
+    fn status_cached(&mut self, ws: &Workspace) -> std::io::Result<Vec<RepoStatus>> {
+        self.status_cached_with(ws, &ShellGit)
+    }
+
+    /// [`Self::status_cached`] against a caller-supplied backend so tests can
+    /// inject a fake that counts how many repos actually got re-stat'd.
+    fn status_cached_with(
+        &mut self,
+        ws: &Workspace,
+        backend: &dyn GitBackend,
+    ) -> std::io::Result<Vec<RepoStatus>> {
+        let entries = ws.status_entries(&[]).map_err(std::io::Error::other)?;
+
+        // Serial, cheap pass: split into cache hits (reuse) and misses (re-stat).
+        let mut hits: HashMap<PathBuf, RepoStatus> = HashMap::new();
+        let mut misses: Vec<(usize, haw_core::workspace::StatusEntry, RepoFingerprint)> =
+            Vec::new();
+        for (i, entry) in entries.iter().enumerate() {
+            let abs = ws.root.join(&entry.path);
+            let fp = RepoFingerprint::of(&abs, entry.locked_rev.as_deref());
+            match self.status_cache.get(&entry.path) {
+                Some((cached_fp, cached_status)) if *cached_fp == fp => {
+                    hits.insert(entry.path.clone(), cached_status.clone());
+                }
+                _ => misses.push((i, entry.clone(), fp)),
+            }
+        }
+
+        // Parallel, expensive pass: re-stat only the changed repos.
+        let fresh = fan_out(&misses, default_jobs(None), |(_, entry, _)| {
+            ws.status_entry(entry, backend)
+        });
+
+        // Refresh the cache for the misses, dropping stale/removed repos.
+        for ((_, entry, fp), status) in misses.iter().zip(&fresh) {
+            if let Ok(status) = status {
+                self.status_cache
+                    .insert(entry.path.clone(), (fp.clone(), status.clone()));
+            }
+        }
+        let present: std::collections::HashSet<&PathBuf> =
+            entries.iter().map(|e| &e.path).collect();
+        self.status_cache.retain(|path, _| present.contains(path));
+
+        // Reassemble in original order: hits from cache, misses from the fan-out.
+        let mut fresh_by_index: HashMap<usize, std::io::Result<RepoStatus>> = misses
+            .into_iter()
+            .map(|(i, _, _)| i)
+            .zip(fresh)
+            .map(|(i, r)| (i, r.map_err(std::io::Error::other)))
+            .collect();
+        let mut out = Vec::with_capacity(entries.len());
+        for (i, entry) in entries.into_iter().enumerate() {
+            if let Some(status) = hits.remove(&entry.path) {
+                out.push(status);
+            } else if let Some(status) = fresh_by_index.remove(&i) {
+                out.push(status?);
+            }
+        }
+        Ok(out)
     }
 
     fn sync_filtered(&self, stack: &str, repo: Option<&str>) -> std::io::Result<String> {
@@ -3113,6 +3267,70 @@ impl CliController {
             results.len()
         ));
         Ok(report)
+    }
+
+    /// Fetch every open PR/MR across the fleet (bounded-parallel in
+    /// `orchestrate`). The cache-free inner fetch behind `fleet_prs_refresh`.
+    fn fetch_fleet_prs() -> std::io::Result<Vec<haw_tui::FleetPr>> {
+        let ws = open_workspace().map_err(std::io::Error::other)?;
+        let tokens = Tokens::from_env();
+        let mut out = Vec::new();
+        let mut failed = Vec::new();
+        for (name, result) in orchestrate::fleet_open_prs(&ws, &tokens) {
+            match result {
+                Ok(prs) => {
+                    let forge = forge_label(&ws, &name);
+                    out.extend(prs.into_iter().map(|pr| haw_tui::FleetPr {
+                        repo: name.clone(),
+                        forge: forge.clone(),
+                        number: pr.number,
+                        title: pr.title,
+                        url: pr.url,
+                        state: render_pr_state(pr.state).to_string(),
+                        approved: pr.approved,
+                        ci: pr.ci_passing,
+                    }));
+                }
+                Err(_) => failed.push(name),
+            }
+        }
+        if out.is_empty() && !failed.is_empty() {
+            return Err(std::io::Error::other(format!(
+                "PR/MR fetch failed for: {}",
+                failed.join(", ")
+            )));
+        }
+        Ok(out)
+    }
+
+    /// Fetch recent CI runs/pipelines across the fleet (bounded-parallel in
+    /// `orchestrate`). The cache-free inner fetch behind `fleet_ci_refresh`.
+    fn fetch_fleet_ci() -> std::io::Result<Vec<haw_tui::FleetCiRun>> {
+        let ws = open_workspace().map_err(std::io::Error::other)?;
+        let tokens = Tokens::from_env();
+        let mut out = Vec::new();
+        let mut failed = Vec::new();
+        for (name, result) in orchestrate::fleet_ci_runs(&ws, &tokens) {
+            match result {
+                Ok(runs) => out.extend(runs.into_iter().map(|run| haw_tui::FleetCiRun {
+                    repo: name.clone(),
+                    id: run.id,
+                    name: run.name,
+                    branch: run.branch,
+                    event: run.event,
+                    status: render_ci_status(run.status).to_string(),
+                    url: run.url,
+                })),
+                Err(_) => failed.push(name),
+            }
+        }
+        if out.is_empty() && !failed.is_empty() {
+            return Err(std::io::Error::other(format!(
+                "CI fetch failed for: {}",
+                failed.join(", ")
+            )));
+        }
+        Ok(out)
     }
 }
 
@@ -3194,7 +3412,7 @@ fn tree_text(ws: &Workspace) -> String {
 impl haw_tui::Controller for CliController {
     fn snapshot(&mut self) -> std::io::Result<haw_tui::Snapshot> {
         let ws = self.workspace()?;
-        let statuses = ws.status(&[], &ShellGit).map_err(std::io::Error::other)?;
+        let statuses = self.status_cached(&ws)?;
         let fleet = ws
             .manifest
             .stacks
@@ -3470,63 +3688,19 @@ impl haw_tui::Controller for CliController {
     }
 
     fn fleet_prs(&mut self) -> std::io::Result<Vec<haw_tui::FleetPr>> {
-        let ws = self.workspace()?;
-        let tokens = Tokens::from_env();
-        let mut out = Vec::new();
-        let mut failed = Vec::new();
-        for (name, result) in orchestrate::fleet_open_prs(&ws, &tokens) {
-            match result {
-                Ok(prs) => {
-                    let forge = forge_label(&ws, &name);
-                    out.extend(prs.into_iter().map(|pr| haw_tui::FleetPr {
-                        repo: name.clone(),
-                        forge: forge.clone(),
-                        number: pr.number,
-                        title: pr.title,
-                        url: pr.url,
-                        state: render_pr_state(pr.state).to_string(),
-                        approved: pr.approved,
-                        ci: pr.ci_passing,
-                    }));
-                }
-                Err(_) => failed.push(name),
-            }
-        }
-        if out.is_empty() && !failed.is_empty() {
-            return Err(std::io::Error::other(format!(
-                "PR/MR fetch failed for: {}",
-                failed.join(", ")
-            )));
-        }
-        Ok(out)
+        self.fleet_prs_refresh(false)
+    }
+
+    fn fleet_prs_refresh(&mut self, force: bool) -> std::io::Result<Vec<haw_tui::FleetPr>> {
+        cached_fleet(&mut self.prs_cache, force, Self::fetch_fleet_prs)
     }
 
     fn fleet_ci(&mut self) -> std::io::Result<Vec<haw_tui::FleetCiRun>> {
-        let ws = self.workspace()?;
-        let tokens = Tokens::from_env();
-        let mut out = Vec::new();
-        let mut failed = Vec::new();
-        for (name, result) in orchestrate::fleet_ci_runs(&ws, &tokens) {
-            match result {
-                Ok(runs) => out.extend(runs.into_iter().map(|run| haw_tui::FleetCiRun {
-                    repo: name.clone(),
-                    id: run.id,
-                    name: run.name,
-                    branch: run.branch,
-                    event: run.event,
-                    status: render_ci_status(run.status).to_string(),
-                    url: run.url,
-                })),
-                Err(_) => failed.push(name),
-            }
-        }
-        if out.is_empty() && !failed.is_empty() {
-            return Err(std::io::Error::other(format!(
-                "CI fetch failed for: {}",
-                failed.join(", ")
-            )));
-        }
-        Ok(out)
+        self.fleet_ci_refresh(false)
+    }
+
+    fn fleet_ci_refresh(&mut self, force: bool) -> std::io::Result<Vec<haw_tui::FleetCiRun>> {
+        cached_fleet(&mut self.ci_cache, force, Self::fetch_fleet_ci)
     }
 
     fn governance(&mut self) -> std::io::Result<haw_tui::Governance> {
@@ -3891,7 +4065,7 @@ fn dash(demo: bool) -> Result<()> {
         Box::new(DemoController)
     } else {
         open_workspace()?;
-        Box::new(CliController)
+        Box::new(CliController::default())
     };
     // `haw_tui::run` restores the terminal before returning, so the TTY is
     // cooked by the time we act on the exit request.
@@ -4878,5 +5052,188 @@ mod files_tests {
     #[test]
     fn file_size_cap_is_about_one_megabyte() {
         assert_eq!(FILE_SIZE_CAP, 1_048_576);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod scaling_tests {
+    use super::*;
+    use haw_core::git::{CloneOpts, GitError, ResolvedRev, RevKind};
+    use std::collections::HashSet;
+    use std::path::Path;
+    use std::sync::Mutex;
+
+    /// A `GitBackend` that records which repos got re-stat'd (via `head_sha`,
+    /// the first call `status_entry` makes on a present repo). Everything is a
+    /// clean, on-lock repo — we only care about the re-stat count.
+    #[derive(Default)]
+    struct CountingGit {
+        restatted: Mutex<Vec<PathBuf>>,
+    }
+
+    impl GitBackend for CountingGit {
+        fn resolve_rev(&self, _url: &str, _rev: &str) -> Result<ResolvedRev, GitError> {
+            Ok(ResolvedRev {
+                sha: "sha".into(),
+                kind: RevKind::Branch,
+            })
+        }
+        fn clone_repo(&self, _u: &str, _d: &Path, _o: &CloneOpts) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn ensure_mirror(&self, _u: &str, _m: &Path) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn fetch(&self, _repo: &Path) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn checkout(&self, _r: &Path, _s: &str, _b: &str, _d: Option<u32>) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn update_submodules(&self, _repo: &Path) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn create_branch(&self, _repo: &Path, _name: &str) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn push_branch(&self, _repo: &Path, _branch: &str) -> Result<(), GitError> {
+            Ok(())
+        }
+        fn head_sha(&self, repo: &Path) -> Result<String, GitError> {
+            self.restatted.lock().unwrap().push(repo.to_path_buf());
+            // Match the locked rev so nothing drifts (keeps the test focused).
+            Ok("feedface".into())
+        }
+        fn ahead_behind(&self, _repo: &Path) -> Result<Option<(u64, u64)>, GitError> {
+            Ok(None)
+        }
+        fn current_branch(&self, _repo: &Path) -> Result<Option<String>, GitError> {
+            Ok(Some("main".into()))
+        }
+        fn is_dirty(&self, _repo: &Path) -> Result<bool, GitError> {
+            Ok(false)
+        }
+        fn is_repo(&self, _repo: &Path) -> bool {
+            true
+        }
+    }
+
+    /// A workspace of two on-disk repos, each with a `.git/HEAD` we can touch to
+    /// change its fingerprint. Returns the workspace and its two checkout paths.
+    fn two_repo_workspace() -> (tempfile::TempDir, Workspace, PathBuf, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("haw.toml"),
+            "[repo.a]\nurl = \"/r/a\"\nrev = \"main\"\n\n\
+             [repo.b]\nurl = \"/r/b\"\nrev = \"main\"\n\n\
+             [stack.s]\nrepos = [\"a\", \"b\"]\n",
+        )
+        .unwrap();
+        // Pin both to `feedface` so status finds them on-lock (no drift noise).
+        let locked = |name: &str| haw_core::lock::LockedRepo {
+            name: name.to_string(),
+            url: format!("/r/{name}"),
+            path: name.into(),
+            rev: "feedface".to_string(),
+            source_rev: "main".to_string(),
+            branch: "main".to_string(),
+            groups: vec![],
+        };
+        haw_core::lock::Lockfile {
+            version: haw_core::lock::LOCK_VERSION,
+            repos: vec![locked("a"), locked("b")],
+        }
+        .save(&dir.path().join("haw.lock"))
+        .unwrap();
+        for name in ["a", "b"] {
+            let git = dir.path().join(name).join(".git");
+            std::fs::create_dir_all(&git).unwrap();
+            std::fs::write(git.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        }
+        let ws = Workspace::open(dir.path()).unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        (dir, ws, a, b)
+    }
+
+    #[test]
+    fn snapshot_skips_unchanged_repos_and_restats_changed_ones() {
+        let (_dir, ws, _a, b) = two_repo_workspace();
+        let backend = CountingGit::default();
+        let mut controller = CliController::default();
+
+        // First snapshot: cold cache — both repos are re-stat'd.
+        let first = controller.status_cached_with(&ws, &backend).unwrap();
+        assert_eq!(first.len(), 2);
+        {
+            let restatted: HashSet<_> = backend.restatted.lock().unwrap().iter().cloned().collect();
+            assert_eq!(restatted.len(), 2, "cold cache re-stats every repo");
+        }
+        backend.restatted.lock().unwrap().clear();
+
+        // Second snapshot with nothing touched: warm cache — zero re-stats.
+        let second = controller.status_cached_with(&ws, &backend).unwrap();
+        assert_eq!(second.len(), 2);
+        assert!(
+            backend.restatted.lock().unwrap().is_empty(),
+            "an unchanged fleet re-stats nothing"
+        );
+
+        // Change one repo's HEAD mtime; only that repo re-stats.
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::fs::write(b.join(".git").join("HEAD"), "ref: refs/heads/dev\n").unwrap();
+        let third = controller.status_cached_with(&ws, &backend).unwrap();
+        assert_eq!(third.len(), 2);
+        let restatted = backend.restatted.lock().unwrap().clone();
+        assert_eq!(restatted, vec![b], "only the changed repo is re-stat'd");
+    }
+
+    #[test]
+    fn fleet_ttl_cache_skips_the_forge_until_forced() {
+        let calls = std::cell::Cell::new(0usize);
+        let mut cache: Option<FleetCacheEntry<u8>> = None;
+        let fetch = || {
+            calls.set(calls.get() + 1);
+            Ok(vec![1u8, 2, 3])
+        };
+
+        // First call populates the cache (one fetch).
+        assert_eq!(
+            cached_fleet(&mut cache, false, fetch).unwrap(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(calls.get(), 1);
+
+        // Second call within the TTL reuses the cache — no forge hit.
+        assert_eq!(
+            cached_fleet(&mut cache, false, fetch).unwrap(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(calls.get(), 1, "a fresh cache must not re-hit the forge");
+
+        // A forced refetch (the `m`/`i` key) bypasses the cache.
+        assert_eq!(
+            cached_fleet(&mut cache, true, fetch).unwrap(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(calls.get(), 2, "force must bypass the cache");
+    }
+
+    #[test]
+    fn fleet_ttl_cache_expires_after_the_ttl() {
+        // A stale entry (fetched long ago) triggers a fresh fetch.
+        let mut cache = Some(FleetCacheEntry {
+            fetched_at: Instant::now() - FLEET_CACHE_TTL - Duration::from_secs(1),
+            rows: vec![9u8],
+        });
+        let calls = std::cell::Cell::new(0usize);
+        let rows = cached_fleet(&mut cache, false, || {
+            calls.set(calls.get() + 1);
+            Ok(vec![7u8])
+        })
+        .unwrap();
+        assert_eq!(rows, vec![7]);
+        assert_eq!(calls.get(), 1, "an expired entry re-fetches");
     }
 }

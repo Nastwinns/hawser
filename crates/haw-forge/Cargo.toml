@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 haw-core.workspace = true
+haw-git.workspace = true
 octocrab.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true

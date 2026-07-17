@@ -1,0 +1,66 @@
+# Automotive example wired for governance: AUTOSAR ARXML config repos + a shared
+# HAL + ECU app repos, with the MISRA C gate subscribed as a pre-request hook so
+# a PR that introduces a MISRA violation is blocked before it opens.
+#
+# haw is toolchain-agnostic: each repo names its own build command (here a
+# Vector/EB-style generate step and an arm-none-eabi-gcc build). haw bundles no
+# compiler — it shells out to whatever the repo declares.
+#
+# The URLs are illustrative internal-style hosts; this is a *reading* manifest.
+
+[remote.internal]
+url = "git@gitlab.company.com:vehicle"
+forge = "gitlab"
+
+# AUTOSAR configuration as ARXML, pinned to an exact SHA beside the code it
+# configures — the config version is part of the auditable baseline.
+[repo.arxml-config]
+remote = "internal"
+repo = "arxml-config.git"
+rev = "c9f2a1b7e4d05386a2f1c7b9e0d4a6f8b2c1d3e5"
+groups = ["autosar", "baseline"]
+build = "davinci_cfg generate --project ecu.dpa"  # Vector DaVinci-style generation
+
+# Shared hardware abstraction layer reused across every ECU.
+[repo.hal]
+remote = "internal"
+repo = "hal.git"
+rev = "v4.2.0"
+groups = ["baseline"]
+build = "cmake -S . -B build && cmake --build build"
+test = "ctest --test-dir build --output-on-failure"
+
+[repo.ecu-powertrain]
+remote = "internal"
+repo = "ecu-powertrain.git"
+rev = "v3.1.0"
+groups = ["ecu"]
+deps = ["arxml-config", "hal"]
+build = "make CC=arm-none-eabi-gcc"      # bare-metal cross build; haw only shells out
+test = "make test"
+
+[repo.ecu-chassis]
+remote = "internal"
+repo = "ecu-chassis.git"
+rev = "v2.6.1"
+groups = ["ecu"]
+deps = ["arxml-config", "hal"]
+build = "make CC=arm-none-eabi-gcc"
+test = "make test"
+
+[stack.powertrain]
+repos = ["arxml-config", "hal", "ecu-powertrain"]
+description = "Powertrain ECU: AUTOSAR config + shared HAL + powertrain app."
+
+[stack.chassis]
+repos = ["arxml-config", "hal", "ecu-chassis"]
+description = "Chassis ECU: same AUTOSAR config + HAL + chassis app."
+
+# --- Governance plugins ------------------------------------------------------
+# misra : run cppcheck --addon=misra across the fleet's C sources before a PR
+#         opens; a violation blocks the request. Fail-open when cppcheck is
+#         absent, so the gate never blocks adoption on a missing tool.
+# aspice: emit repo -> pinned SHA -> process-area traceability as the change lands.
+[plugins]
+misra  = ["pre-request"]
+aspice = ["post-land"]

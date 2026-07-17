@@ -1,0 +1,22 @@
+[package]
+name = "haw-misra"
+description = "haw plugin: haw-misra (MISRA C static-analysis gate across the fleet via cppcheck)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "haw-misra"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

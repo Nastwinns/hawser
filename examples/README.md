@@ -1,15 +1,21 @@
 # haw examples
 
 Hands-on manifests for learning [haw](../README.md) — the multi-repo tool whose
-binary is `haw` (crate `hawser`). Start with **quickstart**: it clones real
-public repos and runs the whole loop with no credentials. The others are
-themed *reading* manifests you inspect with `--manifest`.
+binary is `haw` (crate `hawser`). haw is **domain-agnostic**: these examples span
+backend microservices, ML/data platforms, and embedded/automotive — the same
+loop in each. Start with **quickstart**: it clones real public repos and runs the
+whole loop with no credentials. The others are themed *reading* manifests you
+inspect with `--manifest`. See [`../docs/DOMAINS.md`](../docs/DOMAINS.md) for how
+the loop maps onto each domain.
 
 ## The examples
 
 | Example | Demonstrates | Runnable? | Key commands |
 | --- | --- | --- | --- |
 | [`quickstart/`](quickstart/) | Full loop on real public repos: shared repo across two stacks, groups, changesets | **Yes — clones over HTTPS, no auth** | `haw sync --stack site`, `haw status`, `haw run '…'`, `haw change start DEMO --repos …` |
+| [`microservices/`](microservices/) | **Backend** domain: a feature across four services + a shared proto repo; heterogeneous `build`/`test`; land in `deps` order | Reading | `haw tree --manifest …`, `haw change start FEAT --repos …`, `haw change land` |
+| [`ml-platform/`](ml-platform/) | **ML / data** domain: model + data-pipeline + serving infra pinned as one reproducible baseline; two stacks; an overlay | Reading | `haw tree --manifest …`, `haw sync --overlay bleeding-edge`, `haw evidence` |
+| [`automotive/`](automotive/) | **Embedded** domain: AUTOSAR ARXML + shared HAL + ECU apps; toolchain-agnostic builds; **MISRA gate** as a `pre-request` hook | Reading | `haw tree --manifest …`, `haw misra`, `haw change request` |
 | [`automotive-pinned/`](automotive-pinned/) | Fully pinned tags/SHAs for reproducible, auditable baselines (ASPICE/ISO 26262); `deps` land order; per-repo `build =` | Reading + `build` | `haw tree --manifest …`, `haw verify`, `haw evidence` |
 | [`embedded-bsp/`](embedded-bsp/) | Zephyr/west-style BSP: fixed checkout paths, pinned vs branch-tracking revs, an overlay, per-repo `build =` | Reading | `haw tree --manifest …`, `haw lock --overlay bleeding-edge` |
 | [`governance/`](governance/) | `[plugins]` wired onto lifecycle phases (compliance / SBOM / git-gate) | Reading | `haw tree --manifest …`, `haw dash --demo` |

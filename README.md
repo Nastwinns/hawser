@@ -85,9 +85,27 @@ Five capabilities, one binary — each solving a slice of the multi-repo problem
 
 ## Why it exists
 
-Splitting a product across repositories is routine — shared HAL/BSP repos reused across
-ECUs in automotive and avionics, or a fleet of backend microservices. Every existing
-tool solves one slice and gives up another:
+Splitting a product across repositories is routine — and it is **domain-agnostic**. It
+happens with shared HAL/BSP repos reused across ECUs in automotive and avionics, with a
+fleet of backend microservices, with an ML platform whose models, pipelines, and serving
+infra must move together, and with Terraform/Helm module repos or an app-plus-SDK pair.
+`haw` is built for all of them: embedded/automotive is one proof point, not its identity.
+
+### Who it's for
+
+| Domain | The shape of the fleet |
+|--------|------------------------|
+| **Embedded & automotive** | Shared HAL/BSP/MCAL reused across many ECUs; AUTOSAR/ARXML config repos pinned beside the code |
+| **Backend microservices** | One feature spanning N services plus a shared proto/lib — branched, PR'd, and landed together |
+| **ML / data platforms** | Model repo + data-pipeline repo + serving infra, pinned as one reproducible baseline |
+| **Platform / infra** | Terraform, Helm, and reusable module repos composed and versioned as a unit |
+| **Mobile** | An app repo and its SDK repo(s), changed in lockstep across a single changeset |
+
+The manifest, lockfile, changeset flow, fleet build/test, and governance hooks are the
+same in every one — only the repos and the declared `build`/`test` commands differ. See
+**[docs/DOMAINS.md](docs/DOMAINS.md)** for how each maps onto `haw`.
+
+Every existing tool solves one slice of the multi-repo problem and gives up another:
 
 | Tool | Gives you | Gives up |
 |------|-----------|----------|
@@ -393,6 +411,7 @@ extension model is the same one the core is built on.
 |--------|--------------|
 | [`haw-aspice`](crates/haw-aspice) | Generates Automotive-SPICE **traceability** (repo → pinned SHA → process area) from the fleet — audit evidence, as a `post-land` hook or `haw aspice` |
 | [`haw-jira`](crates/haw-jira) | Links a changeset to a **Jira** issue and transitions it as the change lands (`pre-request` → *In Review*, `post-land` → *Done*); fail-open dry-run without creds |
+| [`haw-misra`](crates/haw-misra) | Runs a **MISRA C** static-analysis pass across the fleet's C/C++ sources via `cppcheck --addon=misra`; blocks a PR on violations as a `pre-request` hook or reports via `haw misra`; **fail-open** when cppcheck is absent |
 
 **Reach into the TUI, too.** A plugin's `Report` — its findings and artifacts — surfaces
 in the cockpit's **governance view** (`v`), whether the hook fired from the CLI or the
@@ -542,6 +561,7 @@ Published at **[nastwinns.github.io/hawser/docs](https://nastwinns.github.io/haw
 
 | Doc | What |
 |-----|------|
+| [docs/DOMAINS.md](docs/DOMAINS.md) | How the manifest/lock/changeset/build/govern loop maps onto each domain — embedded/automotive, microservices, ML/data, infra, mobile |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, concurrency model, forge abstraction, data flows |
 | [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md) | Full CLI lexicon + TUI keymap |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
