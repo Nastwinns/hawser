@@ -17,6 +17,7 @@
 # Reference
 
 - [Domains](DOMAINS.md)
+- [Integration recipes (embedded / AUTOSAR / QEMU)](INTEGRATION.md)
 - [Architecture](ARCHITECTURE.md)
 - [CLI design & TUI keymap](CLI-DESIGN.md)
 - [Extending](EXTENDING.md)

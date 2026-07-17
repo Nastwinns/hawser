@@ -360,6 +360,13 @@ On a big fleet, pair `haw sync --filter=blob:none` (partial clone — all histor
 blobs) with a cache of the shared object store to keep CI clones fast without breaking
 the pinned SHAs.
 
+**Any toolchain — embedded, AUTOSAR, emulated.** `build =`/`test =` are just shell
+commands, so `haw` drives *any* toolchain: a Docker cross-compiler, an emulator, or a
+licensed suite. Validated recipes (with real captured output) — littlefs cross-compiled to
+**Cortex-M4** and **FreeRTOS booted under QEMU**, both orchestrated by `haw` — plus wiring
+patterns for **EB tresos, Vector MICROSAR, Green Hills, IAR, Tasking, Zephyr, Renode**:
+**[docs/INTEGRATION.md](docs/INTEGRATION.md)**.
+
 ## Secrets & tokens
 
 `haw` never stores a credential. It reads forge tokens from the environment at call
@@ -589,6 +596,7 @@ Published at **[nastwinns.github.io/hawser/docs](https://nastwinns.github.io/haw
 | Doc | What |
 |-----|------|
 | [docs/DOMAINS.md](docs/DOMAINS.md) | How the manifest/lock/changeset/build/govern loop maps onto each domain — embedded/automotive, microservices, ML/data, infra, mobile |
+| [docs/INTEGRATION.md](docs/INTEGRATION.md) | Copy-paste `build`/`test` recipes: Docker cross-compile, QEMU/Renode emulation, EB tresos, Vector, GHS/IAR/Tasking, Zephyr (real captured output for the open ones) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, concurrency model, forge abstraction, data flows |
 | [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md) | Full CLI lexicon + TUI keymap |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Extensions, plugins, hooks, auth, CI/CD integration |
