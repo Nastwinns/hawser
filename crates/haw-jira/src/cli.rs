@@ -19,6 +19,8 @@ pub struct Options {
     pub phase: Option<String>,
     /// Emit the machine action document instead of human output.
     pub json: bool,
+    /// Force a dry-run even when Jira credentials are present (`--dry-run`).
+    pub dry_run: bool,
 }
 
 /// The help text for `--help`.
@@ -35,6 +37,8 @@ ARGS:
 OPTIONS:
     --to <name>          Target transition status (e.g. \"In Review\", \"Done\").
     --format json        Emit the planned/performed action as JSON on stdout.
+    --dry-run            Force a dry-run: print the comment/transition that
+                         WOULD be performed and exit 0, even when creds exist.
     --haw-phase <name>   Lifecycle phase; emits a haw.plugin.report/1 report.
     -h, --help           Print this help and exit.
 
@@ -53,6 +57,7 @@ pub fn parse(args: &[String]) -> Result<ParseOutcome, String> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--help" | "-h" => return Ok(ParseOutcome::Help(HELP.to_string())),
+            "--dry-run" => opts.dry_run = true,
             "--format" => {
                 let value = iter
                     .next()
@@ -146,6 +151,19 @@ mod tests {
         assert_eq!(o.to.as_deref(), Some("Done"));
         assert!(o.json);
         assert_eq!(o.phase.as_deref(), Some("post-land"));
+    }
+
+    #[test]
+    fn dry_run_flag_parses() {
+        let o = run(&["SCRUM-1", "--to", "En cours", "--dry-run"]);
+        assert!(o.dry_run);
+        assert_eq!(o.issue.as_deref(), Some("SCRUM-1"));
+        assert_eq!(o.to.as_deref(), Some("En cours"));
+    }
+
+    #[test]
+    fn dry_run_defaults_false() {
+        assert!(!run(&["SCRUM-1"]).dry_run);
     }
 
     #[test]

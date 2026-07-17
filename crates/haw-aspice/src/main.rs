@@ -77,7 +77,7 @@ fn run(opts: cli::Options) -> Result<ExitCode, String> {
                 plugin: "aspice".to_string(),
                 phase: Some(phase),
                 ok: true,
-                summary: trace::summary(&ctx),
+                summary: trace::summary(&ctx, &enrich),
                 artifacts: vec![
                     Artifact {
                         path: json_path.to_string_lossy().into_owned(),
@@ -97,7 +97,7 @@ fn run(opts: cli::Options) -> Result<ExitCode, String> {
         }
         // Subcommand mode: human-friendly output.
         None => {
-            println!("{}", trace::summary(&ctx));
+            println!("{}", trace::summary(&ctx, &enrich));
             println!("wrote {}", md_path.display());
             println!("wrote {}", json_path.display());
             Ok(ExitCode::SUCCESS)

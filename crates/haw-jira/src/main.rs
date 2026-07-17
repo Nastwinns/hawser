@@ -59,14 +59,18 @@ fn run(opts: cli::Options) -> Result<ExitCode, String> {
 
     let action = jira::plan(&ctx, issue, target);
 
-    // Fail-open: no creds -> dry-run, always ok.
+    // Dry-run when explicitly requested, or fail-open when creds are absent.
     let config = jira::Config::from_env();
+    if opts.dry_run || config.is_none() {
+        return emit_dry_run(&opts, phase.as_deref(), action);
+    }
+    // Safe: `config.is_none()` handled above.
     match config {
-        None => emit_dry_run(&opts, phase.as_deref(), action),
         Some(config) => match jira::perform(&config, action) {
             Ok(performed) => emit_success(&opts, phase.as_deref(), performed),
             Err(err) => emit_failure(&opts, phase.as_deref(), err),
         },
+        None => emit_dry_run(&opts, phase.as_deref(), action),
     }
 }
 
