@@ -5,7 +5,7 @@ matrix: every channel, how to verify the signed release, the air-gap workflow, a
 building from source. For the short version, see the
 [README Install section](https://github.com/Nastwinns/hawser#install).
 
-The current release is **v0.1.2**, published with signed, reproducible archives for
+The current release is **v0.1.3**, published with signed, reproducible archives for
 every supported platform.
 
 ## Channel matrix
@@ -15,7 +15,7 @@ every supported platform.
 | **crates.io** | any (Rust) | `cargo install hawser` | Rust 1.90+ toolchain |
 | **Homebrew** | macOS + Linux | `brew install nastwinns/tap/hawser` | Homebrew |
 | **Scoop** | Windows | `scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket` then `scoop install hawser` | Scoop |
-| **Static musl binary** | Linux x86_64 | download `haw-0.1.2-x86_64-unknown-linux-musl.tar.gz` (see below) | none (zero-dependency) |
+| **Static musl binary** | Linux x86_64 | download `haw-0.1.3-x86_64-unknown-linux-musl.tar.gz` (see below) | none (zero-dependency) |
 | **Prebuilt archive** | Linux gnu (x86_64/aarch64), Linux musl (x86_64), macOS (x86_64/aarch64), Windows (x86_64) | [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest) | none (optional: `cosign`, `sha256sum` to verify) |
 | **Private registries** | any | Nexus / Artifactory / GitLab / Bitbucket mirror — see [DISTRIBUTION.md](DISTRIBUTION.md) | registry credentials |
 | **Docker** | any (with Docker) | `docker build -t haw .` | Docker + the repo |
@@ -76,10 +76,10 @@ Each GitHub Release ships a `.deb` and `.rpm` for x86_64 Linux (gnu):
 
 ```bash
 # Debian/Ubuntu
-curl -sSLO https://github.com/Nastwinns/hawser/releases/latest/download/hawser_0.1.2-1_amd64.deb
-sudo dpkg -i hawser_0.1.2-1_amd64.deb
+curl -sSLO https://github.com/Nastwinns/hawser/releases/latest/download/hawser_0.1.3-1_amd64.deb
+sudo dpkg -i hawser_0.1.3-1_amd64.deb
 # Fedora/RHEL
-sudo rpm -i https://github.com/Nastwinns/hawser/releases/latest/download/hawser-0.1.2-1.x86_64.rpm
+sudo rpm -i https://github.com/Nastwinns/hawser/releases/latest/download/hawser-0.1.3-1.x86_64.rpm
 ```
 
 ## Static musl binary (Linux, zero-dependency, air-gap friendly)
@@ -89,7 +89,7 @@ no runtime — so it runs identically on any Linux host, drops into minimal cont
 and installs cleanly on air-gapped machines as a single file.
 
 ```bash
-curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz \
+curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
   | tar xz && sudo install haw /usr/local/bin/
 ```
 
@@ -101,12 +101,12 @@ on a connected machine, verify it (below), copy all four files across, then inst
 Every platform ships an archive on the
 [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest):
 
-- `haw-0.1.2-x86_64-unknown-linux-gnu.tar.gz`
-- `haw-0.1.2-aarch64-unknown-linux-gnu.tar.gz`
-- `haw-0.1.2-x86_64-unknown-linux-musl.tar.gz` (static)
-- `haw-0.1.2-x86_64-apple-darwin.tar.gz`
-- `haw-0.1.2-aarch64-apple-darwin.tar.gz`
-- `haw-0.1.2-x86_64-pc-windows-msvc.zip`
+- `haw-0.1.3-x86_64-unknown-linux-gnu.tar.gz`
+- `haw-0.1.3-aarch64-unknown-linux-gnu.tar.gz`
+- `haw-0.1.3-x86_64-unknown-linux-musl.tar.gz` (static)
+- `haw-0.1.3-x86_64-apple-darwin.tar.gz`
+- `haw-0.1.3-aarch64-apple-darwin.tar.gz`
+- `haw-0.1.3-x86_64-pc-windows-msvc.zip`
 
 Each archive is accompanied by:
 
@@ -120,7 +120,7 @@ and it is the whole point on locked-down or air-gapped hosts.
 ### Verify the checksum
 
 ```bash
-sha256sum -c haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.sha256
+sha256sum -c haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.sha256
 ```
 
 Expect `… OK`. (On macOS, `shasum -a 256 -c` is the equivalent.)
@@ -132,17 +132,17 @@ need [`cosign`](https://github.com/sigstore/cosign) installed:
 
 ```bash
 cosign verify-blob \
-  --certificate haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.pem \
-  --signature   haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.sig \
+  --certificate haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.pem \
+  --signature   haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.sig \
   --certificate-identity-regexp 'https://github.com/Nastwinns/hawser' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  haw-0.1.2-x86_64-unknown-linux-musl.tar.gz
+  haw-0.1.3-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Expect `Verified OK`. Once verified, unpack and install:
 
 ```bash
-tar xzf haw-0.1.2-x86_64-unknown-linux-musl.tar.gz
+tar xzf haw-0.1.3-x86_64-unknown-linux-musl.tar.gz
 sudo install haw /usr/local/bin/
 ```
 
@@ -170,7 +170,7 @@ enable each registry, and the per-registry download/install commands. Example (N
 
 ```bash
 curl -u "$NEXUS_USER:$NEXUS_PASS" -O \
-  "$NEXUS_URL/repository/raw-hosted/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  "$NEXUS_URL/repository/raw-hosted/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Verify the checksum and cosign signature exactly as for the GitHub Release (above).

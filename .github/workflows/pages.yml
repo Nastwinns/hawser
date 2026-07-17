@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "landing/**"
       - "site/**"
       - "docs/**"
       - "README.md"
@@ -49,7 +50,7 @@ jobs:
 
       - name: Build the browser cockpit (Ratzilla / WASM)
         working-directory: site
-        run: trunk build --release --public-url /hawser/
+        run: trunk build --release --public-url /hawser/try/
 
       - name: Build the docs (mdBook)
         working-directory: docs
@@ -58,7 +59,12 @@ jobs:
       - name: Assemble the Pages artifact
         run: |
           mkdir -p _site
-          cp -r site/dist/. _site/
+          # Landing page is the site root
+          cp -r landing/. _site/
+          # Browser TUI demo (Ratzilla / WASM) at /try/
+          mkdir -p _site/try
+          cp -r site/dist/. _site/try/
+          # mdBook docs at /docs/
           mkdir -p _site/docs
           cp -r docs/book/. _site/docs/
 

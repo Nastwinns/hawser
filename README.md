@@ -156,7 +156,7 @@ scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket && scoop in
 is fully static — no glibc, no runtime — so one file runs on any Linux host:
 
 ```bash
-curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz \
+curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
   | tar xz && sudo install haw /usr/local/bin/
 ```
 
@@ -438,7 +438,9 @@ schemas), the [reference bindings](bindings/), and the curated
 ```
 haw                              Open the TUI cockpit (no subcommand)
 ├── init <manifest-url|path>     Bootstrap a workspace from a manifest
-├── sync [--stack S] [--shared]  Clone/pull repos to the state in haw.lock
+├── sync [--shared] [--depth N]  Clone/pull repos to the state in haw.lock
+│        [--filter blob:none]      shallow/partial clone on large fleets
+│        [--recurse-submodules]    init/update each repo's git submodules
 ├── lock / pin / unpin           Resolve revs -> haw.lock / pin to checkouts / restore
 ├── switch <stack>               Materialize a different stack in the workspace
 ├── status                       Aggregated fleet status (dirty/ahead/behind per repo)
@@ -457,7 +459,7 @@ haw                              Open the TUI cockpit (no subcommand)
 ├── change                       Cross-repo feature ("changeset") workflow
 │   ├── start <id> [--repos ..]  Create one branch across the affected repos
 │   ├── status                   Per-repo branch + PR/MR review + CI dashboard
-│   ├── request                  Open linked PR/MRs on GitHub/GitLab for each repo
+│   ├── request                  Open linked PR/MRs on GitHub/GitLab/Bitbucket per repo
 │   ├── goto                     Interactive picker; cd into a repo
 │   ├── snapshot save|restore    Save/restore the multi-repo state of a changeset
 │   └── land                     Merge PR/MRs in dependency order
@@ -467,10 +469,16 @@ haw                              Open the TUI cockpit (no subcommand)
 │   ├── resolve <slice>          Resolve one slice (--take ours|theirs, or by hand)
 │   └── status / cleanup / abort Track, seal, or undo the planned merge
 │
+├── plugins list|install|new    Discover/install plugins (`list --remote` for the community index)
 ├── publish <files> --to <t>    Upload fleet artifacts to Nexus/Artifactory/GitLab/Bitbucket
+├── completions <shell>         Emit shell completions (bash/zsh/fish/…)
 ├── import --from <west.yml|default.xml>   Convert a west/repo manifest to haw.toml
 └── dash                         Open the fleet dashboard (same as bare `haw`)
 ```
+
+Read commands (`status`, `lock`, `tree`, `grep`, …) accept `--json` for scripting,
+and `completions <shell>` wires up tab-completion for bash, zsh, fish, PowerShell,
+and elvish.
 
 Each verb is one guessable word; old names (`graph`, `forall`, `freeze`, `tui`) stay as
 hidden aliases. Full lexicon: [docs/CLI-DESIGN.md](docs/CLI-DESIGN.md).
@@ -596,6 +604,10 @@ Read the full **[trust model](docs/SECURITY.md)**. The essentials:
   Install only plugins you trust and keep your `PATH` clean.
 - **Tokens** are read from environment variables only, never stored or logged;
   git transport auth stays with your existing SSH keys / credential helper.
+- **Supply-chain hardening.** The crate is `#![forbid(unsafe_code)]`, HTTPS uses
+  **rustls** (no OpenSSL), every GitHub Action is **pinned to a full commit SHA**,
+  release artifacts are **cosign**-signed (keyless/OIDC), and `cargo audit` +
+  `cargo deny` gate advisories, licenses, and sources on every push.
 - **Reporting a vulnerability:** see [SECURITY.md](SECURITY.md) for how to
   report privately and which versions are supported.
 

@@ -51,7 +51,7 @@ A registry is skipped (logged, not failed) unless **all** its *required* secrets
 
 ## Per-registry layout and install
 
-Throughout, `<version>` is the tag without the leading `v` (e.g. `0.1.2`).
+Throughout, `<version>` is the tag without the leading `v` (e.g. `0.1.3`).
 
 ### Nexus (raw hosted repository)
 
@@ -65,16 +65,16 @@ Upload (what CI runs, per file):
 
 ```bash
 curl -u "$NEXUS_USER:$NEXUS_PASS" \
-  --upload-file haw-0.1.2-x86_64-unknown-linux-musl.tar.gz \
-  "$NEXUS_URL/repository/raw-hosted/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  --upload-file haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
+  "$NEXUS_URL/repository/raw-hosted/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Consume:
 
 ```bash
 curl -u "$NEXUS_USER:$NEXUS_PASS" -O \
-  "$NEXUS_URL/repository/raw-hosted/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
-tar xzf haw-0.1.2-x86_64-unknown-linux-musl.tar.gz && sudo install haw /usr/local/bin/
+  "$NEXUS_URL/repository/raw-hosted/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+tar xzf haw-0.1.3-x86_64-unknown-linux-musl.tar.gz && sudo install haw /usr/local/bin/
 ```
 
 ### Artifactory (generic repository)
@@ -89,15 +89,15 @@ Upload (per file):
 
 ```bash
 curl -H "Authorization: Bearer $ARTIFACTORY_TOKEN" \
-  --upload-file haw-0.1.2-x86_64-unknown-linux-musl.tar.gz \
-  "$ARTIFACTORY_URL/generic-local/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  --upload-file haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
+  "$ARTIFACTORY_URL/generic-local/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Consume:
 
 ```bash
 curl -H "Authorization: Bearer $ARTIFACTORY_TOKEN" -O \
-  "$ARTIFACTORY_URL/generic-local/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  "$ARTIFACTORY_URL/generic-local/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 ### GitLab (generic package registry + Release)
@@ -116,15 +116,15 @@ Upload (per file):
 
 ```bash
 curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  --upload-file haw-0.1.2-x86_64-unknown-linux-musl.tar.gz \
-  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  --upload-file haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
+  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Consume:
 
 ```bash
 curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" -O \
-  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.2/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Or open the project's **Deploy → Releases** page and download from the release assets.
@@ -143,14 +143,14 @@ Upload (per file):
 curl -u "$BITBUCKET_USER:$BITBUCKET_TOKEN" \
   -X POST \
   "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO/downloads" \
-  -F files=@haw-0.1.2-x86_64-unknown-linux-musl.tar.gz
+  -F files=@haw-0.1.3-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Consume (files land under the repo's Downloads tab; filenames are flat, not versioned):
 
 ```bash
 curl -u "$BITBUCKET_USER:$BITBUCKET_TOKEN" -O -L \
-  "https://bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO/downloads/haw-0.1.2-x86_64-unknown-linux-musl.tar.gz"
+  "https://bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO/downloads/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 > Bitbucket Downloads is a flat namespace (no per-version folders), so the `<version>`
@@ -162,13 +162,13 @@ Regardless of the mirror, verify exactly as with the GitHub Release — download
 matching `.sha256`, `.sig`, and `.pem` alongside the archive:
 
 ```bash
-sha256sum -c haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.sha256
+sha256sum -c haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.sha256
 cosign verify-blob \
-  --certificate haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.pem \
-  --signature   haw-0.1.2-x86_64-unknown-linux-musl.tar.gz.sig \
+  --certificate haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.pem \
+  --signature   haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.sig \
   --certificate-identity-regexp 'https://github.com/Nastwinns/hawser' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  haw-0.1.2-x86_64-unknown-linux-musl.tar.gz
+  haw-0.1.3-x86_64-unknown-linux-musl.tar.gz
 ```
 
 See [INSTALL.md](INSTALL.md#prebuilt-archives-signed) for the full verification and
