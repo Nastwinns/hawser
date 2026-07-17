@@ -1,0 +1,47 @@
+# ml-ai — a REAL AI runtime built from source, pinned with a training repo.
+#
+# Both repos are genuine public GitHub projects that `haw sync` clones
+# anonymously over HTTPS, and both `build =` / `test =` below were actually
+# executed with haw on this host and seen to succeed (host: cmake + AppleClang,
+# python3). See README.md for captured output.
+#
+#   haw sync --filter=blob:none   # clones both upstreams (needs network)
+#   haw build -j4                 # compiles llama.cpp + py_compiles nanoGPT
+#   haw test                      # runs llama-cli --version + parses nanoGPT
+#
+# This is the ML-platform "model runtime + pipeline pinned together" pattern
+# from examples/ml-platform, but with a REAL, from-source AI inference runtime.
+
+[remote.gh]
+url = "https://github.com"
+forge = "github"
+
+# --- runtime -----------------------------------------------------------------
+# llama.cpp — the reference C/C++ LLM inference runtime. A full CMake build
+# compiles ggml + the llama-cli executable from source (CURL disabled so no
+# libcurl dep). The test step runs the real binary's --version, proving the
+# runtime links and starts.
+[repo.llamacpp]
+remote = "gh"
+repo = "ggml-org/llama.cpp.git"
+rev = "master"
+groups = ["runtime"]
+build = "cmake -S . -B build -DLLAMA_CURL=OFF && cmake --build build -j4 --target llama-cli"
+test = "./build/bin/llama-cli --version"
+
+# --- training ----------------------------------------------------------------
+# nanoGPT — Karpathy's minimal GPT training repo. No heavy deps needed just to
+# validate the source: `py_compile` byte-compiles every module, and the test
+# step AST-parses every .py, so a syntax regression fails haw test. (Actually
+# training needs torch/numpy — that is the pattern below, not run here.)
+[repo.nanogpt]
+remote = "gh"
+repo = "karpathy/nanoGPT.git"
+rev = "master"
+groups = ["training"]
+build = "python3 -m py_compile *.py"
+test = "python3 -c \"import ast,glob; [ast.parse(open(f).read()) for f in glob.glob('**/*.py',recursive=True)]; print('NANOGPT_PARSE_OK')\""
+
+[stack.fleet]
+repos = ["llamacpp", "nanogpt"]
+description = "A real from-source LLM inference runtime (llama.cpp) pinned with a training repo (nanoGPT)."

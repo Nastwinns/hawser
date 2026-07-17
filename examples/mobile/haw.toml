@@ -1,0 +1,63 @@
+# mobile — a mobile APP pinned in lockstep with its networking SDK.
+#
+# Both repos are genuine public GitHub projects that `haw sync` clones
+# anonymously over HTTPS. The value of this example is the *wiring*: an app and
+# a library it depends on, pinned as one fleet so they move together.
+#
+#   haw sync --filter=blob:none   # clones both upstreams (needs network)
+#   haw build                     # see per-repo status below
+#
+# STATUS on a host WITHOUT the Android SDK:
+#   * okhttp        — BUILDS + tests-compile FOR REAL (JVM-only, no Android SDK).
+#                     Validated via a JDK-21 Docker image because gradle 9.6.1
+#                     wants a JDK 21 toolchain that can't auto-provision on
+#                     macOS/aarch64 and the host JDK is only 8.
+#   * nowinandroid  — PATTERN (needs Android SDK). The Gradle build configures
+#                     and build-logic compiles, but `:app:assembleDebug` fails
+#                     with "SDK location not found" — expected off-SDK.
+#
+# The okhttp recipes below are the ones actually executed and seen green.
+
+[remote.gh]
+url = "https://github.com"
+forge = "github"
+
+# --- sdk (VALIDATED) ---------------------------------------------------------
+# OkHttp — Square's Kotlin HTTP client, the networking layer under a huge slice
+# of Android apps. Pure Kotlin/JVM: `:okhttp:compileKotlinJvm` builds the SDK
+# and `:okhttp:compileTestKotlinJvm` compiles its test sources — both BUILD
+# SUCCESSFUL. Run inside eclipse-temurin:21-jdk because gradle 9.6.1 needs a
+# JDK-21 toolchain (host JDK is 8; auto-provision is unavailable on
+# macOS/aarch64). A gradle cache volume keeps re-runs fast.
+[repo.okhttp]
+remote = "gh"
+repo = "square/okhttp.git"
+rev = "master"
+groups = ["sdk"]
+build = "docker run --rm -v \"$PWD\":/w -w /w -v haw-gradle-cache:/root/.gradle eclipse-temurin:21-jdk ./gradlew :okhttp:compileKotlinJvm --console=plain --no-daemon"
+test = "docker run --rm -v \"$PWD\":/w -w /w -v haw-gradle-cache:/root/.gradle eclipse-temurin:21-jdk ./gradlew :okhttp:compileTestKotlinJvm --console=plain --no-daemon"
+
+# --- app (PATTERN — needs Android SDK) ---------------------------------------
+# Now in Android — Google's flagship sample app. A full Android build needs the
+# Android SDK (ANDROID_HOME / sdk.dir). The commands below are the REAL app
+# build/test targets, kept as a pattern: on an SDK-equipped host (or an image
+# with cmdline-tools + platforms), un-comment and they run as-is. Off-SDK,
+# `:app:assembleDebug` fails with "SDK location not found" — this is the
+# honestly-marked pattern half of the app+SDK lockstep pair.
+[repo.nowinandroid]
+remote = "gh"
+repo = "android/nowinandroid.git"
+rev = "main"
+groups = ["app"]
+# needs Android SDK:
+build = "./gradlew :app:assembleDebug"
+test = "./gradlew testDemoDebugUnitTest"
+
+[stack.fleet]
+repos = ["okhttp", "nowinandroid"]
+description = "A mobile app (Now in Android) pinned in lockstep with a networking SDK (OkHttp). OkHttp builds for real; the app half needs the Android SDK."
+
+# Just the piece that builds+tests on this host (no Android SDK).
+[stack.sdk-only]
+repos = ["okhttp"]
+description = "OkHttp alone — builds and compiles its tests via a JDK-21 Docker image, no Android SDK."

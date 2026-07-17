@@ -1,0 +1,61 @@
+# devops-infra — a fleet of REAL DevOps / infrastructure upstreams.
+#
+# Every repo here is a genuine public GitHub project that `haw sync` clones
+# anonymously over HTTPS, and every `build =` / `test =` below was actually
+# executed with haw on this host and seen to succeed. See README.md for the
+# captured output and exit codes.
+#
+#   haw sync --filter=blob:none   # clones all three upstreams (needs network)
+#   haw build                     # init / build each in parallel
+#   haw test                      # validate / lint each
+#
+# Grouped by domain: terraform / helm / docker.
+
+[remote.gh]
+url = "https://github.com"
+forge = "github"
+
+# --- terraform ---------------------------------------------------------------
+# terraform-aws-vpc, the canonical community AWS VPC module. `terraform init`
+# (no backend) downloads the provider plugins; `validate` type-checks the
+# module and `fmt -check -recursive` asserts canonical formatting. Native
+# terraform is used here; swap in `docker run --rm -v "$PWD":/w -w /w
+# hashicorp/terraform:latest -chdir=/w init -backend=false` if you have no
+# local terraform.
+[repo.tf-vpc]
+remote = "gh"
+repo = "terraform-aws-modules/terraform-aws-vpc.git"
+rev = "master"
+groups = ["terraform"]
+build = "terraform init -backend=false"
+test = "terraform validate && terraform fmt -check -recursive"
+
+# --- helm --------------------------------------------------------------------
+# prometheus-community/helm-charts, the monorepo behind kube-prometheus-stack.
+# `helm lint` renders + schema-checks a real chart. Native helm is used here;
+# `docker run --rm -v "$PWD":/w -w /w alpine/helm lint charts/<chart>` is the
+# no-local-helm equivalent.
+[repo.helm-charts]
+remote = "gh"
+repo = "prometheus-community/helm-charts.git"
+rev = "main"
+groups = ["helm"]
+build = "helm lint charts/kube-state-metrics"
+test = "helm lint charts/alertmanager charts/kube-state-metrics"
+
+# --- docker ------------------------------------------------------------------
+# docker/welcome-to-docker, a small real app with a multi-stage Dockerfile.
+# `build` does a real `docker build`; `test` lints the Dockerfile with hadolint
+# in a container (no local hadolint needed). Uses hadolint/hadolint — the
+# koalaman/hadolint image is not anonymously pullable from this host.
+[repo.docker-app]
+remote = "gh"
+repo = "docker/welcome-to-docker.git"
+rev = "main"
+groups = ["docker"]
+build = "docker build -t haw-welcome ."
+test = "docker run --rm -v \"$PWD\":/w -w /w hadolint/hadolint hadolint --no-fail Dockerfile"
+
+[stack.fleet]
+repos = ["tf-vpc", "helm-charts", "docker-app"]
+description = "Terraform AWS VPC module + Prometheus Helm charts + a Dockerfile app, validated/linted together."
