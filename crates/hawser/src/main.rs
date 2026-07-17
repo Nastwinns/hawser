@@ -2385,7 +2385,11 @@ fn stream_repo(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    let prefix = format!("{} {}", c.name(name), c.dim("│"));
+    // Distinct, stable color per repo (docker-compose style) so parallel streams
+    // are easy to tell apart. Deterministic from the name; plain under NO_COLOR.
+    const REPO_COLORS: &[&str] = &["36", "33", "32", "35", "34", "96", "93", "95"];
+    let color = REPO_COLORS[name.bytes().map(usize::from).sum::<usize>() % REPO_COLORS.len()];
+    let prefix = format!("{} {}", c.paint(&format!("1;{color}"), name), c.dim("│"));
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     std::thread::scope(|scope| {
