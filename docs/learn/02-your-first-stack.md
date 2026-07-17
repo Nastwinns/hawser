@@ -109,7 +109,7 @@ haw tree
 haw.toml
 └─ site
    ├─ hello-world  master  (https://github.com/octocat/Hello-World.git)
-   └─ spoon-knife  main    (https://github.com/octocat/Spoon-Knife.git)
+   └─ spoon-knife  main  (https://github.com/octocat/Spoon-Knife.git)
 ```
 
 That's your stack → repo tree: the stack `site`, the two repos under it, each with its
@@ -122,9 +122,9 @@ haw status
 ```
 
 ```console
-REPO          BRANCH   HEAD       DIRTY  DRIFT
-hello-world   master   7fd1a60b   -      -
-spoon-knife   main     d0dd1f61   -      -
+REPO         BRANCH                   HEAD       DIRTY  DRIFT
+hello-world  master                    7fd1a60b   -      -
+spoon-knife  main                      d0dd1f61   -      -
 ```
 
 Read the columns left to right: the repo, the branch it's on, its short HEAD SHA, whether
@@ -199,9 +199,9 @@ haw status
 ```
 
 ```console
-REPO          BRANCH       HEAD       DIRTY  DRIFT
-hello-world   (detached)   553c2077   -      YES
-spoon-knife   main         d0dd1f61   -      -
+REPO         BRANCH                   HEAD       DIRTY  DRIFT
+hello-world  (detached)                553c2077   -      YES
+spoon-knife  main                      d0dd1f61   -      -
 ```
 
 There it is — **DRIFT: YES** on `hello-world`. Checking out a specific commit also
@@ -228,7 +228,7 @@ exit code: 3
 ```
 
 That exit `3` is what a CI pipeline keys on: "the tree drifted from the lock — stop the
-build." (When everything matches, `verify` prints `verified: tree matches haw.lock` and
+build." (When everything matches, `verify` prints `verified: tree matches haw.lock (2 repos)` and
 exits `0`.)
 
 <img class="meme" src="https://media.giphy.com/media/IPjIcwdxtrNBIpL8f3/giphy.gif" alt="Wide-eyed, shocked reaction">
@@ -243,6 +243,7 @@ haw verify; echo "exit code: $?"
 ```
 
 ```console
+verified: tree matches haw.lock (2 repos)
 exit code: 0
 ```
 

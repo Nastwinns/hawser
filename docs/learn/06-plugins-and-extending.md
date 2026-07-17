@@ -46,13 +46,18 @@ haw plugins list
 ```
 
 ```console
-NAME        STATUS     SUBSCRIBED    DESCRIPTION
-artifact    available  -             SLSA/in-toto provenance + cosign/minisign signing
-aspice      installed  pre-request   ASPICE/qualification traceability from the pinned fleet
-compliance  available  post-build    SBOM (CycloneDX + SPDX) generation
+NAME        STATUS     SUBSCRIBED           DESCRIPTION
+artifact    available  -                    SLSA/in-toto provenance + cosign/minisign signing
+aspice      available  -                    ASPICE/qualification traceability from the pinned fleet
+compliance  available  -                    SBOM (CycloneDX + SPDX) generation
+git-gate    available  -                    secret / hygiene pre-commit & lifecycle gate
+jira        available  -                    link a changeset to a Jira issue and transition it on land
+misra       available  -                    MISRA C static-analysis gate (cppcheck) for pre-request
 ```
 
-`STATUS` is `installed` when the `haw-<name>` binary is on your `PATH`, else `available`.
+`STATUS` is `installed` when the `haw-<name>` binary is on your `PATH`, else `available`
+(none are installed yet here). `SUBSCRIBED` shows the lifecycle phases a plugin is wired
+to in your manifest's `[plugins]` table (`-` when it isn't subscribed).
 Reach past your machine into the **community index** with `--remote`:
 
 ```bash
@@ -83,17 +88,78 @@ haw plugins new mycheck --lang python
 ```
 
 ```console
-created ./haw-mycheck/
-  haw-mycheck   (executable, python3)
-  README.md
-next steps:
-  chmod is already set — drop it on PATH:
-  PATH="$PWD/haw-mycheck:$PATH" haw mycheck
+scaffolded haw-mycheck (python) in /path/to/my-first-stack/haw-mycheck
+  + haw-mycheck
+  + README.md
+
+next:
+  PATH="/path/to/my-first-stack/haw-mycheck:$PATH" haw mycheck
 ```
 
-You get a **runnable** skeleton that already implements the whole contract: it reads the
-fleet context, handles `--help` and `--format json`, emits a report, and behaves sensibly
-outside a workspace. Other languages work the same way:
+(Both paths are absolute — `haw` prints the real directory it created; yours will show your own workspace path.)
+
+You get a **runnable** skeleton that already implements the whole contract. Curious what
+you just got? Here's the *entire* generated plugin — yes, all of it. It reads the fleet
+context, handles `--help` and `--format json`, emits a report, and behaves sensibly
+outside a workspace:
+
+```python
+#!/usr/bin/env python3
+# haw-mycheck — a haw plugin. Reads the haw.plugin/1 context from HAW_JSON
+# (falling back to stdin) and emits a haw.plugin.report/1 document.
+import json
+import os
+import sys
+
+
+def load_context():
+    raw = os.environ.get("HAW_JSON", "")
+    if not raw and not sys.stdin.isatty():
+        raw = sys.stdin.read()
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
+        print("haw-mycheck — a haw plugin. Options: --help, --format json")
+        print("Run as: haw mycheck")
+        return 0
+
+    ctx = load_context()
+    root = ctx.get("root")
+    repos = ctx.get("repos", []) or []
+
+    if args[:2] == ["--format", "json"]:
+        report = {
+            "schema": "haw.plugin.report/1",
+            "ok": True,
+            "plugin": "mycheck",
+            "summary": "haw-mycheck inspected {} repo(s)".format(len(repos)),
+            "root": root,
+        }
+        json.dump(report, sys.stdout)
+        sys.stdout.write("\n")
+        return 0
+
+    if root:
+        print("haw-mycheck: workspace at {} ({} repos)".format(root, len(repos)))
+    else:
+        print("haw-mycheck: no workspace here — operating on the current directory")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+That's the whole thing — read the context, print a report, mind your exit code. The other
+languages generate the exact same behavior:
 
 ```bash
 haw plugins new mycheck --lang shell    # POSIX sh, already executable
@@ -101,14 +167,15 @@ haw plugins new mycheck --lang go       # main.go + go.mod → go build
 haw plugins new mycheck --lang rust     # cargo crate → cargo build --release
 ```
 
-Put it on `PATH` and it's instantly a `haw` subcommand:
+Put it on `PATH` and it's instantly a `haw` subcommand. Run it from inside
+`my-first-stack`:
 
 ```bash
 PATH="$PWD/haw-mycheck:$PATH" haw mycheck
 ```
 
 ```console
-haw-mycheck: inspected 2 repo(s) in /path/to/my-first-stack
+haw-mycheck: workspace at /path/to/my-first-stack (2 repos)
 ```
 
 That's it — you extended the CLI, no fork, no rebuild of `haw`.

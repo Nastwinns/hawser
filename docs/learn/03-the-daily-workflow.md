@@ -37,8 +37,11 @@ haw run 'git log -1 --oneline'
 ```
 
 ```console
-hello-world   7fd1a60 Merge pull request #6 from Spoon-Knife/patch-1
-spoon-knife   d0dd1f6 Pointing to the guide for forking
+── hello-world ──
+7fd1a60 Merge pull request #6 from Spaceghost/patch-1
+── spoon-knife ──
+d0dd1f6 Pointing to the guide for forking
+ran in 2/2 repos
 ```
 
 `haw` groups the output per repo so you always know which repo said what. Anything you'd
@@ -57,9 +60,9 @@ command; without quotes your shell would try to interpret the flags itself.
 *it*, and `haw` fans those out. You declare them in the manifest with `build =` and
 `test =`.
 
-Our octocat repos have nothing to compile, but the mechanism is what matters. Here's the
-shape, from the shipped [`microservices`](https://github.com/Nastwinns/hawser/tree/main/examples/microservices)
-example — note how each repo brings its *own* toolchain:
+In the real world each repo brings its *own* toolchain. Here's the shape, from the
+shipped [`microservices`](https://github.com/Nastwinns/hawser/tree/main/examples/microservices)
+example:
 
 ```toml
 [repo.proto]
@@ -79,11 +82,49 @@ build = "npm ci && npm run build"
 test  = "npm test"
 ```
 
-With those declared, two commands drive the whole fleet:
+Our octocat repos have nothing real to compile — and if you run `haw build` now, it
+tells you so and exits non-zero:
+
+```console
+$ haw build
+error: no cloned repo declares a `build` command in the manifest
+```
+
+So let's declare trivial commands to see the mechanism. Add a `build =` and `test =`
+line to **both** repos in your `my-first-stack/haw.toml`:
+
+```toml
+[repo.hello-world]
+remote = "gh"
+repo = "Hello-World.git"
+rev = "master"
+groups = ["core"]
+build = "echo built"
+test  = "echo tested"
+
+[repo.spoon-knife]
+remote = "gh"
+repo = "Spoon-Knife.git"
+rev = "main"
+groups = ["web"]
+build = "echo built"
+test  = "echo tested"
+```
+
+Now two commands drive the whole fleet:
 
 ```bash
 haw build     # runs every repo's `build =`, in parallel
 haw test      # runs every repo's `test =`, in parallel
+```
+
+```console
+$ haw build
+── hello-world ──
+built
+── spoon-knife ──
+built
+build ran in 2/2 repos
 ```
 
 Repos that don't declare the command (or aren't cloned) are simply skipped. And here's
@@ -103,20 +144,19 @@ Need to find every use of a symbol, a TODO, a deprecated API across *all* repos?
 grep` fans `git grep` across every cloned repo at once:
 
 ```bash
-haw grep TODO
+haw grep guide
 ```
 
 ```console
-hello-world
-  README:12:  TODO: add usage examples
-
-spoon-knife
-  index.html:8:  <!-- TODO: link the guide -->
+spoon-knife (1 hit(s))
+  README.md:9:For some more information on how to fork a repository, [check out our guide, "Forking Projects""](http://guides.github.com/overviews/forking/). Thanks! :sparkling_heart:
+1 hit(s) in 2 repo(s) for `guide`
 ```
 
-Results are grouped per repo, just like `run`. It searches tracked files via Git, so
-it's fast and ignores your build artifacts for free. Scope it to one stack with
-`--stack <name>` when the fleet is large.
+Each repo with a match gets a header and its hits underneath, and a final line
+totals the hits and repos searched — a repo with no match just doesn't appear. It
+searches tracked files via Git, so it's fast and ignores your build artifacts for
+free. Scope it to one stack with `--stack <name>` when the fleet is large.
 
 ## 🎚️ 4. Control the blast radius: parallelism and groups
 
@@ -139,8 +179,8 @@ haw status --group core
 ```
 
 ```console
-REPO          BRANCH   HEAD       DIRTY  DRIFT
-hello-world   master   7fd1a60b   -      -
+REPO         BRANCH                   HEAD       DIRTY  DRIFT
+hello-world  master                    7fd1a60b   -      -
 ```
 
 Only the `core` repo. The same `--group` filter works on `sync`, `status`, and `run` (and
@@ -172,7 +212,7 @@ declare.** The declared ones are the ones you'll want identical locally and in C
 <p>Put the fleet through its paces in <code>my-first-stack</code>:</p>
 <ul>
 <li>Run <code>haw run 'git log -1 --oneline'</code> and confirm you get one line per repo, grouped by name.</li>
-<li>Run <code>haw grep TODO</code> across the fleet. Then narrow it: <code>haw run --group core 'git log -1 --oneline'</code> — only the <code>core</code> repo should answer.</li>
+<li>Run <code>haw grep guide</code> across the fleet (a real hit in <code>spoon-knife</code>). Then narrow it: <code>haw run --group core 'git log -1 --oneline'</code> — only the <code>core</code> repo should answer.</li>
 <li>Force it fully serial with <code>haw run -j 1 'git status -s'</code> and watch the repos process one at a time instead of in parallel.</li>
 </ul>
 </div>

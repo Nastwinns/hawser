@@ -80,14 +80,45 @@ At any point, get the whole feature on one screen:
 haw change status FEAT-42
 ```
 
-This aggregates, per repo: the branch, whether it's dirty, its HEAD — and once PRs exist,
-the **review state and CI status** of each PR/MR. Instead of three browser tabs, one
-dashboard. It's the changeset equivalent of `haw status`.
+This aggregates, per repo: the branch, whether each repo is **on it**, whether it's
+dirty, its HEAD — and once PRs exist, the review state and CI status of each PR/MR.
+Before any PRs are open it looks like this (run against the `DEMO-1` changeset from the
+"Your turn" below, so the repos are the two octocat clones):
+
+```console
+changeset `DEMO-1`
+REPO         BRANCH                   ON IT     DIRTY  HEAD       PR
+hello-world  change/DEMO-1             yes       -      7fd1a60b   —
+spoon-knife  change/DEMO-1             yes       -      d0dd1f61   —
+(no PR/MRs yet — open them with `haw change request DEMO-1`)
+```
+
+Instead of three browser tabs, one dashboard. It's the changeset equivalent of
+`haw status`.
 
 <div class="callout tip">
 
 **Tip:** Add `--format json` to `change status` (it emits a stable `haw.change-status/1`
-document) when you want to pipe the state into another tool or a script.
+document) when you want to pipe the state into another tool or a script:
+
+```console
+$ haw change status DEMO-1 --format json
+{
+  "id": "DEMO-1",
+  "repos": [
+    {
+      "branch": "change/DEMO-1",
+      "dirty": false,
+      "head": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+      "missing": false,
+      "name": "hello-world",
+      "on_branch": true,
+      "pr": null
+    }
+  ],
+  "schema": "haw.change-status/1"
+}
+```
 
 </div>
 
@@ -142,6 +173,16 @@ landing changeset `FEAT-42` in dependency order:
   api      ✓ merged
 changeset `FEAT-42` landed.
 ```
+
+<div class="callout warning">
+
+**Forge step — needs a token.** Like `request`, `land` talks to the forge and requires
+a token (e.g. `export GITHUB_TOKEN=$(gh auth token)`) plus merge rights on each repo. The
+output above is illustrative: against the public read-only `octocat` repos this course
+uses, `request`/`land` can't push or merge, so don't expect these lines without your own
+writable repos and a token.
+
+</div>
 
 `proto` merged first because everything depends on it; the services followed. One command,
 correct order, no broken `main`.

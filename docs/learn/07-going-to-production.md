@@ -141,8 +141,14 @@ And when someone asks "what exactly shipped?", `haw evidence` bundles the manife
 lock, the audit log, and status into one archive:
 
 ```bash
-haw evidence -o haw-evidence.tar.gz
+haw evidence --out haw-evidence.tar.gz
 ```
+
+```console
+wrote evidence bundle haw-evidence.tar.gz
+```
+
+(Run bare, `haw evidence` writes `./haw-evidence.tar.gz` by default; `--out` just picks the path.)
 
 ## 🏛️ 6. The compliance / automotive angle
 
@@ -168,7 +174,24 @@ before it ever reaches CI:
 
 ```bash
 haw hooks install
-haw hooks list      # see the lifecycle hooks the workspace defines
+```
+
+```console
+  ✓ hello-world  pre-commit -> haw verify
+  ✓ spoon-knife  pre-commit -> haw verify
+installed the integrity pre-commit in 2 repo(s)
+```
+
+`haw hooks list` shows the *lifecycle* hooks the workspace defines (executables under
+`.haw/hooks`) — separate from the per-repo integrity pre-commit above. On a fresh
+workspace with none defined yet, it tells you where to add them:
+
+```bash
+haw hooks list
+```
+
+```console
+no lifecycle hooks — add executables under /path/to/my-first-stack/.haw/hooks
 ```
 
 <div class="callout success">
