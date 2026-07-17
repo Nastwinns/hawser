@@ -5,12 +5,16 @@ This final chapter is about doing all of that *for real* — safely, in CI, with
 trail. It's the difference between a neat local tool and something you trust to gate
 releases.
 
-## 1. First, the trust model — because it matters
+## 🛡️ 1. First, the trust model — because it matters
 
 Before you run `haw` on anything you didn't write, internalize one rule:
 
-> **The manifest is trusted code.** A `haw.toml`'s `build`, `test`, `run`, and `exec`
-> commands are executed through *your* shell.
+<div class="callout warning">
+
+**The manifest is trusted code.** A `haw.toml`'s `build`, `test`, `run`, and `exec`
+commands are executed through *your* shell.
+
+</div>
 
 Running `haw build`, `haw run`, or `haw sync` on an **untrusted** checkout is equivalent to
 running its `Makefile`. Treat `haw.toml` exactly like a `Makefile` or a `package.json`
@@ -27,7 +31,7 @@ Two corollaries you already half-know:
 
 Read the full [trust model](../SECURITY.md) before you wire `haw` into anything shared.
 
-## 2. The CI pipeline — always the same four moves
+## 🔧 2. The CI pipeline — always the same four moves
 
 Here's the payoff of everything you learned in Chapters 2–3. A `haw` pipeline is the same
 shape everywhere:
@@ -59,11 +63,15 @@ jobs:
 
 GitLab CI is the identical four moves with `variables: { GITLAB_TOKEN: $CI_JOB_TOKEN }`.
 
-> **Tip:** On a big fleet, pair `haw sync --filter=blob:none` (partial clone — all history,
-> lazy blobs) with a cache of the shared object store. Clones stay fast *without* breaking
-> the pinned SHAs, because every commit is still reachable.
+<div class="callout tip">
 
-## 3. Reproducibility, enforced
+**Tip:** On a big fleet, pair `haw sync --filter=blob:none` (partial clone — all history,
+lazy blobs) with a cache of the shared object store. Clones stay fast *without* breaking
+the pinned SHAs, because every commit is still reachable.
+
+</div>
+
+## ♻️ 3. Reproducibility, enforced
 
 The whole pipeline rests on `haw.lock`. Two flags make it airtight in CI:
 
@@ -76,7 +84,7 @@ haw verify               # assert tree == lock, exit 3 on drift
 baseline, never resolve fresh. `verify` then proves the checkout matches it. Together they
 guarantee the tree in CI is byte-for-byte the tree you committed.
 
-## 4. Distribution — publish what the fleet produced
+## 📦 4. Distribution — publish what the fleet produced
 
 Once the fleet builds, `haw publish` uploads its artifacts to a generic/raw artifact
 registry — **Nexus, Artifactory, GitLab, or Bitbucket**:
@@ -90,7 +98,7 @@ haw publish dist/*.tar.gz --to nexus --dry-run   # print the plan, no creds, no 
 touching the network or needing credentials — perfect for wiring the step up safely first.
 Credentials come from the target's env vars (e.g. `NEXUS_URL`, `NEXUS_USER`, `NEXUS_PASS`).
 
-## 5. Signing, SBOM, and provenance — the supply chain
+## 🔏 5. Signing, SBOM, and provenance — the supply chain
 
 This is where `haw` earns its keep for serious releases. Every signed release ships with a
 `.sha256` checksum and a **keyless cosign signature** (`.sig`/`.pem`) you can verify
@@ -117,7 +125,7 @@ lock, the audit log, and status into one archive:
 haw evidence -o haw-evidence.tar.gz
 ```
 
-## 6. The compliance / automotive angle
+## 🏛️ 6. The compliance / automotive angle
 
 If you work under a standard — ISO 26262, DO-178C, Automotive SPICE, CRA — the pieces
 above *are* your evidence, because they're grounded in the pinned lock:
@@ -133,7 +141,7 @@ The reproducible lock is the foundation: it makes "the baseline that was live in
 an exact, re-buildable, auditable fact rather than a guess. See
 [Domains](../DOMAINS.md) and [Compliance](../COMPLIANCE.md) for the full mapping.
 
-## 7. Integrity hooks — catch drift before it's committed
+## 🪝 7. Integrity hooks — catch drift before it's committed
 
 One last guardrail. `haw hooks install` writes a pre-commit hook in every repo that runs
 `haw verify` — so a commit that would drift the tree from the lock is caught *locally*,
@@ -144,7 +152,15 @@ haw hooks install
 haw hooks list      # see the lifecycle hooks the workspace defines
 ```
 
-## Recap
+<div class="callout success">
+
+**That's the whole production loop.** Pinned lock, drift gate, fleet build/test, signed
+artifacts, and an evidence bundle — the same primitives serve a hobby project or an
+ISO 26262 audit.
+
+</div>
+
+## ✅ Recap
 
 - **The manifest is trusted code** — only run `haw` on `haw.toml` / plugins you trust;
   tokens stay in the environment, never stored.
@@ -156,7 +172,7 @@ haw hooks list      # see the lifecycle hooks the workspace defines
   evidence` bundles the audit trail; releases are cosign-signed.
 - The same primitives map straight onto ASPICE / ISO 26262 / DO-178C / CRA compliance.
 
-## You did it
+## 🎉 You did it
 
 You've gone from "what even is this?" to composing a fleet, working across it, shipping
 cross-repo changesets, living in the cockpit, writing a plugin, and running it all in

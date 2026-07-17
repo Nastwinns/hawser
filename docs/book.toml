@@ -13,7 +13,7 @@ default-theme = "navy"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/Nastwinns/hawser"
 edit-url-template = "https://github.com/Nastwinns/hawser/edit/main/docs/{path}"
-additional-css = []
+additional-css = ["assets/learn.css"]
 
 [output.html.fold]
 enable = true

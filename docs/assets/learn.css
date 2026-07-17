@@ -1,0 +1,131 @@
+/* ============================================================
+   Learn hawser — course styling
+   Tuned for mdBook's dark "navy" theme: light text on dark bg.
+   Palette: hawser violet / teal / amber.
+   ============================================================ */
+
+:root {
+  --hw-violet: #b39cff;
+  --hw-violet-dim: rgba(139, 108, 255, 0.14);
+  --hw-teal: #5fe3c8;
+  --hw-teal-dim: rgba(56, 209, 178, 0.13);
+  --hw-blue: #79b8ff;
+  --hw-blue-dim: rgba(88, 145, 235, 0.14);
+  --hw-amber: #ffcf6b;
+  --hw-amber-dim: rgba(230, 168, 45, 0.14);
+  --hw-green: #7ee29a;
+  --hw-green-dim: rgba(70, 200, 120, 0.14);
+}
+
+/* ------------------------------------------------------------
+   Colored callout boxes
+   Used as: <div class="callout tip">…</div>
+   ------------------------------------------------------------ */
+.callout {
+  position: relative;
+  margin: 1.4em 0;
+  padding: 0.9em 1.1em 0.9em 3em;
+  border-radius: 8px;
+  border-left: 4px solid var(--hw-teal);
+  background: var(--hw-teal-dim);
+  line-height: 1.55;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child { margin-bottom: 0; }
+
+/* Emoji marker, positioned in the left gutter */
+.callout::before {
+  position: absolute;
+  left: 0.85em;
+  top: 0.82em;
+  font-size: 1.05em;
+  line-height: 1.4;
+}
+
+.callout p,
+.callout li { color: #e8ecf4; }
+
+.callout strong { color: #ffffff; }
+
+/* Inline code inside callouts stays readable on the tint */
+.callout code {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1eaff;
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+}
+
+/* --- Tip: teal/green --- */
+.callout.tip {
+  border-left-color: var(--hw-teal);
+  background: var(--hw-teal-dim);
+}
+.callout.tip::before { content: "\1F4A1"; } /* 💡 */
+
+/* --- Note: blue --- */
+.callout.note {
+  border-left-color: var(--hw-blue);
+  background: var(--hw-blue-dim);
+}
+.callout.note::before { content: "\1F4DD"; } /* 📝 */
+
+/* --- Warning: amber --- */
+.callout.warning {
+  border-left-color: var(--hw-amber);
+  background: var(--hw-amber-dim);
+}
+.callout.warning::before { content: "\26A0\FE0F"; } /* ⚠️ */
+
+/* --- Success: green --- */
+.callout.success {
+  border-left-color: var(--hw-green);
+  background: var(--hw-green-dim);
+}
+.callout.success::before { content: "\2705"; } /* ✅ */
+
+/* ------------------------------------------------------------
+   Inline accent utilities (use sparingly)
+   ------------------------------------------------------------ */
+.k {
+  color: var(--hw-violet);
+  font-weight: 600;
+  font-family: var(--mono-font, monospace);
+}
+
+.hl {
+  color: var(--hw-amber);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------
+   Nicer images — centered GIFs and banner
+   ------------------------------------------------------------ */
+.content img {
+  display: block;
+  margin: 1.4em auto;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+}
+
+/* Top-of-chapter hero banner */
+.hero-banner {
+  max-width: 100%;
+  margin: 0.6em auto 1.8em auto !important;
+  border-radius: 12px;
+  border: 1px solid rgba(179, 156, 255, 0.28) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Italic one-line caption under a GIF (an <em> on its own line) */
+.content p > em:only-child {
+  display: block;
+  text-align: center;
+  color: #aeb6c6;
+  font-size: 0.9em;
+  margin-top: -0.6em;
+}

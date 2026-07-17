@@ -8,7 +8,11 @@ In this chapter you'll run arbitrary commands across the fleet, wire up `build` 
 `test`, search every repo in one shot, and control parallelism and scope. Keep the
 `my-first-stack` workspace from the last chapter open.
 
-## 1. Run any command across every repo — `haw run`
+![Running commands and verifying across the fleet](../assets/cli-run-verify.gif)
+
+*`haw run` fans a command across every repo in parallel; `verify` gates the fleet against the lock.*
+
+## ⚙️ 1. Run any command across every repo — `haw run`
 
 The workhorse. `haw run` takes a command *positionally* and runs it in every repo, in
 parallel:
@@ -25,10 +29,14 @@ spoon-knife   d0dd1f6 Pointing to the guide for forking
 `haw` groups the output per repo so you always know which repo said what. Anything you'd
 type in one repo works: `git fetch`, `git status -s`, a linter, a shell one-liner.
 
-> **Tip:** Quote the command. `haw run 'git status -s'` passes the whole string as one
-> command; without quotes your shell would try to interpret the flags itself.
+<div class="callout tip">
 
-## 2. Declare build and test — then run them fleet-wide
+**Tip:** Quote the command. `haw run 'git status -s'` passes the whole string as one
+command; without quotes your shell would try to interpret the flags itself.
+
+</div>
+
+## 🔨 2. Declare build and test — then run them fleet-wide
 
 `haw` stays build-system-agnostic: each repo names the shell command that builds or tests
 *it*, and `haw` fans those out. You declare them in the manifest with `build =` and
@@ -66,11 +74,15 @@ haw test      # runs every repo's `test =`, in parallel
 Repos that don't declare the command (or aren't cloned) are simply skipped. And here's
 the detail that makes this a CI building block:
 
-> **Tip:** `haw build` and `haw test` **exit non-zero if any repo fails**. That's why the
-> same command you run locally drops straight into a pipeline — the pipeline stops when
-> any repo's build breaks.
+<div class="callout note">
 
-## 3. Search the whole fleet — `haw grep`
+**CI building block:** `haw build` and `haw test` **exit non-zero if any repo fails**.
+That's why the same command you run locally drops straight into a pipeline — the pipeline
+stops when any repo's build breaks.
+
+</div>
+
+## 🔎 3. Search the whole fleet — `haw grep`
 
 Need to find every use of a symbol, a TODO, a deprecated API across *all* repos? `haw
 grep` fans `git grep` across every cloned repo at once:
@@ -91,7 +103,7 @@ Results are grouped per repo, just like `run`. It searches tracked files via Git
 it's fast and ignores your build artifacts for free. Scope it to one stack with
 `--stack <name>` when the fleet is large.
 
-## 4. Control the blast radius: parallelism and groups
+## 🎚️ 4. Control the blast radius: parallelism and groups
 
 Two levers keep fleet-wide commands under control.
 
@@ -124,7 +136,7 @@ filter means everything; a filter excludes ungrouped repos.
 haw run --group core 'git log -1 --oneline'   # only core repos
 ```
 
-## 5. When to reach for each
+## 🗺️ 5. When to reach for each
 
 A quick map so you pick the right verb without thinking:
 
@@ -140,7 +152,7 @@ A quick map so you pick the right verb without thinking:
 The rule of thumb: **`run` for one-off commands, `build`/`test` for the commands your repos
 declare.** The declared ones are the ones you'll want identical locally and in CI.
 
-## Recap
+## ✅ Recap
 
 - `haw run '<cmd>'` runs any command in every repo in parallel, output grouped per repo.
 - Declare `build =` / `test =` per repo in the manifest; `haw build` / `haw test` fan them
@@ -148,7 +160,7 @@ declare.** The declared ones are the ones you'll want identical locally and in C
 - `haw grep <pattern>` is a fleet-wide `git grep`.
 - `-j N` caps parallelism; `--group G` (repeatable) scopes commands to labeled repos.
 
-## Next
+## 👉 Next
 
 Running commands is table stakes. Now the signature move — shipping *one feature across
 many repos* as a single coordinated changeset →

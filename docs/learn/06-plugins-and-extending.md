@@ -5,7 +5,7 @@ it **without forking**. In this chapter you'll discover plugins, install one, an
 your very own in the language of your choice. It's easier than you'd expect: a plugin is
 just a program that reads some JSON and prints some JSON.
 
-## 1. The idea: `haw <name>` runs `haw-<name>`
+## 🧩 1. The idea: `haw <name>` runs `haw-<name>`
 
 `haw` follows the same pattern as `git`, `cargo`, and `kubectl`: **any subcommand `haw`
 doesn't recognize is dispatched to a `haw-<name>` executable on your `PATH`.**
@@ -22,7 +22,7 @@ Two things make this safe and simple:
 - `haw` hands it the current fleet as JSON, and the plugin's exit code becomes `haw`'s. A
   20-line script is a perfectly valid plugin.
 
-## 2. Discover and install plugins
+## 🔌 2. Discover and install plugins
 
 `haw plugins` (plural) is the management surface. Start by listing what exists:
 
@@ -51,11 +51,15 @@ haw plugins install aspice            # installs the haw-aspice binary
 haw plugins install aspice --dry-run  # print the command, run nothing
 ```
 
-> **Tip:** `haw` prints exactly the `cargo install …` command before it runs it, and
-> `--dry-run` shows you the command without executing. Curious where `haw` looks for
-> plugins? `haw plugins path` lists the `PATH` directories it scans.
+<div class="callout tip">
 
-## 3. Scaffold your own — `haw plugins new`
+**Tip:** `haw` prints exactly the `cargo install …` command before it runs it, and
+`--dry-run` shows you the command without executing. Curious where `haw` looks for
+plugins? `haw plugins path` lists the `PATH` directories it scans.
+
+</div>
+
+## 🏗️ 3. Scaffold your own — `haw plugins new`
 
 Here's the fun part. Let's build a plugin called `mycheck` in Python:
 
@@ -94,7 +98,7 @@ haw-mycheck: inspected 2 repo(s) in /path/to/my-first-stack
 
 That's it — you extended the CLI, no fork, no rebuild of `haw`.
 
-## 4. The contract: context in, report out
+## 📜 4. The contract: context in, report out
 
 Every plugin speaks the same tiny protocol. Understand these two shapes and you can write
 a plugin in any language.
@@ -127,7 +131,7 @@ The golden rules, in one breath: name it `haw-<verb>`; be self-describing via `-
 human text on stdout, JSON under `--format json`; **fail open** (handle the workspace-less
 context); and never hang.
 
-## 5. Lifecycle hooks — plugins that fire automatically
+## ⚡ 5. Lifecycle hooks — plugins that fire automatically
 
 Beyond typing `haw <name>`, a plugin can subscribe to **lifecycle phases** in the manifest,
 so it runs automatically around fleet operations. This is exactly how the automotive
@@ -143,10 +147,14 @@ Now `misra` runs before any PR opens, and `aspice` runs after a changeset lands 
 has to remember to invoke them. `haw`'s own governance features (SBOM, signing, secret
 gate) ship *as plugins* on exactly this model, so nothing here is second-class.
 
-> **Tip:** A plugin's report surfaces in the cockpit's **governance view** (`v`) and its
-> panel in the **Plugins view** (`P`) — whether the hook fired from the CLI or the TUI.
+<div class="callout tip">
 
-## 6. Publish it to the community
+**Tip:** A plugin's report surfaces in the cockpit's **governance view** (`v`) and its
+panel in the **Plugins view** (`P`) — whether the hook fired from the CLI or the TUI.
+
+</div>
+
+## 📤 6. Publish it to the community
 
 Built something useful? Share it in two steps:
 
@@ -157,7 +165,7 @@ Built something useful? Share it in two steps:
    its `name`, `crate`, `git`, and a one-sentence `description`. Once merged, it shows up
    for everyone running `haw plugins list --remote`.
 
-## Where to go deeper
+## 📚 Where to go deeper
 
 - The full contract, the render intent, and every field: [Plugins](../PLUGINS.md).
 - The **official JSON Schemas** (the source of truth for every field):
@@ -165,7 +173,7 @@ Built something useful? Share it in two steps:
 - Thin reference **bindings** so you don't hand-roll JSON — Python and Go:
   [`bindings/`](https://github.com/Nastwinns/hawser/tree/main/bindings).
 
-## Recap
+## ✅ Recap
 
 - Any unrecognized `haw <name>` runs `haw-<name>` from `PATH`, as a separate process — a
   plugin can't crash `haw`.
@@ -176,7 +184,7 @@ Built something useful? Share it in two steps:
 - Subscribe a plugin to **lifecycle phases** in `[plugins]` so it fires automatically.
 - Publish via a crate + a one-line PR to the community index.
 
-## Next
+## 👉 Next
 
 You can compose, orchestrate, ship changesets, and extend `haw`. Let's make it
 production-grade — trust, CI, signing, and audit → [7. Going to production](07-going-to-production.md).

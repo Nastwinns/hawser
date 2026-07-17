@@ -5,7 +5,11 @@ you'll take *one* feature that touches *several* repos and drive it as a single 
 branch across all of them, cross-linked pull requests, and a merge that lands in the right
 order.
 
-## 1. The pain this removes
+![Driving a cross-repo changeset from the CLI](../assets/cli-changeset.gif)
+
+*One feature, many repos: `change start` branches them all, `status` aggregates, `request` opens linked PRs.*
+
+## 😤 1. The pain this removes
 
 Think back to the last time a feature spanned repos. You did this dance:
 
@@ -19,11 +23,15 @@ Nothing tied those three PRs together. There was no single artifact that said "t
 one feature." A **changeset** is exactly that artifact: one feature = one branch across N
 repos, with linked PR/MRs and an ordered land.
 
-> Changesets need a real forge (GitHub, GitLab, or Bitbucket) and a token to open PRs.
-> The `start` and `status` steps are local and safe to try anywhere; `request` and `land`
-> talk to the forge. We'll flag which is which.
+<div class="callout note">
 
-## 2. Start the changeset
+Changesets need a real forge (GitHub, GitLab, or Bitbucket) and a token to open PRs.
+The `start` and `status` steps are local and safe to try anywhere; `request` and `land`
+talk to the forge. We'll flag which is which.
+
+</div>
+
+## 🌱 2. Start the changeset
 
 You name the feature and (optionally) the repos it touches:
 
@@ -49,7 +57,7 @@ A few useful options at start time:
 - `--skip-branch` — adopt whatever branch each repo is already on, instead of creating one.
 - `--label <l>` — attach a label (repeatable) that gets forwarded to the PR/MRs later.
 
-## 3. Watch it come together — `change status`
+## 📊 3. Watch it come together — `change status`
 
 At any point, get the whole feature on one screen:
 
@@ -61,10 +69,14 @@ This aggregates, per repo: the branch, whether it's dirty, its HEAD — and once
 the **review state and CI status** of each PR/MR. Instead of three browser tabs, one
 dashboard. It's the changeset equivalent of `haw status`.
 
-> **Tip:** Add `--format json` to `change status` (it emits a stable `haw.change-status/1`
-> document) when you want to pipe the state into another tool or a script.
+<div class="callout tip">
 
-## 4. Open the pull requests — `change request`
+**Tip:** Add `--format json` to `change status` (it emits a stable `haw.change-status/1`
+document) when you want to pipe the state into another tool or a script.
+
+</div>
+
+## 🔀 4. Open the pull requests — `change request`
 
 When your branches are pushed and ready, one command opens **cross-linked PR/MRs** — one
 per repo — on whichever forge each repo lives on:
@@ -79,11 +91,15 @@ and a GitLab library gets a PR on GitHub *and* an MR on GitLab, cross-linked, fr
 one command. Any labels you passed at `start` are forwarded here. Target a specific base
 branch with `--base <branch>`.
 
-> This step needs a forge token in your environment — e.g. `export GITHUB_TOKEN=$(gh auth
-> token)`. `haw` reads tokens from env vars only, never stores them. Read-only steps
-> (`start`, `status`) need no token.
+<div class="callout warning">
 
-## 5. Land in dependency order — `change land`
+This step needs a forge token in your environment — e.g. `export GITHUB_TOKEN=$(gh auth
+token)`. `haw` reads tokens from env vars only, never stores them. Read-only steps
+(`start`, `status`) need no token.
+
+</div>
+
+## 🛬 5. Land in dependency order — `change land`
 
 Reviews are in, checks are green. Now merge — but in the *right order*. Remember `proto`
 is a shared library that `api` and `billing` depend on. Merging a service before its
@@ -115,7 +131,11 @@ changeset `FEAT-42` landed.
 `proto` merged first because everything depends on it; the services followed. One command,
 correct order, no broken `main`.
 
-## 6. The value, in one picture
+![Merging a changeset in dependency order](../assets/cli-merge.gif)
+
+*`change land` merges the linked PR/MRs in topological order — dependencies first — and stops at the first failure.*
+
+## 🖼️ 6. The value, in one picture
 
 ```text
         one feature (FEAT-42)
@@ -132,12 +152,16 @@ You never lost track of which PRs were "the feature," you never merged in the wr
 and you drove all of it from four commands. That's the whole point of a changeset:
 **a multi-repo feature that behaves like a single, coherent change.**
 
-> **Tip:** Working across repos and want to hop into one? `haw change goto FEAT-42 <repo>`
-> prints its path so you can `cd "$(haw change goto FEAT-42 api)"`. And `haw change
-> snapshot save <name>` records every repo's branch + HEAD so you can restore the exact
-> multi-repo state later.
+<div class="callout tip">
 
-## Recap
+**Tip:** Working across repos and want to hop into one? `haw change goto FEAT-42 <repo>`
+prints its path so you can `cd "$(haw change goto FEAT-42 api)"`. And `haw change
+snapshot save <name>` records every repo's branch + HEAD so you can restore the exact
+multi-repo state later.
+
+</div>
+
+## ✅ Recap
 
 - A **changeset** is one feature across N repos: a shared branch, linked PR/MRs, an
   ordered merge.
@@ -148,7 +172,7 @@ and you drove all of it from four commands. That's the whole point of a changese
   on the first failure.
 - `start`/`status` are local; `request`/`land` need a forge token in the environment.
 
-## Next
+## 👉 Next
 
 You've driven the changeset from the CLI. Now meet the cockpit that does all of this —
 and more — from the keyboard → [5. The TUI cockpit](05-the-tui-cockpit.md).

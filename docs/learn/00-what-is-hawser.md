@@ -1,5 +1,7 @@
 # 0. What is hawser?
 
+<img src="../assets/hawser-comic.jpeg" alt="hawser — the beam that binds the repos" class="hero-banner">
+
 Welcome! If you've ever worked on a product that lives in more than one Git repository,
 this course is for you. By the end of it you'll be composing repos, running work across
 a whole fleet, opening cross-repo pull requests, and driving it all from a keyboard
@@ -8,7 +10,7 @@ cockpit — comfortably.
 Let's start with the *why*. Because once the problem clicks, every command in `haw`
 suddenly makes sense.
 
-## The problem: one product, many repos
+## 🧩 The problem: one product, many repos
 
 Picture a real product. It's rarely a single repository anymore. It's a shared library,
 three or four services, an SDK, some infrastructure — each in its own Git repo, each with
@@ -28,10 +30,14 @@ Here's the thing: a *single* repo already solved these problems years ago. Your
 (`package-lock.json`, `Cargo.lock`) pins the *exact* resolved versions so everyone —
 you, your teammate, the CI runner — rebuilds an identical tree.
 
-> **The mental model in one line:** hawser is a `package.json` + lockfile, but for a
-> **fleet of Git repos** instead of a fleet of npm packages.
+<div class="callout note">
 
-## What hawser does
+**The mental model in one line:** hawser is a `package.json` + lockfile, but for a
+**fleet of Git repos** instead of a fleet of npm packages.
+
+</div>
+
+## ⚓ What hawser does
 
 **hawser composes a software stack from many Git repos, pins it to a lockfile, and lets
 you drive every cross-repo build, PR, review, and CI run from one place.**
@@ -43,7 +49,7 @@ for a single repo, now done for many.
 The command-line tool is called `haw`. It's a single binary, written in Rust, with no
 runtime to install.
 
-## The mental model: manifest → lockfile → stacks
+## 🧠 The mental model: manifest → lockfile → stacks
 
 Three concepts carry the whole system. Learn these now and everything else follows.
 
@@ -67,7 +73,7 @@ haw.toml   (intent)  ─────►  haw sync  ─────►  haw.lock 
 On disk there are no submodules, no symlinks, and no detached HEADs — each repo is a
 plain, complete Git clone. `haw` just keeps them in sync and coordinated.
 
-## When to reach for hawser
+## 🎯 When to reach for hawser
 
 hawser is **domain-agnostic** — a repo is a repo, a build is whatever shell command you
 declare. It shines whenever a product is spread across repos:
@@ -84,7 +90,7 @@ The loop — **compose → pin → change → build/test → govern** — is the
 Only the repos and the declared build commands differ. See
 [Domains](../DOMAINS.md) for how each maps on.
 
-## What you'll be able to do by the end of this course
+## 🚀 What you'll be able to do by the end of this course
 
 - Write a `haw.toml`, sync it, and read the lockfile with confidence.
 - Run builds, tests, commands, and searches across an entire fleet in parallel.
@@ -95,7 +101,13 @@ Only the repos and the declared build commands differ. See
 
 That's a real, productive skill set — and we'll build it one small step at a time.
 
-## Recap
+And here's where we're going — the keyboard cockpit you'll be living in by Chapter 5:
+
+![The hawser TUI cockpit, driving a whole fleet from the keyboard](../assets/haw-tui.gif)
+
+*The `haw` cockpit: read the fleet, drill into any repo or PR, and act — without leaving the terminal.*
+
+## ✅ Recap
 
 - Splitting a product across many Git repos is normal, but it costs you version
   coordination, cross-repo PRs, and reproducibility.
@@ -106,6 +118,6 @@ That's a real, productive skill set — and we'll build it one small step at a t
 - The CLI is `haw`: one Rust binary, no runtime.
 - It fits any domain where a product spans repos.
 
-## Next
+## 👉 Next
 
 Let's get the tool onto your machine → [1. Installing haw](01-install.md).

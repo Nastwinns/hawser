@@ -7,7 +7,11 @@ break something to see how `haw` catches drift.
 Everything here clones over HTTPS with no authentication, so you can actually run every
 command as you read. Grab a terminal.
 
-## 1. Create a workspace
+![Composing a stack: sync, tree, status, and the lockfile](../assets/cli-compose.gif)
+
+*The full compose loop you're about to run: `sync` clones the fleet, then `tree` / `status` read it and the lock pins it.*
+
+## 🛠️ 1. Create a workspace
 
 Make an empty directory and drop in a manifest. We'll use three small, real public repos
 from GitHub's `octocat` account — the same ones the shipped
@@ -50,7 +54,7 @@ Read that top to bottom, because it *is* the mental model:
 - `groups` are free-form labels you'll filter commands by later.
 - `[stack.site]` composes those repos into a stack. A repo is *shared*, never copied.
 
-## 2. Sync — clone everything and write the lock
+## 🔄 2. Sync — clone everything and write the lock
 
 One command materializes the tree:
 
@@ -70,11 +74,15 @@ haw.lock   haw.toml   hello-world/   spoon-knife/
 There they are: two **real, complete Git clones**, plus a brand-new `haw.lock`. No
 submodules, no symlinks — you could `cd hello-world && git log` and it's just Git.
 
-> **Tip:** `haw sync` is *idempotent*. Run it again and, since the lock already pins
-> exact SHAs, `haw` just makes sure your tree matches — no surprises, safe to repeat in
-> scripts and CI.
+<div class="callout tip">
 
-## 3. Explore the fleet
+**Tip:** `haw sync` is *idempotent*. Run it again and, since the lock already pins
+exact SHAs, `haw` just makes sure your tree matches — no surprises, safe to repeat in
+scripts and CI.
+
+</div>
+
+## 🔍 3. Explore the fleet
 
 Now the read commands. First, the shape of things:
 
@@ -109,11 +117,15 @@ the working tree has uncommitted changes (**DIRTY**), and whether HEAD differs f
 locked SHA (**DRIFT**). Right now everything is clean and in sync — the dashes mean "all
 good."
 
-> **Tip:** On a terminal these are color-coded — cyan repo names, yellow revs, green for
-> clean, red for drift. Pipe the output anywhere and it falls back to plain text
-> automatically (it honors `NO_COLOR`), so it's script-friendly by default.
+<div class="callout tip">
 
-## 4. Read the lockfile
+**Tip:** On a terminal these are color-coded — cyan repo names, yellow revs, green for
+clean, red for drift. Pipe the output anywhere and it falls back to plain text
+automatically (it honors `NO_COLOR`), so it's script-friendly by default.
+
+</div>
+
+## 🔒 4. Read the lockfile
 
 Open `haw.lock` in your editor. You'll see each repo pinned to a **full 40-character
 SHA** — not the branch name, the exact commit:
@@ -131,10 +143,14 @@ but the lock froze the *exact* commit master pointed at when you synced. Commit
 `haw.lock` alongside `haw.toml`, and anyone who clones and runs `haw sync` gets
 **precisely these commits** — not whatever `master` happens to be today.
 
-> **Tip:** `haw.lock` is generated. You commit it, but you don't hand-edit it — you
-> change intent in `haw.toml` and let `haw lock` / `haw sync` regenerate it.
+<div class="callout warning">
 
-## 5. Prove it's reproducible — re-run sync
+**Don't hand-edit it.** `haw.lock` is generated. You commit it, but you change intent in
+`haw.toml` and let `haw lock` / `haw sync` regenerate the lock.
+
+</div>
+
+## ♻️ 5. Prove it's reproducible — re-run sync
 
 ```bash
 haw sync
@@ -144,7 +160,7 @@ Because the lock exists, `haw` syncs *to the pinned SHAs*, not to wherever the b
 have moved. Run `haw status` again and you'll see the same clean fleet. That
 idempotence is the point: the lock, not the branch, is the source of truth now.
 
-## 6. See drift with your own eyes
+## 🧭 6. See drift with your own eyes
 
 Reproducibility is only useful if you can *detect* when the tree wanders off the baseline.
 Let's cause that on purpose. Move one repo to a different commit by hand:
@@ -203,7 +219,14 @@ exit code: 0
 Clean again. You just watched the full loop: **declare → sync → pin → detect drift →
 restore.**
 
-## Recap
+<div class="callout success">
+
+**You just did the core loop.** Declare intent, pin it, detect drift, and restore the
+baseline — the same four moves scale from two octocat repos to a hundred-repo fleet.
+
+</div>
+
+## ✅ Recap
 
 - A `haw.toml` declares **remotes**, **repos** (each with a `rev`), and **stacks**.
 - `haw sync` clones every repo and writes `haw.lock` — real Git clones, no
@@ -215,7 +238,7 @@ restore.**
 - **Drift** = HEAD differs from the lock. `haw status` flags it; `haw verify` **exits 3**
   on drift (your CI gate). `haw sync` restores the baseline.
 
-## Next
+## 👉 Next
 
 You can compose and pin a fleet. Now let's *work* across it — run commands, builds, tests,
 and searches everywhere at once → [3. The daily workflow](03-the-daily-workflow.md).

@@ -7,7 +7,11 @@ and *act* — merge, approve, checkout — without ever leaving the terminal.
 
 In this chapter you'll take a guided tour. Open it and follow along.
 
-## 1. Open it
+![The hawser TUI cockpit — mission control for the fleet](../assets/haw-tui.gif)
+
+*Your mission control: the fleet grid, drill-downs, PR/CI views, and keyboard actions — all in the terminal.*
+
+## 🚁 1. Open it
 
 Run `haw` with **no subcommand**:
 
@@ -25,7 +29,7 @@ haw dash --demo
 
 Either way you land on the **fleet grid** — the cockpit's home screen.
 
-## 2. Read the fleet grid
+## 📋 2. Read the fleet grid
 
 ```text
  haw ▸ ~/work/gateway ───────────────────────── stack: gateway   lock: ✓   repos: 3/3
@@ -48,7 +52,7 @@ selected repo, and `⚠` flags a problem (like the drift on `app-mqtt`). The gri
 
 Move with `↑`/`↓` (or `k`/`j`), exactly like Vim.
 
-## 3. Drill in — the core loop is read → drill → act
+## 🔬 3. Drill in — the core loop is read → drill → act
 
 Put the cursor on a repo and press **`Enter`**. You drill into that repo's Git detail:
 branch, SHA, working-tree status, recent log, diffstat, remotes. Press `Esc` (or `b`) to
@@ -57,7 +61,7 @@ come back up a level.
 That's the rhythm of the whole cockpit: **read** the grid → **drill** into a thing → **act**
 on it → back out. You're never more than a keystroke from detail or from action.
 
-## 4. Act on the fleet from the home row
+## ⌨️ 4. Act on the fleet from the home row
 
 Single keys on the cursor row do things. The essentials:
 
@@ -72,11 +76,15 @@ Single keys on the cursor row do things. The essentials:
 | `Space` | **mark** / unmark the cursor repo (`◉`) |
 | `r` | **run** a command — across the marked repos if any, else the whole fleet |
 
-> **Tip:** Marks are the cockpit's superpower. Press `Space` on a few repos, then `s`
-> (sync) or `r` (run) acts on *just that set*. It's how you do a surgical fleet operation
-> without touching a manifest.
+<div class="callout tip">
 
-## 5. The network views — PRs, CI, and acting on them
+**Tip:** Marks are the cockpit's superpower. Press `Space` on a few repos, then `s`
+(sync) or `r` (run) acts on *just that set*. It's how you do a surgical fleet operation
+without touching a manifest.
+
+</div>
+
+## 🌐 5. The network views — PRs, CI, and acting on them
 
 Three keys open fleet-wide network views. They load on demand (nothing hits the network
 until you ask):
@@ -99,7 +107,7 @@ with a `y/n` so you never merge by fat-finger:
 So the full cross-forge flow from Chapter 4 — see PRs, approve, merge — is right here,
 keyboard-only.
 
-## 6. The command bar — one language for CLI and TUI
+## 💬 6. The command bar — one language for CLI and TUI
 
 Press **`:`** to open the command bar. Its verbs *mirror the CLI you already learned*, and
 the status line echoes the exact command each one runs — so the cockpit doubles as a way
@@ -115,7 +123,7 @@ to discover the CLI:
 
 Learn one, know both. `:name` also jumps the cursor to a repo by name.
 
-## 7. Two more views, and themes
+## 🎨 7. Two more views, and themes
 
 - **`P`** — the **Plugins** view: every available plugin; `Enter` runs one and shows its
   output in a panel. (Chapter 6 is all about these.)
@@ -128,10 +136,14 @@ Learn one, know both. `:name` also jumps the cursor to a repo by name.
 
 Press **`?`** any time for the help overlay, and `q` (or `Ctrl-C`) to quit.
 
-> **Tip:** Every heavy action runs on a background worker, so the UI never freezes while a
-> sync, a fetch, or a forge call is in flight. Keep navigating.
+<div class="callout tip">
 
-## Recap
+**Tip:** Every heavy action runs on a background worker, so the UI never freezes while a
+sync, a fetch, or a forge call is in flight. Keep navigating.
+
+</div>
+
+## ✅ Recap
 
 - Bare `haw` (or `haw dash --demo`) opens the cockpit — a live `haw status` you can act on.
 - The loop is **read → drill (`Enter`) → act → back (`Esc`)**.
@@ -142,7 +154,7 @@ Press **`?`** any time for the help overlay, and `q` (or `Ctrl-C`) to quit.
 - `:` is a command bar mirroring the CLI; `P` plugins, `E` errors; six themes via
   `:theme` / `HAW_THEME`.
 
-## Next
+## 👉 Next
 
 You saw a Plugins view — let's find out what plugins are, use one, and scaffold your own →
 [6. Plugins and extending](06-plugins-and-extending.md).
