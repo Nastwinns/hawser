@@ -16,8 +16,9 @@ cargo install hawser        # or: brew, scoop, prebuilt binaries — see Install
 <img src="demo/hawser-persona.gif" alt="haw persona journey: declare, pin to real SHAs, build & test 5 real embedded upstreams, install plugins, and drive the cockpit" width="820">
 
 <sub>Five real embedded upstreams — CoreMark · cJSON · Monocypher · libcanard · Mbed-TLS —
-declared, pinned to real SHAs, built &amp; tested (real output), then plugins and the
-cockpit. <a href="https://nastwinns.github.io/hawser/">Full demo on the site →</a></sub>
+declared, pinned to real SHAs, then <b>real terminal captures</b> of the parallel build,
+the test recipes, and the live cockpit; plus plugins.
+<a href="https://nastwinns.github.io/hawser/">Full demo on the site →</a></sub>
 
 ### 🌐 [**hawser.dev — website & interactive course →**](https://nastwinns.github.io/hawser/)
 
