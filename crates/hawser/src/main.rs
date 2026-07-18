@@ -2865,6 +2865,7 @@ fn default_publish_name(ws: &Workspace) -> String {
         .unwrap_or_else(|| "fleet".to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn publish_cmd(
     files: &[String],
     to: &str,
