@@ -3158,6 +3158,77 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
 /// so data rows and the detail panel never get squeezed out entirely.
 const COMPACT_HEADER_HEIGHT: u16 = 16;
 
+/// Test-only render seam: build a Fleet-view [`App`] from a public [`Snapshot`]
+/// and draw one frame into `terminal`, so an out-of-crate integration test can
+/// exercise the real terminal-render path (layout, header collapse, footer)
+/// without spawning a process or reaching the private `App`/`draw` internals.
+///
+/// Gated behind the `test-render` feature (also enabled under `#[cfg(test)]`)
+/// so it never ships in a normal build.
+#[cfg(any(test, feature = "test-render"))]
+pub fn render_snapshot<B: ratatui::backend::Backend>(
+    terminal: &mut ratatui::Terminal<B>,
+    snapshot: Snapshot,
+) -> io::Result<()> {
+    let mut cursor = ListState::default();
+    cursor.select(Some(0));
+    // Default the active stack to the snapshot's current (or first) stack so
+    // `fleet_rows` resolves to real rows rather than an empty grid.
+    let stack = snapshot
+        .current_stack
+        .clone()
+        .or_else(|| snapshot.stacks.first().cloned());
+    let mut app = App {
+        view: View::Fleet,
+        back: Vec::new(),
+        snapshot,
+        stack,
+        changeset: None,
+        selected_repos: Vec::new(),
+        sort: None,
+        cursor,
+        input: InputMode::None,
+        filter: String::new(),
+        message: String::new(),
+        busy: None,
+        spinner: 0,
+        tick: 0,
+        help: false,
+        help_scroll: 0,
+        exit: None,
+        files_repo: None,
+        files_subpath: String::new(),
+        files_remote: false,
+        files_entries: None,
+        pending_confirm: None,
+        output: None,
+        prs: None,
+        ci: None,
+        gov: None,
+        detail_text: None,
+        detail_title: "detail".to_string(),
+        outgoing_crumb: None,
+        detail_scroll: 0,
+        pending_scroll: None,
+        files_return: None,
+        detail_pr: None,
+        detail_ci: None,
+        page_size: 10,
+        problems_only: false,
+        grep_hits: None,
+        grep_pattern: String::new(),
+        panels: None,
+        pr_file_entries: None,
+        pr_files_pr: None,
+        pr_files_return: None,
+        errors: Vec::new(),
+        error_seq: 0,
+        watch: false,
+    };
+    terminal.draw(|frame| draw(frame, &mut app))?;
+    Ok(())
+}
+
 fn draw(frame: &mut Frame, app: &mut App) {
     // On short terminals the full ~6-row header eats every row; collapse it to a
     // single compact line so the body (data rows / detail) always has space.
