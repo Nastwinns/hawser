@@ -575,6 +575,10 @@ enum InputMode {
     NewChangeset(String),
     /// The `!` single-repo shell prompt; carries the target repo + typed cmd.
     Exec(String, String),
+    /// The lazygit-style `a` actions menu; carries the (sub-key, label) rows to
+    /// render. Pressing a listed sub-key fires the same dispatch the old capital
+    /// did; `Esc`/any-unlisted-key cancels.
+    ActionsMenu(Vec<(char, &'static str)>),
 }
 
 enum Job {
@@ -1706,6 +1710,150 @@ fn open_fleet_view(app: &mut App, jobs: &Sender<Job>, view: View) {
     }
 }
 
+/// Whether `view` is a top-level LIST view where the global digit view-jumps
+/// (`1`–`7`) apply. Detail/scroll views (RepoDetail/PrDetail/CiDetail/Files/
+/// PrFiles/Grep) return `false`, so digits give inapplicable feedback there.
+fn is_list_view(view: View) -> bool {
+    matches!(
+        view,
+        View::Stacks
+            | View::Fleet
+            | View::Changesets
+            | View::Changeset
+            | View::Tree
+            | View::Prs
+            | View::Ci
+            | View::Governance
+            | View::Plugins
+            | View::Errors
+    )
+}
+
+/// Open the actions menu appropriate to the current view, or give inapplicable
+/// feedback when the view has no context actions. Modelled on the confirm popup.
+fn open_actions_menu(app: &mut App) {
+    let actions: Vec<(char, &'static str)> = match app.view {
+        View::Prs | View::PrDetail => {
+            vec![('m', "merge"), ('a', "approve"), ('c', "checkout")]
+        }
+        View::Changeset => vec![('r', "request PR"), ('l', "land")],
+        _ => Vec::new(),
+    };
+    if actions.is_empty() {
+        app.message = "no actions in this view — press ? for all keys".to_string();
+    } else {
+        app.input = InputMode::ActionsMenu(actions);
+    }
+}
+
+/// Fire one action-menu sub-key. Reuses the exact confirm-gated / write-guarded
+/// paths the old capital keys used, so safety is unchanged. Returns `false` when
+/// the sub-key is not a listed action (so the caller cancels the menu).
+fn run_action_menu_key(app: &mut App, c: char) -> bool {
+    match (app.view, c) {
+        (View::Prs | View::PrDetail, 'm') => {
+            pr_action_merge(app);
+            true
+        }
+        (View::Prs | View::PrDetail, 'a') => {
+            pr_action_approve(app);
+            true
+        }
+        (View::Prs | View::PrDetail, 'c') => {
+            pr_action_checkout(app);
+            true
+        }
+        (View::Changeset, 'r') => {
+            changeset_action_request(app);
+            true
+        }
+        (View::Changeset, 'l') => {
+            changeset_action_land(app);
+            true
+        }
+        _ => false,
+    }
+}
+
+/// The old `M` merge path — write-guarded confirm gate preserved.
+fn pr_action_merge(app: &mut App) {
+    match app.current_pr() {
+        Some(_) if !app.current_pr_writable() => {
+            if let Some((_, number, _)) = app.current_pr() {
+                let state = app.current_pr_state().unwrap_or_default();
+                app.message = format!("PR #{number} is already {state}");
+            }
+        }
+        Some((repo, number, title)) => {
+            app.pending_confirm = Some(Confirm::MergePr {
+                repo,
+                number,
+                title,
+            });
+        }
+        None => app.message = "merge: put the cursor on a PR row".to_string(),
+    }
+}
+
+/// The old `A` approve path — write-guarded confirm gate preserved.
+fn pr_action_approve(app: &mut App) {
+    match app.current_pr() {
+        Some(_) if !app.current_pr_writable() => {
+            if let Some((_, number, _)) = app.current_pr() {
+                let state = app.current_pr_state().unwrap_or_default();
+                app.message = format!("PR #{number} is already {state}");
+            }
+        }
+        Some((repo, number, title)) => {
+            app.pending_confirm = Some(Confirm::ApprovePr {
+                repo,
+                number,
+                title,
+            });
+        }
+        None => app.message = "approve: put the cursor on a PR row".to_string(),
+    }
+}
+
+/// The old `C` checkout path — write-guarded confirm gate preserved.
+fn pr_action_checkout(app: &mut App) {
+    match app.current_pr() {
+        Some(_) if !app.current_pr_writable() => {
+            if let Some((_, number, _)) = app.current_pr() {
+                let state = app.current_pr_state().unwrap_or_default();
+                app.message = format!("PR #{number} is already {state}");
+            }
+        }
+        Some((repo, number, title)) => {
+            app.pending_confirm = Some(Confirm::CheckoutPr {
+                repo,
+                number,
+                title,
+            });
+        }
+        None => app.message = "checkout: put the cursor on a PR row".to_string(),
+    }
+}
+
+/// The old `R` request-PR path — confirm gate preserved.
+fn changeset_action_request(app: &mut App) {
+    if let Some(id) = app.changeset.clone() {
+        let only = if app.selected_repos.is_empty() {
+            None
+        } else {
+            Some(app.selected_repos.clone())
+        };
+        app.pending_confirm = Some(Confirm::Request(id, only));
+    }
+}
+
+/// The old `L` land path — confirm gate preserved.
+fn changeset_action_land(app: &mut App) {
+    if let Some(id) = app.changeset.clone() {
+        app.pending_confirm = Some(Confirm::Land(id));
+    }
+}
+
 /// Render one plugin's panel into the shared scrollable detail view, titled
 /// `plugin: <name>`.
 fn open_plugin_render(app: &mut App, jobs: &Sender<Job>, name: &str) {
@@ -1804,10 +1952,12 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
                 dispatch(app, jobs, "sync", ActionKind::SyncStack(stack));
             }
         }
-        ("stack" | "switch", name) if !name.is_empty() => {
+        ("stack" | "stacks" | "switch", name) if !name.is_empty() => {
             app.message = format!("→ haw switch {name}");
             dispatch(app, jobs, "switch", ActionKind::Switch(name.to_string()));
         }
+        // Bare `:stack`/`:stacks` opens the switch-stack picker (the Stacks view).
+        ("stack" | "stacks", "") => app.goto_view(View::Stacks),
         ("run", cmd) if !cmd.is_empty() => {
             if app.view == View::Fleet && !app.selected_repos.is_empty() {
                 let repos = app.selected_repos.clone();
@@ -1862,12 +2012,15 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
             app.message = "→ haw lock".to_string();
             dispatch(app, jobs, "lock", ActionKind::Lock);
         }
+        // View aliases — each is the same jump as its digit key.
+        ("fleet", "") => open_fleet_view(app, jobs, View::Fleet),
+        ("changesets", "") => app.goto_view(View::Changesets),
         ("tree", "") => app.goto_view(View::Tree),
         ("prs", "") => open_fleet_view(app, jobs, View::Prs),
         ("ci", "") => open_fleet_view(app, jobs, View::Ci),
         ("governance", "") => open_fleet_view(app, jobs, View::Governance),
         ("plugins", "") => open_fleet_view(app, jobs, View::Plugins),
-        ("errors", "") => app.goto_view(View::Errors),
+        ("errors" | "err", "") => app.goto_view(View::Errors),
         ("theme", "") => {
             app.message = format!("themes: {}", theme::THEMES.join(", "));
         }
@@ -2446,10 +2599,22 @@ fn event_loop(
                                     );
                                 }
                             }
-                            InputMode::None => {}
+                            InputMode::ActionsMenu(_) | InputMode::None => {}
                         }
                     }
                     _ => {}
+                }
+                continue;
+            }
+            InputMode::ActionsMenu(_) => {
+                let key = key.code;
+                app.input = InputMode::None;
+                if let KeyCode::Char(c) = key
+                    && run_action_menu_key(&mut app, c)
+                {
+                    // Fired; the confirm gate (if any) is now armed.
+                } else if key != KeyCode::Esc {
+                    app.message = "cancelled".to_string();
                 }
                 continue;
             }
@@ -2525,13 +2690,27 @@ fn event_loop(
             KeyCode::Char('>') => app.cycle_sort(true),
             KeyCode::Char('<') => app.cycle_sort(false),
             KeyCode::Char('.') => app.toggle_sort_dir(),
-            KeyCode::Char('t') => app.goto_view(View::Tree),
-            KeyCode::Char('c') => app.goto_view(View::Changesets),
-            KeyCode::Char('m') => open_fleet_view(&mut app, jobs, View::Prs),
-            KeyCode::Char('i') => open_fleet_view(&mut app, jobs, View::Ci),
-            KeyCode::Char('v') => open_fleet_view(&mut app, jobs, View::Governance),
-            KeyCode::Char('P') => open_fleet_view(&mut app, jobs, View::Plugins),
-            KeyCode::Char('E') => app.goto_view(View::Errors),
+            // Digit view-jumps (k9s-style) — global from any top-level LIST
+            // view. They call the exact same transition the old letter keys did:
+            // 1→Fleet 2→Changesets 3→PR/MR 4→CI 5→Tree 6→Governance 7→Plugins.
+            KeyCode::Char('1') if is_list_view(app.view) => {
+                open_fleet_view(&mut app, jobs, View::Fleet)
+            }
+            KeyCode::Char('2') if is_list_view(app.view) => app.goto_view(View::Changesets),
+            KeyCode::Char('3') if is_list_view(app.view) => {
+                open_fleet_view(&mut app, jobs, View::Prs)
+            }
+            KeyCode::Char('4') if is_list_view(app.view) => {
+                open_fleet_view(&mut app, jobs, View::Ci)
+            }
+            KeyCode::Char('5') if is_list_view(app.view) => app.goto_view(View::Tree),
+            KeyCode::Char('6') if is_list_view(app.view) => {
+                open_fleet_view(&mut app, jobs, View::Governance)
+            }
+            KeyCode::Char('7') if is_list_view(app.view) => {
+                open_fleet_view(&mut app, jobs, View::Plugins)
+            }
+            KeyCode::Char('a') => open_actions_menu(&mut app),
             KeyCode::Char('o') if app.view == View::Prs || app.view == View::Ci => {
                 match app.cursor_url() {
                     Some(url) if !url.is_empty() => match open_in_browser(&url) {
@@ -2693,20 +2872,6 @@ fn event_loop(
                     dispatch(&mut app, jobs, "sync", ActionKind::SyncStack(stack));
                 }
             }
-            KeyCode::Char('S') => {
-                let target = match app.view {
-                    View::Stacks => app.stack_rows().get(selected).map(|s| s.to_string()),
-                    _ => None,
-                };
-                match target {
-                    Some(stack) => {
-                        app.message = format!("→ haw switch {stack}");
-                        app.stack = Some(stack.clone());
-                        dispatch(&mut app, jobs, "switch", ActionKind::Switch(stack));
-                    }
-                    None => app.goto_view(View::Stacks),
-                }
-            }
             KeyCode::Char('p') if app.view == View::Fleet => {
                 app.problems_only = !app.problems_only;
                 app.clamp_cursor();
@@ -2730,23 +2895,6 @@ fn event_loop(
                     None => app.message = "exec: put the cursor on a repo row".to_string(),
                 }
             }
-            KeyCode::Char('F') if matches!(app.view, View::Fleet | View::RepoDetail) => {
-                let repo = match app.view {
-                    View::RepoDetail => app.files_repo.clone(),
-                    _ => app.cursor_repo(),
-                };
-                match repo {
-                    Some(repo) => {
-                        app.message = format!("→ git fetch ({repo})");
-                        dispatch(&mut app, jobs, "fetch", ActionKind::RepoFetch(repo));
-                    }
-                    None => app.message = "fetch: put the cursor on a repo row".to_string(),
-                }
-            }
-            KeyCode::Char('l') if app.view == View::Fleet || app.view == View::Stacks => {
-                app.message = "→ haw lock".to_string();
-                dispatch(&mut app, jobs, "lock", ActionKind::Lock);
-            }
             KeyCode::Char('r') => {
                 app.input = InputMode::Command("run ".to_string());
             }
@@ -2761,75 +2909,6 @@ fn event_loop(
                     } else {
                         app.selected_repos.push(repo);
                     }
-                }
-            }
-            KeyCode::Char('R') if app.view == View::Changeset => {
-                if let Some(id) = app.changeset.clone() {
-                    let only = if app.selected_repos.is_empty() {
-                        None
-                    } else {
-                        Some(app.selected_repos.clone())
-                    };
-                    app.pending_confirm = Some(Confirm::Request(id, only));
-                }
-            }
-            KeyCode::Char('L') if app.view == View::Changeset => {
-                if let Some(id) = app.changeset.clone() {
-                    app.pending_confirm = Some(Confirm::Land(id));
-                }
-            }
-            KeyCode::Char('M') if app.view == View::Prs || app.view == View::PrDetail => {
-                match app.current_pr() {
-                    Some(_) if !app.current_pr_writable() => {
-                        if let Some((_, number, _)) = app.current_pr() {
-                            let state = app.current_pr_state().unwrap_or_default();
-                            app.message = format!("PR #{number} is already {state}");
-                        }
-                    }
-                    Some((repo, number, title)) => {
-                        app.pending_confirm = Some(Confirm::MergePr {
-                            repo,
-                            number,
-                            title,
-                        });
-                    }
-                    None => app.message = "merge: put the cursor on a PR row".to_string(),
-                }
-            }
-            KeyCode::Char('A') if app.view == View::Prs || app.view == View::PrDetail => {
-                match app.current_pr() {
-                    Some(_) if !app.current_pr_writable() => {
-                        if let Some((_, number, _)) = app.current_pr() {
-                            let state = app.current_pr_state().unwrap_or_default();
-                            app.message = format!("PR #{number} is already {state}");
-                        }
-                    }
-                    Some((repo, number, title)) => {
-                        app.pending_confirm = Some(Confirm::ApprovePr {
-                            repo,
-                            number,
-                            title,
-                        });
-                    }
-                    None => app.message = "approve: put the cursor on a PR row".to_string(),
-                }
-            }
-            KeyCode::Char('C') if app.view == View::Prs || app.view == View::PrDetail => {
-                match app.current_pr() {
-                    Some(_) if !app.current_pr_writable() => {
-                        if let Some((_, number, _)) = app.current_pr() {
-                            let state = app.current_pr_state().unwrap_or_default();
-                            app.message = format!("PR #{number} is already {state}");
-                        }
-                    }
-                    Some((repo, number, title)) => {
-                        app.pending_confirm = Some(Confirm::CheckoutPr {
-                            repo,
-                            number,
-                            title,
-                        });
-                    }
-                    None => app.message = "checkout: put the cursor on a PR row".to_string(),
                 }
             }
             KeyCode::Char('d') if app.view == View::Prs || app.view == View::PrDetail => {
@@ -2863,6 +2942,13 @@ fn event_loop(
                 }
                 None => app.message = "logs: no CI run in view".to_string(),
             },
+            // Digit view-jumps only apply in top-level LIST views; in a
+            // detail/scroll view they're inapplicable — say so rather than
+            // no-op silently.
+            KeyCode::Char('1'..='7') if !is_list_view(app.view) => {
+                app.message =
+                    "view jumps (1-7) work from a list view — press ? for all keys".to_string();
+            }
             // A hinted key that fell through every guard is advertised somewhere
             // but does nothing here — tell the user rather than no-op silently.
             // Truly unbound keys stay quiet.
@@ -2878,10 +2964,10 @@ fn event_loop(
 /// one — used to give feedback when a hinted-but-inapplicable key is pressed.
 /// Keeps global keys (handled everywhere) out so they never trip this path.
 fn key_hinted_elsewhere(current: View, c: char) -> bool {
-    // Keys wired globally in the event loop, handled in every view.
-    const GLOBAL: &[char] = &[
-        'q', '?', '/', ':', 'b', 'j', 'k', 'g', 'S', 'r', 't', 'c', 'm', 'i', 'v', 'P', 'E',
-    ];
+    // Keys wired globally in the event loop, handled in every view. `a` opens
+    // the context actions menu everywhere (it self-reports when a view has no
+    // actions), so it never trips the inapplicable-key path either.
+    const GLOBAL: &[char] = &['q', '?', '/', ':', 'b', 'j', 'k', 'g', 'r', 'w', 'a'];
     if GLOBAL.contains(&c) {
         return false;
     }
@@ -2938,6 +3024,9 @@ fn hint_key_tokens(label: &str) -> Vec<&str> {
             tokens.push(">");
         } else if first == "PgUp/PgDn" {
             tokens.push("PgUp/PgDn");
+        } else if first == "1-7" {
+            // The compact digit view-jump cell advertises all seven digits.
+            tokens.extend(["1", "2", "3", "4", "5", "6", "7"]);
         } else {
             tokens.push(first);
         }
@@ -2995,35 +3084,26 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         View::Stacks => &[
             ("enter", "open fleet"),
             ("s", "sync stack"),
-            ("S", "switch stack"),
             ("p", "pin"),
-            ("l", "lock"),
-            ("c", "changesets"),
-            ("t", "tree"),
+            ("1-7", "views"),
+            (":stack", "switch"),
+            ("g", "goto"),
             ("/", "filter"),
             (":", "cmd"),
             ("?", "help"),
         ],
         View::Fleet => &[
             ("s", "sync"),
-            ("F", "fetch"),
-            ("S", "switch stack"),
             ("space", "mark"),
             ("p", "problems"),
-            ("l", "lock"),
             ("!", "exec"),
-            ("c", "changesets"),
-            ("m", "PRs"),
-            ("i", "CI"),
-            ("v", "governance"),
-            ("P", "plugins"),
-            ("E", "errors"),
+            ("1-7", "views"),
+            (":stack", "switch"),
             ("r", "run"),
             ("w", "watch"),
             ("g", "goto"),
             ("x", "shell"),
             ("f", "files"),
-            ("t", "tree"),
             ("<>", "sort"),
             (".", "dir"),
             ("PgUp/PgDn", "page"),
@@ -3033,6 +3113,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         View::Changesets => &[
             ("enter", "open"),
             ("n", "new"),
+            ("1-7", "views"),
             ("b", "back"),
             ("/", "filter"),
             ("?", "help"),
@@ -3040,9 +3121,9 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         ],
         View::Changeset => &[
             ("space", "select"),
-            ("R", "request PR"),
-            ("L", "land"),
+            ("a", "actions"),
             ("n", "new"),
+            ("1-7", "views"),
             ("g", "goto"),
             ("f", "files"),
             ("PgUp/PgDn", "page"),
@@ -3050,16 +3131,13 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("/", "filter"),
             (":", "cmd"),
         ],
-        View::Tree => &[("b", "back"), ("q", "quit")],
+        View::Tree => &[("1-7", "views"), ("b", "back"), ("q", "quit")],
         View::Prs => &[
             ("enter", "detail"),
+            ("a", "actions"),
             ("d", "diff"),
-            ("M", "merge"),
-            ("A", "approve"),
-            ("C", "checkout"),
             ("o", "open in browser"),
-            ("m", "refetch"),
-            ("i", "CI runs"),
+            ("1-7", "views"),
             ("g", "goto"),
             ("x", "shell"),
             ("f", "files"),
@@ -3074,8 +3152,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("enter", "detail"),
             ("l", "logs"),
             ("o", "open in browser"),
-            ("i", "refetch"),
-            ("m", "PR/MRs"),
+            ("1-7", "views"),
             ("g", "goto"),
             ("x", "shell"),
             ("f", "files"),
@@ -3088,26 +3165,30 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
         ],
         View::Governance => &[
             ("o", "open artifact"),
-            ("v", "refetch"),
+            ("1-7", "views"),
             ("b", "back"),
             ("/", "filter"),
             ("?", "help"),
         ],
         View::Plugins => &[
             ("enter", "render panel"),
-            ("P", "refetch"),
+            ("1-7", "views"),
             ("b", "back"),
             ("/", "filter"),
             ("?", "help"),
         ],
-        View::Errors => &[("b", "back"), ("/", "filter"), ("?", "help"), ("q", "quit")],
+        View::Errors => &[
+            ("1-7", "views"),
+            ("b", "back"),
+            ("/", "filter"),
+            ("?", "help"),
+            ("q", "quit"),
+        ],
         View::PrDetail => &[
             ("j/k", "scroll"),
+            ("a", "actions"),
             ("d", "diff"),
             ("f", "files"),
-            ("M", "merge"),
-            ("A", "approve"),
-            ("C", "checkout"),
             ("b", "back"),
             ("q", "quit"),
         ],
@@ -3121,7 +3202,7 @@ fn key_hints(view: View) -> &'static [(&'static str, &'static str)] {
             ("j/k", "scroll"),
             ("x", "shell"),
             ("!", "exec"),
-            ("F", "fetch"),
+            (":fetch", "fetch"),
             ("b", "back"),
             ("q", "quit"),
         ],
@@ -3278,6 +3359,9 @@ fn draw(frame: &mut Frame, app: &mut App) {
     if let Some(confirm) = &app.pending_confirm {
         draw_confirm(frame, confirm);
     }
+    if let InputMode::ActionsMenu(actions) = &app.input {
+        draw_actions_menu(frame, actions);
+    }
     if app.help {
         draw_help(frame, app.help_scroll);
     }
@@ -3424,6 +3508,56 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm) {
                     " confirm ",
                     Style::default()
                         .fg(theme::yellow())
+                        .add_modifier(Modifier::BOLD),
+                )),
+        ),
+        popup,
+    );
+}
+
+/// The lazygit-style `a` actions menu: a bordered ` actions ` popup listing each
+/// sub-key + label. Pressing a listed sub-key fires the same (confirm-gated)
+/// dispatch the old capital did; `Esc`/any-unlisted-key cancels.
+fn draw_actions_menu(frame: &mut Frame, actions: &[(char, &'static str)]) {
+    let mut text: Vec<Line> = Vec::with_capacity(actions.len() + 2);
+    for (key, label) in actions {
+        text.push(Line::from(vec![
+            Span::styled(
+                format!(" {key} "),
+                Style::default()
+                    .fg(theme::green())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled((*label).to_string(), Style::default().fg(theme::text())),
+        ]));
+    }
+    text.push(Line::raw(""));
+    text.push(Line::from(Span::styled(
+        " esc cancels ",
+        Style::default().fg(theme::dim()),
+    )));
+    let area = frame.area();
+    let width = area.width.min(40);
+    let height = u16::try_from(text.len() + 2)
+        .unwrap_or(u16::MAX)
+        .min(area.height);
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(Text::from(text)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme::teal()))
+                .title(Span::styled(
+                    " actions ",
+                    Style::default()
+                        .fg(theme::mauve())
                         .add_modifier(Modifier::BOLD),
                 )),
         ),
@@ -4944,6 +5078,10 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(theme::dim()),
             ),
         ]),
+        (InputMode::ActionsMenu(_), _) => Line::styled(
+            " actions — pick a key, esc cancels",
+            Style::default().fg(theme::dim()),
+        ),
         (InputMode::None, Some(label)) => Line::from(vec![
             Span::styled(
                 format!(" {} ", SPINNER[app.spinner]),
@@ -5074,10 +5212,36 @@ fn frame_height(terminal: &ratatui::DefaultTerminal) -> u16 {
 /// renderer and the scroll-clamp so they never disagree.
 fn help_lines() -> Vec<Line<'static>> {
     vec![
-        help_section("navigation"),
-        help_entry("j / k", "move · enter drill in · esc/b back"),
+        // The model, k9s/lazygit-style: digits switch views, `a` opens the
+        // current view's context actions, `:` handles everything else.
+        help_section("the model"),
+        help_entry("1-7", "switch view · a context actions · : for the rest"),
+        Line::raw(""),
+        help_section("global (frozen — same in every view)"),
+        help_entry("j / k", "move (↑/↓ too) · enter drill in · esc/b/⌫ back"),
         help_entry("q", "quit · ctrl-c force quit"),
         help_entry("F5", "refresh now · ctrl-r also works"),
+        help_entry("ctrl-d / ctrl-u", "half-page · PgUp/PgDn full page"),
+        help_entry("/", "filter · : command · ? help"),
+        help_entry("g", "goto the repo under the cursor (opens it in a shell)"),
+        help_entry(
+            "w",
+            "toggle watch — auto-refresh the fleet & open PR/CI view",
+        ),
+        help_entry("space", "mark/unmark (Fleet & Changeset)"),
+        Line::raw(""),
+        help_section("views (from any list — digits or : aliases)"),
+        help_entry("1", "fleet · :fleet"),
+        help_entry("2", "changesets · :changesets"),
+        help_entry("3", "PR/MRs · :prs"),
+        help_entry("4", "CI runs · :ci"),
+        help_entry("5", "tree · :tree"),
+        help_entry("6", "governance · :governance"),
+        help_entry("7", "plugins · :plugins"),
+        Line::raw(""),
+        help_section("actions (a opens a context menu; each asks y/n)"),
+        help_entry("a", "in PR/MR: m merge · a approve · c checkout"),
+        help_entry("a", "in changeset: r request PR/MRs · l land"),
         Line::raw(""),
         help_section("fleet"),
         help_entry(
@@ -5085,43 +5249,25 @@ fn help_lines() -> Vec<Line<'static>> {
             "drill into the repo's live git detail (scrollable)",
         ),
         help_entry("s", "sync marked repos, else cursor repo (or stack)"),
-        help_entry("F", "git fetch the cursor repo (distinct from s sync)"),
         help_entry("space", "mark/unmark repo · s / r act on the marked set"),
         help_entry("p", "problems-only filter (⚠ dirty/drift/behind/missing)"),
         help_entry("!", "run a shell command in the cursor repo (detail view)"),
-        help_entry("S", "switch stack · l lock"),
-        help_entry("t", "tree · c changesets · r run · g goto"),
-        help_entry(
-            "w",
-            "toggle watch — auto-refresh the fleet & open PR/CI view",
-        ),
-        help_entry("x", "drop into a shell in the repo (exits the cockpit)"),
+        help_entry("r", "run a command · x drop into a shell in the repo"),
         help_entry("f", "browse the repo's files (local disk or forge)"),
         help_entry("< >", "move sort column · . toggles asc/desc"),
-        help_entry(
-            "/",
-            "fuzzy filter by name or group — reopens with your text",
-        ),
+        help_entry(":stack", "switch stack · :lock lock · :fetch git fetch"),
         Line::raw(""),
-        help_section("fleet-wide (network)"),
-        help_entry("m", "open PR/MRs across every repo"),
-        help_entry("i", "recent CI runs across every repo"),
-        help_entry("v", "governance — plugins, artifacts, findings"),
+        help_section("pr/mr & ci"),
         help_entry("enter", "drill into a PR/MR or CI run (scrollable)"),
-        help_entry("d", "read the PR/MR's diff (scrollable)"),
+        help_entry("d", "read the PR/MR's diff · f its changed files"),
         help_entry("l", "read the CI run/pipeline's logs (scrollable)"),
-        help_entry("o", "open the row's PR / run / artifact"),
-        help_entry("< > .", "sort PR/CI columns (. toggles asc/desc)"),
-        help_entry("PgUp/PgDn", "page through long lists · ctrl-d/u also"),
-        help_entry("M / A", "merge / approve the PR/MR (asks y/n)"),
-        help_entry("C", "check out the PR/MR branch locally (asks y/n)"),
+        help_entry("o", "open the row's PR / run / artifact in the browser"),
+        help_entry("a", "actions — merge / approve / checkout (asks y/n)"),
         Line::raw(""),
         help_section("changeset"),
         help_entry("n", "new · space select repos"),
-        help_entry("space", "toggle a repo · R with no selection = all repos"),
-        help_entry("R", "request PR/MRs (cross-linked, asks y/n)"),
-        help_entry("L", "land in dependency order (asks y/n)"),
-        help_entry("g", "goto the repo under the cursor"),
+        help_entry("space", "toggle a repo · a→r with no selection = all repos"),
+        help_entry("a", "actions — r request PR/MRs · l land (asks y/n)"),
         Line::raw(""),
         help_section("files"),
         help_entry("enter", "open a dir or view a file (scrollable)"),
@@ -5135,13 +5281,14 @@ fn help_lines() -> Vec<Line<'static>> {
         help_entry(":merge abort <repo>", "abort a planned merge"),
         Line::raw(""),
         help_section("command bar"),
-        help_entry(":sync", "· :switch NAME · :run CMD · :tree"),
-        help_entry(":build", "· :test · :verify — fleet build/test/verify"),
+        help_entry(":stack", "· :stack NAME · :lock · :fetch · :errors"),
+        help_entry(":fleet", "· :changesets · :prs · :ci · :tree"),
+        help_entry(":governance", "· :plugins · :help"),
+        help_entry(":sync", "· :run CMD · :build · :test · :verify"),
         help_entry(":watch", "· w — toggle fleet & PR/CI auto-refresh"),
-        help_entry(":prs", "· :ci · :governance · :plugins · :help"),
         help_entry(":pin", "· :lock — pin HEADs / commit the lock"),
         help_entry(":change", "[ID | start ID | land ID | request ID]"),
-        help_entry(":grep <pat>", "· :sh CMD · :problems · :fetch"),
+        help_entry(":grep <pat>", "· :sh CMD · :problems"),
         help_entry(":<repo>", "jump the fleet cursor to a matching repo"),
         help_entry(":theme <name>", "switch skin (catppuccin/dracula/nord/…)"),
         Line::raw(""),
@@ -5394,19 +5541,100 @@ mod tests {
         }
     }
 
+    /// The frozen global keys, by hint token, that must mean the SAME thing in
+    /// every view — never repurposed per-view. Paired with the canonical label
+    /// each is allowed to carry.
+    const FROZEN_GLOBALS: &[(&str, &str)] = &[
+        ("j/k", "scroll"),
+        ("/", "filter"),
+        (":", "cmd"),
+        ("?", "help"),
+        ("q", "quit"),
+        ("b", "back"),
+        ("space", "mark"),
+        ("g", "goto"),
+        ("w", "watch"),
+        ("PgUp/PgDn", "page"),
+    ];
+
+    /// No view may bind a frozen-global key token to a DIFFERENT label than its
+    /// global meaning — the globals are never repurposed. `j/k` reads "scroll"
+    /// in detail views and "move" in lists (both movement), and `space` reads
+    /// "select"/"mark" (both marking), so those synonym pairs are accepted.
+    #[test]
+    fn no_view_overrides_a_frozen_global() {
+        // Movement/marking synonyms that count as the SAME global meaning.
+        fn same_meaning(token: &str, label: &str, canonical: &str) -> bool {
+            if label == canonical {
+                return true;
+            }
+            match token {
+                "j/k" => matches!(label, "move" | "scroll"),
+                "space" => matches!(label, "mark" | "select"),
+                "b" => matches!(label, "back" | "up / back"),
+                _ => false,
+            }
+        }
+        for view in ALL_VIEWS {
+            for (key, label) in key_hints(view) {
+                if let Some((_, canonical)) = FROZEN_GLOBALS.iter().find(|(tok, _)| tok == key) {
+                    assert!(
+                        same_meaning(key, label, canonical),
+                        "view {view:?} repurposes frozen global <{key}> as `{label}` \
+                         (must mean `{canonical}`)"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Within a single view, no key string may appear twice in its hint row.
+    #[test]
+    fn no_duplicate_key_within_a_view() {
+        for view in ALL_VIEWS {
+            let mut seen = std::collections::HashSet::new();
+            for (key, _) in key_hints(view) {
+                assert!(
+                    seen.insert(*key),
+                    "view {view:?} lists key `{key}` more than once in its hints"
+                );
+            }
+        }
+    }
+
+    /// Every frozen-global key resolves to a real handler in EVERY view — the
+    /// globals are the always-present spine of the keymap.
+    #[test]
+    fn every_frozen_global_is_handled_in_every_view() {
+        for view in ALL_VIEWS {
+            for (token, label) in FROZEN_GLOBALS {
+                for key in hint_key_tokens(token) {
+                    assert!(
+                        key_is_handled(view, key),
+                        "frozen global <{key}> ({label}) is not handled in {view:?}"
+                    );
+                }
+            }
+        }
+    }
+
     /// Whether a hinted key resolves to a real handler for the given view.
     fn key_is_handled(view: View, key: &str) -> bool {
         match key {
             "enter" | "space" | "?" | "/" | ":" | "b" | "q" | "j" | "k" => true,
             "j/k" => matches!(view, View::RepoDetail | View::PrDetail | View::CiDetail),
-            "t" | "c" | "m" | "i" | "v" | "r" | "g" | "P" | "E" | "w" => true,
+            "r" | "g" | "w" => true,
+            // Digit view-jumps: handled in every top-level LIST view.
+            "1" | "2" | "3" | "4" | "5" | "6" | "7" => is_list_view(view),
+            // `:`-prefixed hint tokens are command-bar aliases, always reachable.
+            _ if key.starts_with(':') => true,
+            // `a` opens the context actions menu (only hinted where it acts).
+            "a" => matches!(view, View::Prs | View::PrDetail | View::Changeset),
             "s" => matches!(view, View::Fleet | View::Stacks),
-            "S" => true,
             "p" => matches!(view, View::Fleet | View::Stacks),
-            "!" | "F" => matches!(view, View::Fleet | View::RepoDetail),
+            "!" => matches!(view, View::Fleet | View::RepoDetail),
             "n" => matches!(view, View::Changesets | View::Changeset),
-            "L" => view == View::Changeset,
-            "R" => matches!(view, View::Changeset | View::Files),
+            "R" => view == View::Files,
             "f" => matches!(
                 view,
                 View::Fleet | View::Changeset | View::Prs | View::PrDetail | View::Ci | View::Grep
@@ -5421,17 +5649,13 @@ mod tests {
                     | View::Ci
                     | View::Grep
             ),
-            "M" | "A" | "C" => matches!(view, View::Prs | View::PrDetail),
             "d" => matches!(view, View::Prs | View::PrDetail),
-            "l" => matches!(view, View::Fleet | View::Stacks | View::Ci | View::CiDetail),
+            "l" => matches!(view, View::Ci | View::CiDetail),
             "o" => matches!(view, View::Prs | View::Ci | View::Governance),
             "<" | ">" | "<>" | "." => matches!(view, View::Fleet | View::Prs | View::Ci),
-            "PgUp/PgDn" => {
-                matches!(
-                    view,
-                    View::Fleet | View::Changeset | View::Prs | View::Ci | View::Grep
-                )
-            }
+            // PageUp/PageDown are wired globally in the event loop (list paging
+            // and detail scroll alike), so they resolve in every view.
+            "PgUp/PgDn" => true,
             _ => false,
         }
     }
@@ -5809,7 +6033,7 @@ mod tests {
         open_fleet_view(&mut app, &tx, View::Prs);
         assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs { force: false })));
         app.busy = None;
-        // Pressing `m` again while already on the view is a manual refetch.
+        // Pressing `3` (or F5) again while already on the view is a manual refetch.
         open_fleet_view(&mut app, &tx, View::Prs);
         assert!(matches!(rx.try_recv(), Ok(Job::FleetPrs { force: true })));
     }
@@ -5832,6 +6056,103 @@ mod tests {
         let (tx, _rx) = channel();
         run_command_bar(&mut app, &tx, "frobnicate");
         assert!(app.message.contains("unknown command"));
+    }
+
+    #[test]
+    fn bare_stack_command_opens_the_switch_picker() {
+        let mut app = fleet_app();
+        let (tx, _rx) = channel();
+        run_command_bar(&mut app, &tx, "stack");
+        assert_eq!(app.view, View::Stacks);
+        app.view = View::Fleet;
+        run_command_bar(&mut app, &tx, "stacks");
+        assert_eq!(app.view, View::Stacks);
+    }
+
+    #[test]
+    fn stack_command_with_name_switches() {
+        let mut app = fleet_app();
+        let (tx, rx) = channel();
+        run_command_bar(&mut app, &tx, "stack gw");
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Job::Action("switch", ActionKind::Switch(_)))
+        ));
+    }
+
+    #[test]
+    fn err_alias_opens_errors_view() {
+        let mut app = fleet_app();
+        let (tx, _rx) = channel();
+        run_command_bar(&mut app, &tx, "err");
+        assert_eq!(app.view, View::Errors);
+    }
+
+    #[test]
+    fn fleet_and_changesets_command_aliases_jump_views() {
+        let mut app = fleet_app();
+        app.view = View::Errors;
+        let (tx, _rx) = channel();
+        run_command_bar(&mut app, &tx, "changesets");
+        assert_eq!(app.view, View::Changesets);
+        run_command_bar(&mut app, &tx, "fleet");
+        assert_eq!(app.view, View::Fleet);
+    }
+
+    #[test]
+    fn actions_menu_opens_in_prs_and_changeset_but_not_fleet() {
+        let mut app = fleet_app();
+        app.view = View::Prs;
+        open_actions_menu(&mut app);
+        assert!(matches!(app.input, InputMode::ActionsMenu(_)));
+
+        app.input = InputMode::None;
+        app.view = View::Changeset;
+        app.changeset = Some("cs1".to_string());
+        open_actions_menu(&mut app);
+        match &app.input {
+            InputMode::ActionsMenu(items) => {
+                assert!(items.iter().any(|(k, _)| *k == 'r'));
+                assert!(items.iter().any(|(k, _)| *k == 'l'));
+            }
+            _ => panic!("expected an actions menu in Changeset"),
+        }
+
+        app.input = InputMode::None;
+        app.view = View::Fleet;
+        open_actions_menu(&mut app);
+        assert_eq!(app.input, InputMode::None);
+        assert!(app.message.contains("no actions"));
+    }
+
+    #[test]
+    fn actions_menu_key_fires_confirm_gated_paths() {
+        let mut app = fleet_app();
+        app.prs = Some(vec![pr("kernel", "fix")]);
+        app.view = View::Prs;
+        app.cursor.select(Some(0));
+        // `m` from the Prs actions menu arms the merge confirm — the same
+        // write-guarded gate the old `M` used.
+        assert!(run_action_menu_key(&mut app, 'm'));
+        assert!(matches!(app.pending_confirm, Some(Confirm::MergePr { .. })));
+
+        app.pending_confirm = None;
+        app.view = View::Changeset;
+        app.changeset = Some("cs1".to_string());
+        assert!(run_action_menu_key(&mut app, 'l'));
+        assert!(matches!(app.pending_confirm, Some(Confirm::Land(_))));
+
+        // An unlisted sub-key does nothing (caller cancels the menu).
+        assert!(!run_action_menu_key(&mut app, 'z'));
+    }
+
+    #[test]
+    fn digits_are_list_only() {
+        assert!(is_list_view(View::Fleet));
+        assert!(is_list_view(View::Prs));
+        assert!(!is_list_view(View::PrDetail));
+        assert!(!is_list_view(View::Files));
+        assert!(!is_list_view(View::Grep));
     }
 
     #[test]
@@ -6871,13 +7192,13 @@ mod tests {
 
     #[test]
     fn key_hinted_elsewhere_flags_inapplicable_but_not_global_or_unbound() {
-        // `M` is hinted in Prs but not in Fleet → inapplicable feedback.
-        assert!(key_hinted_elsewhere(View::Fleet, 'M'));
+        // `s` is hinted in Fleet but not in Prs → inapplicable feedback.
+        assert!(key_hinted_elsewhere(View::Prs, 's'));
         // `q` is global → never flagged.
         assert!(!key_hinted_elsewhere(View::Fleet, 'q'));
         // `z` is not hinted anywhere → stays quiet (truly unbound).
         assert!(!key_hinted_elsewhere(View::Fleet, 'z'));
-        // `f` is now hinted in Prs → not flagged there.
+        // `f` is hinted in Prs → not flagged there.
         assert!(!key_hinted_elsewhere(View::Prs, 'f'));
     }
 }

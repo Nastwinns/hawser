@@ -85,89 +85,88 @@ via the `forall` alias. Running `haw` with no subcommand opens the dashboard (li
 
 ## TUI keymap
 
-k9s-style, keyboard-first. Every action is a single key on the cursor row; `:` opens a
-command bar whose verbs mirror the CLI (learn one, know both). Data loads on a
-background worker — the UI never blocks. The fleet grid auto-refreshes every ~5s while
-idle (never while you're typing, in an overlay, a confirm, or a job is in flight);
-`F5` / `ctrl-r` refresh on demand.
+k9s/lazygit-style, keyboard-first. Three mechanisms carry everything:
 
-**Global**
+- **digits `1`–`7` switch views** (from any top-level list view),
+- **`a` opens the current view's context actions** (a lazygit-style menu),
+- **`:` is the command bar** for the rest — its verbs mirror the CLI (learn one, know both).
+
+Data loads on a background worker — the UI never blocks. The fleet grid auto-refreshes
+every ~5s while idle (never while you're typing, in an overlay, a confirm, or a job is in
+flight); `F5` / `ctrl-r` refresh on demand.
+
+**Global (frozen — these keys mean the same thing in every view)**
 
 | Key | Action |
 |-----|--------|
 | `↑`/`↓` or `k`/`j` | move cursor (in a drill-in: scroll one line) |
-| `PageUp` / `PageDown` | scroll a drill-in by a page |
-| `enter` | drill in (stack → fleet → repo/PR/CI detail) |
-| `esc` / `b` | clear an active filter, else go back one level |
+| `enter` | drill in (stack → fleet → repo/PR/CI detail) · confirm a `y/n` prompt |
+| `esc` / `b` / `⌫` | clear an active filter, else go back one level |
+| `q` | quit · `ctrl-c` force-quit |
 | `/` | fuzzy filter the grid (live, case-insensitive: `/knl` → `kernel`) |
-| `>` / `<` | move the active sort column right / left |
-| `.` | toggle sort direction (asc/desc); a `▲`/`▼` caret marks the column |
 | `:` | command bar (mirrors the CLI verbs, see below) |
 | `?` | help overlay |
 | `F5` / `ctrl-r` | refresh now |
-| `q` / `ctrl-c` | quit |
+| `ctrl-d` / `ctrl-u` | half-page down / up · `PageUp` / `PageDown` full page |
+| `g` | goto — quit and print the cursor repo's path (`cd "$(haw dash)"`) |
+| `w` | toggle watch — auto-refresh the fleet & the open PR/CI view |
+| `space` | mark / unmark the cursor repo (Fleet & Changeset only; shown as `◉`) |
 
-Sorting (`<`/`>`/`.`) applies to the Fleet, PR/MR, and CI tables.
+**View jumps (`1`–`7`) — from any list view**
+
+| Key | View | `:` alias |
+|-----|------|-----------|
+| `1` | fleet | `:fleet` |
+| `2` | changesets | `:changesets` |
+| `3` | PR/MRs | `:prs` |
+| `4` | CI runs | `:ci` |
+| `5` | tree | `:tree` |
+| `6` | governance | `:governance` |
+| `7` | plugins | `:plugins` |
+
+Digits are inert in the scroll/detail views (repo/PR/CI detail, files, grep) — jump from a
+list. Sorting (`<`/`>`/`.`) applies to the Fleet, PR/MR, and CI tables.
 
 **Fleet view**
 
 | Key | Action |
 |-----|--------|
 | `s` | sync — the marked repos if any, else the cursor repo, else the stack |
-| `F` | git fetch the cursor repo (distinct from `s` sync) |
 | `space` | mark / unmark the cursor repo (shown as `◉`) |
 | `r` | run a command — across the marked repos if any, else the whole fleet |
-| `S` | switch stack |
 | `p` | problems-only filter (⚠ dirty / drift / behind / missing) |
-| `l` | lock (resolve revs → SHA) |
-| `t` | tree view · `c` changesets |
 | `x` | drop into a shell in the cursor repo (exits the cockpit) |
 | `f` | browse the cursor repo's files (local disk or forge) |
 | `!` | run one shell command in the cursor repo (in its detail view) |
-| `m` | fleet-wide open PR/MRs · `i` recent CI runs · `v` governance |
-| `g` | goto — quit and print the cursor repo's path (`cd "$(haw dash)"`) |
 | `enter` | drill into the cursor repo's git detail (branch, SHA, status, log, diffstat, remotes) |
 
-> Pinning the lock to current checkouts is `p` in the **Stacks** view (and `:pin` in the
-> command bar), not in the Fleet view.
+Switch-stack, lock, and git-fetch moved to the command bar: `:stack` (picker) / `:stack NAME`,
+`:lock`, `:fetch`. Pinning the lock is `p` in the **Stacks** view (or `:pin`).
 
 Marks persist across the Fleet and Changeset views; with marks set, both `s` (sync)
 and `r`/`:run` act on just the marked set.
 
-**Fleet PR/MR view (`m`) and CI view (`i`)**
+**Fleet PR/MR view (`3`) and CI view (`4`)**
 
 | Key | Action |
 |-----|--------|
 | `enter` | drill in — PR/MR: reviewers, checks, body, url · CI run: jobs, steps, conclusion |
+| `a` | actions menu — PR/MR: `m` merge · `a` approve · `c` checkout (each asks `y/n`) |
 | `d` | read the PR/MR's diff (scrollable) |
 | `l` | read the CI run/pipeline's logs (scrollable) |
 | `f` | browse the PR/MR's changed files (PR-files view) |
-| `M` | merge the PR/MR on its forge (asks `y/n`) |
-| `A` | approve the PR/MR on its forge (asks `y/n`) |
-| `C` | checkout the PR/MR branch locally as `haw-pr-<n>` (asks `y/n`) |
 | `o` | open the cursor row in your browser |
-| `m` / `i` | refetch this view / jump to the sibling view |
 | `<` `>` `.` | sort the table |
 | `b` / `esc` | back |
 
-`M`/`A`/`C`/`d` are also available from within a PR/MR drill-in.
+`a` (actions) and `d` are also available from within a PR/MR drill-in. Refetch is now just
+`F5` / `ctrl-r`.
 
-**Errors view (`E`) and Plugins view (`P`)**
+**Errors view, Plugins view, Governance view**
 
-| Key | Action |
-|-----|--------|
-| `E` | open the errors view — failures collected across the fleet |
-| `P` | open the plugins view — registered `haw-<name>` plugins |
-| `/` | filter · `b` / `esc` back |
-
-**Governance view (`v`)**
-
-| Key | Action |
-|-----|--------|
-| `o` | open the cursor plugin's artifact (SBOM / provenance / …) |
-| `v` | refetch · `b` back |
-
-Lists registered plugins, their SBOM/provenance/signature artifacts, and findings.
+Reach them from a list view (Errors via `:errors`/`:err`, Plugins via `7`/`:plugins`,
+Governance via `6`/`:governance`). In Governance, `o` opens the cursor plugin's artifact
+(SBOM / provenance / …). Refetch is `F5` / `ctrl-r`; `b` / `esc` go back.
 
 **Changeset view**
 
@@ -175,9 +174,14 @@ Lists registered plugins, their SBOM/provenance/signature artifacts, and finding
 |-----|--------|
 | `n` | new changeset |
 | `space` | select / deselect a repo |
-| `R` | request — open cross-linked PR/MRs (selected repos, or all if none; asks `y/n`) |
-| `L` | land — merge PR/MRs in dependency order (asks `y/n`) |
+| `a` | actions menu — `r` request cross-linked PR/MRs (selected, or all if none) · `l` land in dependency order (each asks `y/n`) |
 | `g` | goto the cursor repo |
+
+**Actions menu (`a`)**
+
+`a` opens a bordered ` actions ` popup listing the current view's context actions, each
+with its sub-key. Pressing a listed sub-key fires that action — write actions keep their
+`y/n` confirm gate. `esc` (or any unlisted key) cancels. Views with no actions report so.
 
 **Command bar (`:`)**
 
@@ -186,19 +190,24 @@ the TUI doubles as a way to discover the CLI.
 
 | Command | Action |
 |---------|--------|
-| `:sync` | sync the current stack |
+| `:stack` | open the switch-stack picker (alias `:stacks`) |
 | `:stack NAME` / `:switch NAME` | switch to a stack |
+| `:lock` | commit the lock (resolve revs → SHA) |
+| `:fetch` | git fetch the cursor repo |
+| `:errors` / `:err` | errors view — failures collected across the fleet |
+| `:fleet` / `:changesets` / `:tree` | view jumps (same as `1` / `2` / `5`) |
+| `:prs` / `:ci` | fleet-wide PR/MR / CI views (same as `3` / `4`) |
+| `:governance` / `:plugins` | governance / plugins view (same as `6` / `7`) |
+| `:sync` | sync the current stack |
 | `:run CMD` | run a command (across marked repos in the Fleet, else the fleet) |
-| `:tree` | tree view |
-| `:prs` / `:ci` | fleet-wide PR/MR / CI views |
-| `:governance` / `:plugins` | governance / plugins view |
+| `:build` / `:test` / `:verify` | fleet build / test / drift-verify |
 | `:pin` / `:lock` | pin HEADs / commit the lock |
 | `:change [ID \| start ID \| land ID \| request ID]` | changeset workflow |
 | `:merge [cleanup <repo> \| abort <repo>]` | list / seal / abort in-progress merges |
 | `:grep <pat>` | fan-out grep across every repo |
 | `:sh CMD` | run a shell command in the cursor repo |
 | `:problems` | toggle the problems-only filter (⚠ dirty/drift/behind/missing) |
-| `:fetch` | git fetch the cursor repo |
+| `:watch` | toggle watch auto-refresh (same as `w`) |
 | `:<repo>` | jump the fleet cursor to a repo whose name matches |
 | `:theme [NAME]` | switch skin live (no arg lists the built-ins) |
 | `:help` | help overlay |

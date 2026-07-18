@@ -128,6 +128,39 @@ fn footer_shows_anchored_version_cell() {
 }
 
 #[test]
+fn fleet_header_shows_digit_view_jumps_and_no_stale_capital_hints() {
+    let buf = render(160, 40);
+    let rows = rows_text(&buf);
+    let screen = rows.join("\n");
+
+    // The k9s-style digit view-jump cell is present in the fleet hint grid.
+    assert!(
+        screen.contains("1-7"),
+        "fleet header is missing the `1-7` digit view-jump hint:\n{screen}"
+    );
+    // A representative frozen global is still advertised.
+    assert!(
+        screen.contains("watch"),
+        "fleet header is missing the `w watch` hint:\n{screen}"
+    );
+
+    // The retired `switch stack` label (now the `:stack` command) is gone.
+    assert!(
+        !screen.contains("switch stack"),
+        "fleet header still advertises the retired `switch stack` (now :stack):\n{screen}"
+    );
+
+    // The retired capital-letter keycaps must be gone from the hint grid. Each
+    // hint key renders wrapped in a `<key>` field, so match the exact keycaps.
+    for stale in ["<S>", "<F>", "<M>"] {
+        assert!(
+            !screen.contains(stale),
+            "fleet header still shows retired keycap {stale:?}:\n{screen}"
+        );
+    }
+}
+
+#[test]
 fn small_terminal_collapses_header_and_keeps_data_rows_visible() {
     // 10 rows is below COMPACT_HEADER_HEIGHT (16): the ~6-row header must
     // collapse to a single compact line, leaving data rows on screen.
