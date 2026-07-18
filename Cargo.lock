@@ -921,6 +921,7 @@ name = "haw-tui"
 version = "0.1.8"
 dependencies = [
  "haw-core",
+ "haw-tui",
  "nucleo-matcher",
  "ratatui",
 ]

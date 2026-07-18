@@ -12,5 +12,16 @@ haw-core.workspace = true
 nucleo-matcher.workspace = true
 ratatui.workspace = true
 
+[features]
+# Exposes the `render_snapshot` test seam for out-of-crate render tests.
+test-render = []
+
+[dev-dependencies]
+# Self-dependency with `test-render` on, so integration tests under tests/ can
+# reach `haw_tui::render_snapshot` in a plain `cargo test` (no extra flags).
+# TestBackend hands us the rendered `Buffer` directly, so no ANSI parser (vt100)
+# is needed — we assert on cell contents.
+haw-tui = { path = ".", features = ["test-render"] }
+
 [lints]
 workspace = true
