@@ -38,6 +38,17 @@ aliases so nothing breaks.
 | `haw repo add\|remove\|list` | edit the repos of the manifest | `brick` |
 | `haw stack add\|remove\|list` | edit the stacks of the manifest | `product` |
 | `haw change start\|status\|list` | cross-repo feature (changeset) workflow | — |
+| `haw grep <pat>` | fan-out grep across every repo | — |
+| `haw verify` | drift gate — exit 3 if the tree diverges from `haw.lock` | — |
+| `haw build` | run each repo's manifest `build` command across the fleet | — |
+| `haw test` | run each repo's manifest `test` command across the fleet | — |
+| `haw hooks install` | install lifecycle hooks from `.haw/hooks/` | — |
+| `haw evidence` | bundle SBOM / provenance / signatures into `haw-evidence.tar.gz` | — |
+| `haw publish <files> --to <registry>` | upload artifacts to a private registry (see [DISTRIBUTION.md](DISTRIBUTION.md)) | — |
+| `haw import --from <west.yml\|default.xml>` | convert a `west` / Google-`repo` manifest to `haw.toml` | — |
+| `haw merge plan\|resolve\|status\|cleanup\|abort` | parallel collaborative merge (per-slice) | — |
+| `haw completions <shell>` | print a shell completion script to stdout | — |
+| `haw plugins new\|list\|install` | scaffold, discover, and install `haw-<name>` plugins | — |
 | `haw` (no args) / `haw dash` | open the TUI cockpit | `tui` |
 
 `haw run` takes the command positionally (`haw run 'git fetch'`); `-c/--command` still works
@@ -68,6 +79,7 @@ via the `forall` alias. Running `haw` with no subcommand opens the dashboard (li
 | `--repos a,b` | change start | alias `--bricks` |
 | `--slug <S>` | repo add | repo path under `--remote` (alias `--repo`); with `--remote`, not `--url` |
 | `-j, --jobs <N>` | sync, switch, run | default min(cores, 8) |
+| `--recurse-submodules` | sync | clone/update each repo's git submodules, pinned to the superproject |
 | `--skip-branch` | change start | adopt current branches (RepoFleet) |
 | `--branch <B>` | change start | default `change/<id>` |
 
@@ -102,15 +114,22 @@ Sorting (`<`/`>`/`.`) applies to the Fleet, PR/MR, and CI tables.
 | Key | Action |
 |-----|--------|
 | `s` | sync — the marked repos if any, else the cursor repo, else the stack |
+| `F` | git fetch the cursor repo (distinct from `s` sync) |
 | `space` | mark / unmark the cursor repo (shown as `◉`) |
 | `r` | run a command — across the marked repos if any, else the whole fleet |
 | `S` | switch stack |
-| `p` | pin lock to current checkouts |
+| `p` | problems-only filter (⚠ dirty / drift / behind / missing) |
 | `l` | lock (resolve revs → SHA) |
 | `t` | tree view · `c` changesets |
+| `x` | drop into a shell in the cursor repo (exits the cockpit) |
+| `f` | browse the cursor repo's files (local disk or forge) |
+| `!` | run one shell command in the cursor repo (in its detail view) |
 | `m` | fleet-wide open PR/MRs · `i` recent CI runs · `v` governance |
 | `g` | goto — quit and print the cursor repo's path (`cd "$(haw dash)"`) |
 | `enter` | drill into the cursor repo's git detail (branch, SHA, status, log, diffstat, remotes) |
+
+> Pinning the lock to current checkouts is `p` in the **Stacks** view (and `:pin` in the
+> command bar), not in the Fleet view.
 
 Marks persist across the Fleet and Changeset views; with marks set, both `s` (sync)
 and `r`/`:run` act on just the marked set.
@@ -120,6 +139,9 @@ and `r`/`:run` act on just the marked set.
 | Key | Action |
 |-----|--------|
 | `enter` | drill in — PR/MR: reviewers, checks, body, url · CI run: jobs, steps, conclusion |
+| `d` | read the PR/MR's diff (scrollable) |
+| `l` | read the CI run/pipeline's logs (scrollable) |
+| `f` | browse the PR/MR's changed files (PR-files view) |
 | `M` | merge the PR/MR on its forge (asks `y/n`) |
 | `A` | approve the PR/MR on its forge (asks `y/n`) |
 | `C` | checkout the PR/MR branch locally as `haw-pr-<n>` (asks `y/n`) |
@@ -128,7 +150,15 @@ and `r`/`:run` act on just the marked set.
 | `<` `>` `.` | sort the table |
 | `b` / `esc` | back |
 
-`M`/`A`/`C` are also available from within a PR/MR drill-in.
+`M`/`A`/`C`/`d` are also available from within a PR/MR drill-in.
+
+**Errors view (`E`) and Plugins view (`P`)**
+
+| Key | Action |
+|-----|--------|
+| `E` | open the errors view — failures collected across the fleet |
+| `P` | open the plugins view — registered `haw-<name>` plugins |
+| `/` | filter · `b` / `esc` back |
 
 **Governance view (`v`)**
 
@@ -161,10 +191,15 @@ the TUI doubles as a way to discover the CLI.
 | `:run CMD` | run a command (across marked repos in the Fleet, else the fleet) |
 | `:tree` | tree view |
 | `:prs` / `:ci` | fleet-wide PR/MR / CI views |
-| `:governance` / `:plugins` | governance view |
+| `:governance` / `:plugins` | governance / plugins view |
 | `:pin` / `:lock` | pin HEADs / commit the lock |
 | `:change [ID \| start ID \| land ID \| request ID]` | changeset workflow |
 | `:merge [cleanup <repo> \| abort <repo>]` | list / seal / abort in-progress merges |
+| `:grep <pat>` | fan-out grep across every repo |
+| `:sh CMD` | run a shell command in the cursor repo |
+| `:problems` | toggle the problems-only filter (⚠ dirty/drift/behind/missing) |
+| `:fetch` | git fetch the cursor repo |
+| `:<repo>` | jump the fleet cursor to a repo whose name matches |
 | `:theme [NAME]` | switch skin live (no arg lists the built-ins) |
 | `:help` | help overlay |
 

@@ -28,7 +28,7 @@ haw sync            # clone every repo, write haw.lock (exact SHAs)
 haw verify          # CI gate: exit 3 if the tree drifts from the lock
 ```
 
-This is the reference documentation for **hawser 0.1.4**. New to the project? Start with
+This is the reference documentation for **hawser 0.1.7**. New to the project? Start with
 the [Learn course](learn/00-what-is-hawser.md) for a guided, hands-on path; use the pages below as
 reference.
 

@@ -144,7 +144,7 @@ Swap QEMU for **Renode** with one line — `test = "renode --console -e 'include
 ## More validated embedded fleets ✅ *executed*
 
 Beyond the single-repo cross-compile/QEMU recipes above, the
-[`examples/embedded-real/`](../examples/embedded-real/) manifest composes **five
+[`examples/embedded-real/`](https://github.com/Nastwinns/hawser/tree/main/examples/embedded-real) manifest composes **five
 real public embedded/safety-critical upstreams** into one fleet and builds them
 all with a single `haw build -j4`. Every command in that manifest was actually
 run and seen to succeed on a clang/cmake/make host:
@@ -176,7 +176,7 @@ submodule is skipped with a warning, not fatal). The same cJSON checkout also
 cross-compiles to a bare-metal **Cortex-M4** object via `haw-arm-emu`
 (`architecture: armv7e-m`), so one fleet spans a host build and a cross build.
 Full per-repo table, prerequisites, and the cross recipe are in the
-[example README](../examples/embedded-real/README.md).
+[example README](https://github.com/Nastwinns/hawser/blob/main/examples/embedded-real/README.md).
 
 ---
 

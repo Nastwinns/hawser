@@ -22,6 +22,7 @@
 # Reference
 
 - [Domains](DOMAINS.md)
+- [Distribution](DISTRIBUTION.md)
 - [Architecture](ARCHITECTURE.md)
 - [CLI design & TUI keymap](CLI-DESIGN.md)
 - [Extending](EXTENDING.md)

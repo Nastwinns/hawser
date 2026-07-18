@@ -12,13 +12,13 @@ prompt fast.
 <strong>🎯 In this chapter, you'll learn to…</strong>
 <ul>
 <li>Install <code>haw</code> through the channel that fits your machine — Cargo, Homebrew, Scoop, or the static musl binary.</li>
-<li>Confirm the binary is on your <code>PATH</code> and prints <code>haw 0.1.3</code>.</li>
+<li>Confirm the binary is on your <code>PATH</code> and prints <code>haw 0.1.7</code>.</li>
 <li>Turn on shell tab-completion so the shell fills in subcommands and flags as you learn.</li>
 </ul>
 </div>
 
 The tool ships as a **single binary named `haw`**. There's no runtime, no interpreter,
-nothing to keep updated alongside it. The current release is **v0.1.3**.
+nothing to keep updated alongside it. The current release is **v0.1.7**.
 
 ## 📦 1. Install it
 
@@ -40,7 +40,7 @@ On a Linux server, container, or air-gapped host, the **static musl binary** is 
 easiest choice — it's fully static (no glibc, no runtime), so one file just runs:
 
 ```bash
-curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
+curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz \
   | tar xz && sudo install haw /usr/local/bin/
 ```
 
@@ -65,7 +65,7 @@ haw --version
 You should see the version print:
 
 ```console
-haw 0.1.3
+haw 0.1.7
 ```
 
 If you get "command not found", the install directory isn't on your `PATH` yet — for
@@ -110,7 +110,7 @@ shell. Now `haw sy<Tab>` completes to `haw sync`.
 
 - `haw` is a single binary — install it with `cargo`, `brew`, `scoop`, or the static
   musl archive.
-- `haw --version` should print `haw 0.1.3`; `haw --help` lists every command.
+- `haw --version` should print `haw 0.1.7`; `haw --help` lists every command.
 - `haw completions <shell>` gives you tab completion — set it up now, thank yourself
   later.
 - The [full install matrix](../INSTALL.md) covers signed releases and air-gapped hosts.
@@ -119,7 +119,7 @@ shell. Now `haw sy<Tab>` completes to `haw sync`.
 <strong>🙌 Your turn</strong>
 <p>Two-minute checkpoint — prove your setup before moving on:</p>
 <ul>
-<li>Run <code>haw --version</code> and confirm you see <code>haw 0.1.3</code>. If it says "command not found", the install dir isn't on your <code>PATH</code> yet — fix that first.</li>
+<li>Run <code>haw --version</code> and confirm you see <code>haw 0.1.7</code>. If it says "command not found", the install dir isn't on your <code>PATH</code> yet — fix that first.</li>
 <li>Run <code>haw --help</code> and skim the subcommand list. Spot <code>sync</code>, <code>status</code>, <code>run</code>, and <code>change</code> — you'll meet every one of them soon.</li>
 <li>Set up completions for your shell, restart it, then type <code>haw sy</code> and press <code>Tab</code>. It should complete to <code>haw sync</code>.</li>
 </ul>

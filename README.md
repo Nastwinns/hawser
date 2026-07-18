@@ -183,7 +183,7 @@ scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket && scoop in
 is fully static — no glibc, no runtime — so one file runs on any Linux host:
 
 ```bash
-curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
+curl -sSL https://github.com/Nastwinns/hawser/releases/download/v0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz \
   | tar xz && sudo install haw /usr/local/bin/
 ```
 

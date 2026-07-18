@@ -2,7 +2,7 @@
 
 Every tagged release publishes a signed [GitHub Release](https://github.com/Nastwinns/hawser/releases/latest)
 first. After that succeeds, the `distribute` job in
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) mirrors the **same
+[`.github/workflows/release.yml`](https://github.com/Nastwinns/hawser/blob/main/.github/workflows/release.yml) mirrors the **same
 artifacts** to any of four private registries — **Nexus**, **Artifactory**, **GitLab**,
 and **Bitbucket** — for organizations that install from an internal mirror rather than
 from GitHub.
@@ -51,7 +51,7 @@ A registry is skipped (logged, not failed) unless **all** its *required* secrets
 
 ## Per-registry layout and install
 
-Throughout, `<version>` is the tag without the leading `v` (e.g. `0.1.3`).
+Throughout, `<version>` is the tag without the leading `v` (e.g. `0.1.7`).
 
 ### Nexus (raw hosted repository)
 
@@ -65,16 +65,16 @@ Upload (what CI runs, per file):
 
 ```bash
 curl -u "$NEXUS_USER:$NEXUS_PASS" \
-  --upload-file haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
-  "$NEXUS_URL/repository/raw-hosted/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+  --upload-file haw-0.1.7-x86_64-unknown-linux-musl.tar.gz \
+  "$NEXUS_URL/repository/raw-hosted/haw/0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Consume:
 
 ```bash
 curl -u "$NEXUS_USER:$NEXUS_PASS" -O \
-  "$NEXUS_URL/repository/raw-hosted/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
-tar xzf haw-0.1.3-x86_64-unknown-linux-musl.tar.gz && sudo install haw /usr/local/bin/
+  "$NEXUS_URL/repository/raw-hosted/haw/0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
+tar xzf haw-0.1.7-x86_64-unknown-linux-musl.tar.gz && sudo install haw /usr/local/bin/
 ```
 
 ### Artifactory (generic repository)
@@ -89,15 +89,15 @@ Upload (per file):
 
 ```bash
 curl -H "Authorization: Bearer $ARTIFACTORY_TOKEN" \
-  --upload-file haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
-  "$ARTIFACTORY_URL/generic-local/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+  --upload-file haw-0.1.7-x86_64-unknown-linux-musl.tar.gz \
+  "$ARTIFACTORY_URL/generic-local/haw/0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Consume:
 
 ```bash
 curl -H "Authorization: Bearer $ARTIFACTORY_TOKEN" -O \
-  "$ARTIFACTORY_URL/generic-local/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+  "$ARTIFACTORY_URL/generic-local/haw/0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 ### GitLab (generic package registry + Release)
@@ -116,15 +116,15 @@ Upload (per file):
 
 ```bash
 curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  --upload-file haw-0.1.3-x86_64-unknown-linux-musl.tar.gz \
-  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+  --upload-file haw-0.1.7-x86_64-unknown-linux-musl.tar.gz \
+  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Consume:
 
 ```bash
 curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" -O \
-  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.3/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+  "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/packages/generic/haw/0.1.7/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 Or open the project's **Deploy → Releases** page and download from the release assets.
@@ -143,18 +143,61 @@ Upload (per file):
 curl -u "$BITBUCKET_USER:$BITBUCKET_TOKEN" \
   -X POST \
   "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO/downloads" \
-  -F files=@haw-0.1.3-x86_64-unknown-linux-musl.tar.gz
+  -F files=@haw-0.1.7-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Consume (files land under the repo's Downloads tab; filenames are flat, not versioned):
 
 ```bash
 curl -u "$BITBUCKET_USER:$BITBUCKET_TOKEN" -O -L \
-  "https://bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO/downloads/haw-0.1.3-x86_64-unknown-linux-musl.tar.gz"
+  "https://bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO/downloads/haw-0.1.7-x86_64-unknown-linux-musl.tar.gz"
 ```
 
 > Bitbucket Downloads is a flat namespace (no per-version folders), so the `<version>`
 > is carried in the filename itself.
+
+## `haw publish` — upload artifacts from the CLI
+
+The CI `distribute` job mirrors *release* archives, but you can push **any** artifacts
+(build outputs, an `evidence` bundle, an SBOM) to the same four registries yourself with
+`haw publish`. It uses the identical upload paths and auth as CI, reading credentials from
+the same environment variables.
+
+```
+haw publish <files…> --to <nexus|artifactory|gitlab|bitbucket>
+            [--name <NAME>] [--version <VER>] [--url <URL>]
+            [--dry-run] [--insecure] [--format json]
+```
+
+| Flag | Meaning |
+|------|---------|
+| `<files…>` | Files or globs to upload. Defaults to `haw-evidence.tar.gz` if present and no files are given. |
+| `--to` | Target registry: `nexus`, `artifactory`, `gitlab`, or `bitbucket` (required). |
+| `--name` | Package name. Default: the current stack, else the workspace directory name. |
+| `--version` | Package version. Default: the short HEAD SHA, else `unversioned`. |
+| `--url` | Override the target's base URL (else taken from the target's env var). |
+| `--dry-run` | Print exactly what would upload (method, URL, auth slot) and exit — no network, no credentials needed. |
+| `--insecure` | Allow a non-HTTPS (`http://`) registry. **By default `http://` registries are rejected**; without this flag `haw publish` refuses to send credentials in cleartext. |
+| `--format json` | Emit a JSON summary `{target, name, version, uploads:[…]}`. |
+
+Credentials come from the environment, per target (same variables as the CI secret
+matrix above):
+
+| Target | Env vars |
+|--------|----------|
+| **Nexus** | `NEXUS_URL`, `NEXUS_USER`, `NEXUS_PASS`, optional `NEXUS_REPO` (default `raw-hosted`) |
+| **Artifactory** | `ARTIFACTORY_URL`, `ARTIFACTORY_TOKEN`, optional `ARTIFACTORY_REPO` (default `generic-local`) |
+| **GitLab** | `GITLAB_TOKEN`, `GITLAB_PROJECT_ID`, optional `GITLAB_URL` (default `https://gitlab.com`) |
+| **Bitbucket** | `BITBUCKET_USER`, `BITBUCKET_TOKEN`, `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO` |
+
+```bash
+haw publish ./out/*.bin --to nexus                 # upload build outputs to Nexus raw-hosted
+haw publish --to gitlab                             # upload haw-evidence.tar.gz to GitLab packages
+haw publish sbom.json haw-evidence.tar.gz --to artifactory   # several files at once
+haw publish app.bin --to bitbucket                  # POST to the Bitbucket repo Downloads
+haw publish app.bin --to nexus --dry-run            # print the plan (method/URL/auth), no network
+haw publish app.bin --to nexus --format json        # machine-readable upload summary
+```
 
 ## Verifying after download
 
@@ -162,13 +205,13 @@ Regardless of the mirror, verify exactly as with the GitHub Release — download
 matching `.sha256`, `.sig`, and `.pem` alongside the archive:
 
 ```bash
-sha256sum -c haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.sha256
+sha256sum -c haw-0.1.7-x86_64-unknown-linux-musl.tar.gz.sha256
 cosign verify-blob \
-  --certificate haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.pem \
-  --signature   haw-0.1.3-x86_64-unknown-linux-musl.tar.gz.sig \
+  --certificate haw-0.1.7-x86_64-unknown-linux-musl.tar.gz.pem \
+  --signature   haw-0.1.7-x86_64-unknown-linux-musl.tar.gz.sig \
   --certificate-identity-regexp 'https://github.com/Nastwinns/hawser' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  haw-0.1.3-x86_64-unknown-linux-musl.tar.gz
+  haw-0.1.7-x86_64-unknown-linux-musl.tar.gz
 ```
 
 See [INSTALL.md](INSTALL.md#prebuilt-archives-signed) for the full verification and

@@ -14,7 +14,7 @@ This page shows how the same loop —
 not `haw`'s identity.
 
 Each section names the pain, then the mapping. Illustrative manifests live under
-[`examples/`](../examples/).
+[`examples/`](https://github.com/Nastwinns/hawser/tree/main/examples).
 
 ---
 
@@ -39,7 +39,7 @@ SHAs are the feature."
 - **Govern.** A `pre-request` gate can enforce policy (secret scan, license check) before
   any PR opens.
 
-See [`examples/microservices/`](../examples/microservices/).
+See [`examples/microservices/`](https://github.com/Nastwinns/hawser/tree/main/examples/microservices).
 
 ---
 
@@ -63,7 +63,7 @@ guessing which commit of the pipeline produced it.
 - **Govern.** SBOM + provenance hooks record exactly which model, data, and infra SHAs
   shipped together — the audit trail for an ML release.
 
-See [`examples/ml-platform/`](../examples/ml-platform/).
+See [`examples/ml-platform/`](https://github.com/Nastwinns/hawser/tree/main/examples/ml-platform).
 
 ---
 
@@ -84,7 +84,7 @@ and "what was deployed" is spread across N repos at N revisions.
 - **Govern.** `haw verify` (exit 3 on drift) is a CI gate that fails if the checked-out
   tree no longer matches the pinned infra baseline.
 
-See [`examples/microservices/`](../examples/microservices/) for the changeset pattern —
+See [`examples/microservices/`](https://github.com/Nastwinns/hawser/tree/main/examples/microservices) for the changeset pattern —
 the same shape applies to Terraform/Helm repos.
 
 ---
@@ -139,13 +139,13 @@ reproducible and auditable for functional-safety qualification.
 
   | Standard / artifact | How `haw` covers it |
   |---------------------|---------------------|
-  | **Automotive SPICE (ASPICE)** | [`haw-aspice`](../crates/haw-aspice) emits repo → pinned SHA → process-area traceability |
-  | **MISRA C** | [`haw-misra`](../crates/haw-misra) runs `cppcheck --addon=misra` across the fleet as a `pre-request` gate |
+  | **Automotive SPICE (ASPICE)** | [`haw-aspice`](https://github.com/Nastwinns/hawser/tree/main/crates/haw-aspice) emits repo → pinned SHA → process-area traceability |
+  | **MISRA C** | [`haw-misra`](https://github.com/Nastwinns/hawser/tree/main/crates/haw-misra) runs `cppcheck --addon=misra` across the fleet as a `pre-request` gate |
   | **ISO 26262 / DO-178C** | `haw evidence` bundles (manifest + lock + audit + status) plus SBOM + provenance from the governance plugins |
   | **AUTOSAR ARXML** | config repos pinned to exact SHAs in `haw.lock`, versioned with the code they configure |
 
-See [`examples/automotive/`](../examples/automotive/) and
-[`examples/automotive-pinned/`](../examples/automotive-pinned/).
+See [`examples/automotive/`](https://github.com/Nastwinns/hawser/tree/main/examples/automotive) and
+[`examples/automotive-pinned/`](https://github.com/Nastwinns/hawser/tree/main/examples/automotive-pinned).
 
 ---
 

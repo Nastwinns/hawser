@@ -179,8 +179,15 @@ source is `--git https://github.com/Nastwinns/hawser`:
 haw plugins install aspice                 # cargo install --git <repo> haw-aspice
 haw plugins install aspice --dry-run        # print the command, run nothing
 haw plugins install haw-foo --git https://example.com/me/plugins   # custom source
+haw plugins install haw-foo --git https://example.com/me/plugins --tag v1.2.0   # pin to a tag
+haw plugins install haw-foo --git https://example.com/me/plugins --rev 9f3c1a2   # pin to a commit
 haw plugins install some-crate --locked     # honor the crate's Cargo.lock
 ```
+
+Pin a custom `--git` source with `--tag <TAG>` or `--rev <SHA>` (mutually exclusive).
+They only apply to a custom `--git` source — the default first-party source is already
+pinned to this hawser version automatically. Installs are always `--locked` for
+reproducibility (`--locked` is now a no-op, kept for compatibility).
 
 haw prints exactly what it will run (`$ cargo install …`) before running it, streams
 cargo's output, and propagates cargo's exit code. `--dry-run` prints the command and
@@ -283,7 +290,7 @@ The index is a single JSON document:
 
 ### Add your plugin to the community index
 
-Open a PR against the repo-root [`plugins-index.json`](../plugins-index.json)
+Open a PR against the repo-root [`plugins-index.json`](https://github.com/Nastwinns/hawser/blob/main/plugins-index.json)
 that adds one entry — `name`, `crate`, `git`, and a one-sentence `description`.
 Once merged it appears for everyone running `haw plugins list --remote`.
 
@@ -309,7 +316,7 @@ Both versions below implement the same command: `haw hello` prints a greeting,
 
 ### POSIX shell
 
-A full working version lives in [`examples/haw-hello`](../examples/haw-hello). The core:
+A full working version lives in [`examples/haw-hello`](https://github.com/Nastwinns/hawser/tree/main/examples/haw-hello). The core:
 
 ```sh
 #!/usr/bin/env sh
@@ -405,21 +412,21 @@ stdin (`haw.plugin/1`) and JSON on stdout (`haw.plugin.report/1` for lifecycle
 phases, `haw.plugin.view/1` for TUI render intent). Any language that can read an
 env var and print JSON can be a haw plugin.
 
-The [`schemas/`](../schemas/) directory holds the **official JSON Schemas**
+The [`schemas/`](https://github.com/Nastwinns/hawser/tree/main/schemas) directory holds the **official JSON Schemas**
 (draft 2020-12) — the source of truth for every field name and shape. Validate
 your plugin's I/O against them.
 
 Thin reference bindings mirror those schemas so you don't hand-roll the JSON:
 
-- **Python** — [`bindings/python`](../bindings/python) (`haw_plugin`):
+- **Python** — [`bindings/python`](https://github.com/Nastwinns/hawser/tree/main/bindings/python) (`haw_plugin`):
   `Context.from_env()`, `Report.emit()`, `view(title, lines)`. No deps beyond stdlib.
-- **Go** — [`bindings/go`](../bindings/go) (`hawplugin`): `ReadContext()`,
+- **Go** — [`bindings/go`](https://github.com/Nastwinns/hawser/tree/main/bindings/go) (`hawplugin`): `ReadContext()`,
   `Report.Emit()`, `View(title, lines)`. Stdlib only.
-- **POSIX shell** and **Rust** — the [`examples/haw-hello`](../examples/haw-hello)
+- **POSIX shell** and **Rust** — the [`examples/haw-hello`](https://github.com/Nastwinns/hawser/tree/main/examples/haw-hello)
   and the "Hello, plugin" section above show zero-dependency implementations.
 
 For a curated list of existing plugins to install or learn from, see
-[AWESOME-HAW-PLUGINS.md](../AWESOME-HAW-PLUGINS.md).
+[AWESOME-HAW-PLUGINS.md](https://github.com/Nastwinns/hawser/blob/main/AWESOME-HAW-PLUGINS.md).
 
 ## Conventions
 
@@ -456,7 +463,7 @@ haw <name> --help
 
 ## Submitting your plugin
 
-Built something useful? Share it. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the
+Built something useful? Share it. See [CONTRIBUTING.md](https://github.com/Nastwinns/hawser/blob/main/CONTRIBUTING.md) for the
 build/test checklist and PR etiquette, then open a PR that adds your plugin to the
 community list — one line: name, one-sentence description, and a link. We keep core
 small on purpose; the ecosystem lives in plugins.
