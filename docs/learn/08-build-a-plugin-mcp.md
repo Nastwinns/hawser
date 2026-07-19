@@ -9,61 +9,104 @@
 *You bring the workspace, Claude brings the prose — pair-programming your commits and PRs.*
 
 You've composed a fleet, pinned it, lived in the cockpit, shipped changesets, and gated it
-in CI. Now the fun part: **extend haw yourself**. haw follows the git / cargo / kubectl
-pattern — any subcommand it doesn't recognize is dispatched to an executable named
-`haw-<name>` on your `PATH`. Ship `haw-jira`, `haw-sbom`, `haw-whatever` without touching
-core.
+in CI. Now the fun part: **you're going to extend haw yourself**. And by the end of this
+chapter you'll have taught an AI assistant — Claude — to read your whole fleet and write
+your commits and pull-request text for you.
 
-We're going to build a real one: **`haw-commit-ai`**. It has two faces from a single
-script. As a plain plugin (`haw commit-ai`) it drafts commit messages and PR text from your
-diffs. And — the headline — it doubles as an **MCP server** so **Claude** (Claude Code /
-Claude Desktop) can read your workspace and diffs and write the real commit + PR text
-*itself*, safely.
+This chapter assumes nothing. If you've never written a haw plugin, don't know what MCP is,
+and have never touched the plugin protocol, you're in exactly the right place. We'll define
+every term the first time it appears, walk every command, and show you the output you should
+expect at each step.
 
-We'll build it in **two levels**, and the second one is the whole point:
+We'll build one real plugin — **`haw-commit-ai`** — and grow it in **two levels**:
 
-- **Niveau 1 — le socle (mono-repo).** Learn the plugin + MCP mechanics on a single repo:
-  scaffold, read the context, expose a few small tools, wire it into Claude. Simple and
-  honest — *at this stage Claude Code already sees a single repo's diff natively.*
-- **Niveau 2 — la vision cross-repo (changeset-wide).** The differentiator. Claude on its
-  own **cannot** see a *fleet-wide changeset* spanning N repos. haw can. We add two tools
-  that hand Claude the combined cross-repo diff and let it write **one** coherent PR that
-  narrates every repo together. **This is the thing neither Claude nor lazygit can do alone.**
+- **Level 1 — the foundation (single repo).** Learn the plugin mechanics and the MCP
+  handshake on one repo at a time. Honest and simple. At this level Claude already sees a
+  single repo's diff on its own, so we're mostly teaching it to speak haw's protocol
+  cleanly.
+- **Level 2 — the cross-repo power (changeset-wide).** The payoff. Claude on its own
+  **cannot** see a *fleet-wide changeset* that spans several repos. haw can. We hand Claude
+  the combined cross-repo diff and let it write **one** coherent pull request that narrates
+  every repo together. This is the thing neither Claude nor a single-repo tool like lazygit
+  can do alone.
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
+<strong>In this chapter, you'll learn to…</strong>
 <ul>
-<li>Build a plugin <em>and</em> give Claude fleet-wide vision across your whole changeset.</li>
-<li>Scaffold a plugin with <code>haw plugins new</code> and understand the <code>haw.plugin/1</code> contract.</li>
-<li>Read the workspace context haw hands every plugin (via <code>$HAW_JSON</code> / stdin).</li>
-<li>Emit the two machine shapes: a <code>haw.plugin.report/1</code> for <code>--format json</code> and a <code>haw.plugin.view/1</code> panel for the cockpit's Plugins view (<code>7</code>).</li>
-<li>Turn the same script into an <strong>MCP server</strong> with the official <code>mcp</code> SDK (FastMCP) so Claude can call small, safe tools.</li>
-<li><strong>Niveau 2:</strong> hand Claude the <em>combined</em> cross-repo diff (<code>changeset_diff()</code>) and let it draft a single fleet-wide PR (<code>draft_changeset_pr()</code>) — the cross-repo story no single-repo tool can tell.</li>
+<li>Understand what a haw plugin actually is, and how haw finds and runs it.</li>
+<li>Read the <code>haw.plugin/1</code> context that haw hands every plugin, field by field.</li>
+<li>Scaffold a working plugin with <code>haw plugins new</code>.</li>
+<li>Emit the two machine shapes haw understands: a <code>haw.plugin.report/1</code> for <code>--format json</code> and a <code>haw.plugin.view/1</code> panel for the cockpit's Plugins view (<code>7</code>).</li>
+<li>Understand what MCP is, and turn the same script into an <strong>MCP server</strong> so Claude can call small, safe tools.</li>
+<li><strong>Level 2:</strong> hand Claude the <em>combined</em> cross-repo diff and let it draft a single fleet-wide PR — the cross-repo story no single-repo tool can tell.</li>
 </ul>
 </div>
 
-# 🪜 Niveau 1 : le socle (mono-repo)
+---
 
-This is the foundation: one repo at a time, and everything you need to understand the
-plugin protocol and the MCP handshake. It's deliberately simple — get comfortable here,
-then Niveau 2 unlocks the cross-repo superpower.
+# Level 1 — the foundation (single repo)
 
-*Spoiler : le niveau 1, c'est les petites roues. Utile, honnête, et volontairement pas
-encore magique. Reste jusqu'au niveau 2 — c'est là que le vélo décolle.* 🚲
+This is the base you build everything on: one repo at a time, and every concept you need to
+understand the plugin protocol and the MCP handshake. It's deliberately simple. Get
+comfortable here, then Level 2 unlocks the cross-repo power.
 
-## 🧩 1. The plugin contract, in one breath
+Think of Level 1 as the training wheels: useful, honest, and on purpose not yet magical.
+Stay through to Level 2 — that's where it takes off.
 
-When you run `haw <name> <args…>` and `<name>` isn't built in, haw:
+## 1. What a haw plugin actually is
 
-1. spawns `haw-<name>` from your `PATH` (a **separate process** — a broken plugin can't
-   crash haw),
-2. forwards your `<args…>` verbatim,
-3. hands over the workspace context as a **`haw.plugin/1`** JSON document — **both** in the
-   `HAW_JSON` environment variable **and** on the plugin's stdin (identical content, read
-   whichever you like),
-4. propagates the plugin's exit code as its own.
+Let's start from zero. **A haw plugin is nothing more than an executable program named
+`haw-<name>` that lives somewhere on your `PATH`.** That's the whole idea. There is no
+plugin registry to sign up for, no dynamic library to load, no special API to link against.
 
-The context looks like this inside a workspace:
+haw follows the same convention as `git`, `cargo`, and `kubectl`: when you type a subcommand
+it doesn't recognize, it looks for a matching executable and runs it. Here's the flow in
+words:
+
+1. You type `haw commit-ai`.
+2. haw checks its built-in subcommands. `commit-ai` isn't one of them.
+3. haw searches every directory on your `PATH` for an executable named `haw-commit-ai`.
+4. It finds one, runs it as a **separate process**, and forwards your arguments to it.
+5. Whatever that program prints becomes the output; whatever exit code it returns becomes
+   haw's exit code.
+
+So `haw commit-ai` is really just "run the program `haw-commit-ai`, and hand it some
+context about my workspace." This is called **PATH dispatch**, and it's why you can ship
+`haw-jira`, `haw-sbom`, or `haw-whatever` without ever touching haw's source code. A broken
+plugin can't crash haw, because it runs in its own process.
+
+You can see exactly which directories haw scans:
+
+```bash
+haw plugins path      # prints the PATH directories haw searches for haw-* binaries
+```
+
+We're going to build a plugin called **`haw-commit-ai`**. It has two faces, both from a
+single script:
+
+- As an ordinary plugin (`haw commit-ai`) it drafts commit messages and PR text from your
+  diffs.
+- As an **MCP server** it lets **Claude** read your workspace and diffs and write the real
+  commit and PR text itself — safely.
+
+We'll do the plain plugin first, then add the MCP face.
+
+## 2. The context haw hands every plugin: `haw.plugin/1`
+
+When haw runs your plugin, it doesn't just launch a blind program. It hands the plugin a
+**context**: a JSON document that describes your workspace. This document has a schema name,
+**`haw.plugin/1`**, and it is the contract between haw and every plugin.
+
+**Where does it come from?** haw provides the same JSON in two places, so you can read
+whichever is convenient:
+
+- the **`HAW_JSON`** environment variable, and
+- the plugin's **standard input (stdin)**.
+
+The content is identical in both. The environment variable is usually easier because reading
+it never blocks.
+
+**What's inside?** Here's a real example of the context inside a workspace:
 
 ```json
 {
@@ -77,23 +120,81 @@ The context looks like this inside a workspace:
 }
 ```
 
-Run **outside** a workspace it degrades to just `{"schema": "haw.plugin/1"}` — a
-well-behaved plugin checks for `root`/`repos` and does something sensible when they're
-absent.
+Let's read it field by field:
 
-There are two more shapes a plugin can *print*:
+- **`schema`** — always `"haw.plugin/1"`. It tells you which contract version you're
+  looking at.
+- **`root`** — the absolute path to the workspace root (the directory that holds your
+  manifest). Everything the plugin writes should stay inside this.
+- **`stack`** — the name of the active stack (the named selection of repos you're working
+  with). Here it's `"gateway"`.
+- **`repos`** — the list of repositories in play. Each entry has:
+  - **`name`** — the repo's short name (`kernel`, `hal`).
+  - **`path`** — its absolute on-disk location. This is the important one: to run `git diff`
+    or `git commit` on a repo, you shell out into this `path`.
+  - **`rev`** — the pinned revision (a tag like `v6.1.2` or a branch like `main`).
+  - **`groups`** — the groups the repo belongs to (`["firmware"]`).
 
-- **`haw.plugin.report/1`** — a machine report (`{schema, plugin, ok, summary, findings}`)
-  for `--format json`.
-- **`haw.plugin.view/1`** — a panel (`{schema, title, lines[]}`) for the cockpit's Plugins
-  view. haw sets `HAW_RENDER=1` and puts `"intent": "render"` in the context to ask for it.
+**Run outside a workspace**, the context degrades to just `{"schema": "haw.plugin/1"}` — no
+`root`, no `repos`. A well-behaved plugin checks whether `root` and `repos` are present and
+does something sensible when they're absent.
 
-The three JSON Schemas live in [`schemas/`](https://github.com/Nastwinns/hawser/tree/main/schemas)
-— they're the source of truth for every field.
+Here is how you read that context in Python, step by step. Read the environment variable
+first; if it's empty, fall back to stdin; if there's nothing at all, return the minimal
+context so the plugin never crashes:
 
-## 🏗️ 2. Scaffold it
+```python
+import json, os, sys
 
-haw writes you a runnable skeleton that already implements the contract:
+def read_context() -> dict:
+    raw = os.environ.get("HAW_JSON", "")       # 1. prefer the env var (never blocks)
+    if not raw and not sys.stdin.isatty():     # 2. fall back to stdin if it's piped in
+        raw = sys.stdin.read()
+    if not raw:                                # 3. nothing at all → minimal context
+        return {"schema": "haw.plugin/1"}
+    try:
+        ctx = json.loads(raw)                  # 4. parse the JSON
+    except ValueError:
+        return {"schema": "haw.plugin/1"}      # 5. malformed → degrade gracefully
+    return ctx if isinstance(ctx, dict) else {"schema": "haw.plugin/1"}
+```
+
+Once you have `ctx`, everything else is ordinary shell work: `ctx["repos"]` gives you each
+repo's on-disk `path`, and `git diff` / `git commit` are just subprocess calls into that
+path.
+
+## 3. The three output shapes a plugin can print
+
+A plugin can print three different kinds of output, depending on how it's called. You don't
+have to support all three, but a good one does:
+
+1. **Plain text** — the default. When someone runs `haw commit-ai` in a terminal, print
+   friendly human-readable text.
+2. **A machine report** — when called with `--format json`, print a
+   **`haw.plugin.report/1`** document: `{schema, plugin, ok, summary, findings}`. Tools and
+   CI parse this instead of scraping human text.
+3. **A cockpit panel** — when haw wants to render your plugin inside the TUI cockpit, it
+   sets the environment variable `HAW_RENDER=1` and puts `"intent": "render"` in the
+   context. Your plugin then prints a **`haw.plugin.view/1`** document:
+   `{schema, title, lines[]}`. haw draws those lines in the cockpit's Plugins view (press
+   `7`).
+
+The three JSON schemas live in
+[`schemas/`](https://github.com/Nastwinns/hawser/tree/main/schemas) — they're the source of
+truth for every field.
+
+## 4. Scaffold the plugin
+
+You don't have to write any of this from a blank file. haw generates a runnable skeleton
+that already implements the contract for you.
+
+**Prerequisite:** you need Python 3 installed. Check it:
+
+```bash
+python3 --version      # any recent Python 3.x is fine
+```
+
+Now scaffold:
 
 ```bash
 haw plugins new commit-ai --lang python
@@ -107,65 +208,36 @@ next:
     PATH="$PWD/haw-commit-ai:$PATH" haw commit-ai
 ```
 
-That skeleton reads `$HAW_JSON`, handles `--help` and `--format json`, and emits a
-`haw.plugin.report/1`. It's a correct plugin already — we're going to *replace* its body
-with the MCP-capable version below.
+Two files land in a new `./haw-commit-ai/` directory:
+
+- **`haw-commit-ai`** — the plugin executable itself (a Python script with a
+  `#!/usr/bin/env python3` shebang, already marked executable).
+- **`README.md`** — notes for the plugin.
+
+The scaffold already reads `$HAW_JSON`, handles `--help` and `--format json`, and emits a
+`haw.plugin.report/1`. It's a correct, working plugin as-is. In the next sections we'll
+replace its body with our MCP-capable version.
 
 <div class="callout note">
 
 **Why Python?** Because the MCP SDK we'll use for the Claude side is Python-first. The
-plugin *face* stays zero-dependency stdlib; only the `--mcp` face needs `pip install mcp`.
+plugin *face* stays zero-dependency (standard library only); only the `--mcp` face needs
+one extra package, which we install later with `pip install mcp`.
 
 </div>
 
-## 📖 3. Read the context
+## 5. The plugin faces: human text, JSON report, and cockpit panel
 
-The heart of any plugin is reading `haw.plugin/1`. Prefer the env var (it never blocks),
-fall back to stdin, and always degrade gracefully:
+Let's build the plugin. We'll introduce it piece by piece so nothing is a mystery, then show
+you the full script.
 
-```python
-import json, os, sys
-
-def read_context() -> dict:
-    raw = os.environ.get("HAW_JSON", "")
-    if not raw and not sys.stdin.isatty():
-        raw = sys.stdin.read()
-    if not raw:
-        return {"schema": "haw.plugin/1"}
-    try:
-        ctx = json.loads(raw)
-    except ValueError:
-        return {"schema": "haw.plugin/1"}
-    return ctx if isinstance(ctx, dict) else {"schema": "haw.plugin/1"}
-```
-
-From `ctx["repos"]` you get each repo's on-disk `path` — everything else (`git diff`,
-`git commit`) is just shelling out into that path.
-
-## 🤖 4. The two faces: plugin + MCP server
-
-Here's the full final `haw-commit-ai`. Paste it over the scaffold's script (keep the file
-name `haw-commit-ai` and the `#!/usr/bin/env python3` shebang; `chmod +x` it). A ready copy
-lives at [`examples/plugins/haw-commit-ai/`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai).
+First, a few small helpers. `context_repos` pulls the repo list out of the context safely,
+and `_run` is a thin wrapper around running a shell command and capturing its output:
 
 ```python
-#!/usr/bin/env python3
-"""haw-commit-ai — draft commits + PRs from a haw workspace, and serve them to
-Claude via MCP. The plugin face is zero-dependency stdlib; --mcp needs `pip install mcp`."""
 import json, os, subprocess, sys
-from typing import Any, Optional
 
-def read_context() -> dict:
-    raw = os.environ.get("HAW_JSON", "")
-    if not raw and not sys.stdin.isatty():
-        raw = sys.stdin.read()
-    try:
-        ctx = json.loads(raw) if raw else {}
-    except ValueError:
-        ctx = {}
-    return ctx if isinstance(ctx, dict) else {"schema": "haw.plugin/1"}
-
-def context_repos(ctx): 
+def context_repos(ctx):
     r = ctx.get("repos")
     return [x for x in r if isinstance(x, dict)] if isinstance(r, list) else []
 
@@ -173,10 +245,16 @@ def _run(cmd, cwd=None):
     p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
     return p.returncode, p.stdout, p.stderr
 
-def repo_diff_text(path):                        # staged + unstaged vs HEAD
+def repo_diff_text(path):                        # staged + unstaged changes vs HEAD
     rc, out, _ = _run(["git", "-C", path, "diff", "HEAD"], cwd=path)
     return out
+```
 
+Next, `changeset_repos` figures out *which* repos to act on. It asks haw which repos the
+current changeset touched; if that comes back empty, it falls back to any repo with dirty
+(uncommitted) changes:
+
+```python
 def changeset_repos(ctx):                        # touched repos, else dirty repos
     root, repos = ctx.get("root"), context_repos(ctx)
     if root:
@@ -194,8 +272,8 @@ def changeset_repos(ctx):                        # touched repos, else dirty rep
     return dirty
 ```
 
-The plugin faces — human text, `--format json` → `haw.plugin.report/1`, and the render
-intent → `haw.plugin.view/1`:
+Now the two machine outputs. `emit_report` prints the `haw.plugin.report/1` document for
+`--format json`, and `emit_view` prints the `haw.plugin.view/1` panel for the cockpit:
 
 ```python
 def emit_report(ctx):
@@ -211,7 +289,42 @@ def emit_view(ctx):
                       "title": "commit-ai — proposed commits", "lines": lines}))
 ```
 
-And the MCP face — the tools Claude will call. We use the official SDK's **FastMCP**:
+That's the entire plugin face — the part that needs no external packages at all. The MCP
+face comes next.
+
+## 6. What MCP is, and why it matters here
+
+Before we write the MCP face, let's define MCP, because you can't wire up what you don't
+understand.
+
+**MCP (Model Context Protocol) is a standard way for an AI assistant to call tools you
+expose.** In three sentences:
+
+1. It's a simple protocol spoken over stdio (standard input/output) using JSON-RPC messages
+   — your program reads requests on stdin and writes responses on stdout.
+2. Your program advertises a set of **tools** (named functions with typed arguments), and an
+   AI assistant like Claude can call them and read the results.
+3. That's it: MCP is the bridge that lets Claude *do things in your world* — read a diff,
+   commit a repo — instead of only chatting about it.
+
+**Why it matters here:** haw knows about your whole fleet — every repo, every path, every
+changeset. If we expose that knowledge as MCP tools, Claude can call them to read your diffs
+and write accurate commit messages and PR text. Claude stops guessing and starts working
+from the real diff.
+
+The good news: you don't implement the JSON-RPC wire protocol yourself. The official MCP SDK
+ships a helper called **FastMCP** that turns a plain Python function into a tool with one
+decorator. You write normal functions; FastMCP handles the protocol.
+
+## 7. The MCP face: the tools Claude will call
+
+Here's the `run_mcp()` function. It imports FastMCP (failing gracefully if the package isn't
+installed), creates a server, and registers each tool with the `@mcp.tool()` decorator. The
+docstring of each function is what Claude sees as the tool's description, so we write them
+clearly.
+
+Two small guards are defined first: `_repo_path` looks up a repo's on-disk path by name, and
+`_within_root` ensures any write stays inside the workspace `root`:
 
 ```python
 def run_mcp():
@@ -229,7 +342,11 @@ def run_mcp():
         if not root or not path: return False
         root_abs, path_abs = os.path.realpath(root), os.path.realpath(path)
         return path_abs == root_abs or path_abs.startswith(root_abs + os.sep)
+```
 
+Now the five Level 1 tools. Read the docstrings — that's what Claude reads too:
+
+```python
     @mcp.tool()
     def haw_context() -> dict:
         """Workspace root, current stack, and repos (name, path, rev, groups)."""
@@ -269,7 +386,24 @@ def run_mcp():
 
     mcp.run()
     return 0
+```
 
+Here's what each tool does and why it exists:
+
+- **`haw_context()`** — hands Claude the workspace shape: root, stack, and repos. This is how
+  Claude learns your fleet exists.
+- **`repo_diff(repo)`** — returns one repo's diff so Claude reads exactly what changed
+  before writing about it.
+- **`changeset_repos_tool()`** — tells Claude which repos are in play right now.
+- **`write_commit(repo, message)`** — actually commits, but only inside the workspace root
+  (the path-guard refuses anything outside).
+- **`draft_pr(repo, title, body)`** — returns PR text; **dry by default**, so it never
+  pushes anything unless you explicitly pass `submit=True`.
+
+Finally, `main()` ties every face together — help, MCP, JSON report, cockpit render, and the
+default human text:
+
+```python
 def main():
     args = sys.argv[1:]
     if "-h" in args or "--help" in args:
@@ -289,20 +423,39 @@ if __name__ == "__main__":
 
 <div class="callout note">
 
-The listing above is the **Niveau 1** MCP face. The shipped
+The listing above is the **Level 1** version. The shipped
 [`examples/plugins/haw-commit-ai/haw-commit-ai`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai)
 is the fully-commented version (with a real conventional-commit skeleton and a PR-body
-template) and *also* carries the **Niveau 2** cross-repo tools we add below. Both pass
-`python3 -m py_compile` and run with zero deps in plugin mode.
+template) and *also* carries the **Level 2** cross-repo tools we add below. Both pass
+`python3 -m py_compile` and run with zero dependencies in plugin mode.
 
 </div>
 
-Try the plugin face right now — no MCP, no Claude:
+## 8. Run the plugin — no MCP, no Claude yet
+
+Let's prove it works as a plain plugin first. Make the file executable and put its directory
+on your `PATH` for the command:
 
 ```bash
 chmod +x haw-commit-ai
-PATH="$PWD:$PATH" haw commit-ai              # human draft
+PATH="$PWD:$PATH" haw commit-ai               # human draft
 PATH="$PWD:$PATH" haw commit-ai --format json # a haw.plugin.report/1
+```
+
+The first command prints a friendly one-liner. The second prints a JSON report you can
+parse — something like:
+
+```json
+{
+  "schema": "haw.plugin.report/1",
+  "plugin": "commit-ai",
+  "ok": true,
+  "summary": "2 repo(s)",
+  "findings": [
+    { "level": "info", "message": "kernel: draft a commit" },
+    { "level": "info", "message": "hal: draft a commit" }
+  ]
+}
 ```
 
 ![Running `haw commit-ai` — a plugin haw dispatches to `haw-commit-ai` on your PATH](../assets/haw-cli.gif)
@@ -314,21 +467,23 @@ open `haw dash`, press `7`, and there it is in the Plugins panel:
 
 ![The cockpit's Plugins panel (press `7`) rendering the plugin's `haw.plugin.view/1`](../assets/haw-tui.gif)
 
-## 🔌 5. Wire the MCP server into Claude Code
+## 9. Wire the MCP server into Claude Code
 
-First, the SDK (only for the `--mcp` face):
+Now the Claude side. First install the MCP SDK — this is the only dependency, and only the
+`--mcp` face needs it:
 
 ```bash
 pip install mcp
 ```
 
-Register the server with Claude Code — one command:
+Register the server with Claude Code — one command. Use an **absolute path** to your plugin
+file:
 
 ```bash
 claude mcp add haw-commit-ai -- python3 /abs/path/to/haw-commit-ai --mcp
 ```
 
-or, per project, drop it in `.mcp.json`:
+Or, per project, drop it in a `.mcp.json` file at your project root:
 
 ```json
 {
@@ -341,20 +496,20 @@ or, per project, drop it in `.mcp.json`:
 }
 ```
 
-Verify Claude sees the tools:
+Verify Claude sees the server:
 
 ```bash
 claude mcp list            # haw-commit-ai should be listed
 ```
 
-Inside a Claude session, `/mcp` shows the connected server and its tools. At Niveau 1 that's
-`haw_context`, `repo_diff`, `changeset_repos_tool`, `write_commit`, `draft_pr` — and once
-you add Niveau 2, `changeset_diff` and `draft_changeset_pr` join them.
+Inside a Claude session, `/mcp` shows the connected server and its tools. At Level 1 that's
+`haw_context`, `repo_diff`, `changeset_repos_tool`, `write_commit`, and `draft_pr`. Once you
+add Level 2 below, `changeset_diff` and `draft_changeset_pr` join them.
 
-## 🎬 6. Worked example — Claude writes your commit + PR text
+## 10. Worked example — Claude writes your commit and PR text
 
 Make a change across two repos in your workspace (say `kernel` and `hal`), stage them, then
-ask Claude — inside the workspace directory:
+ask Claude — from inside the workspace directory:
 
 > *"Read the diffs for the repos touched by my current changeset and write a
 > conventional-commit message for each. Then draft a single cross-repo PR body. Commit each
@@ -374,37 +529,64 @@ Claude call `draft_pr(..., submit=True)`).
 
 <div class="callout note">
 
-**Honnêteté niveau 1.** À ce stade, Claude Code voit déjà le diff d'un seul repo
-nativement — tu ne lui as pas donné de superpouvoir, tu lui as juste appris à parler le
-protocole haw proprement. Le vrai pouvoir arrive au **niveau 2** : lui montrer un
-changeset *entier*, réparti sur plusieurs repos, en une seule vue.
+**Being honest about Level 1.** At this point, Claude Code already sees a single repo's diff
+natively — you haven't given it a superpower yet, you've just taught it to speak haw's
+protocol cleanly. The real power arrives at **Level 2**: showing it an *entire* changeset,
+spread across several repos, in a single view.
 
 </div>
 
-Yep — so far we've mostly reinvented what Claude does for one repo for free. 😅 Keep the
-faith: the next niveau is the part it *can't* do on its own.
+So far we've mostly reinvented what Claude does for one repo for free. Keep the faith: the
+next level is the part it *can't* do on its own.
 
 <!-- render via <img>; giphy hotlink — swap if giphy changes -->
 <img class="meme" src="https://media.giphy.com/media/LBNbGeT9nwdEZdxNgj/giphy.gif" alt="This is fine — a cartoon dog sipping coffee as the room burns">
 
-*"We built a whole plugin to do what Claude already did." This is fine — niveau 2 fixes it. 🔥*
+*"We built a whole plugin to do what Claude already did." This is fine — Level 2 fixes it.*
 
-# 🚀 Niveau 2 : la vision cross-repo (changeset-wide)
+<div class="your-turn">
+<strong>Your turn (Level 1)</strong>
+<ul>
+<li>Scaffold your own: <code>haw plugins new commit-ai --lang python</code>, then run the zero-dependency face with <code>haw commit-ai --format json</code> and confirm you get a <code>haw.plugin.report/1</code> document.</li>
+<li>Drop the plugin on <code>PATH</code>, open <code>haw dash</code>, press <code>7</code>, and select <code>commit-ai</code> — your <code>haw.plugin.view/1</code> panel renders right in the cockpit.</li>
+<li><code>pip install mcp</code>, register it with <code>claude mcp add …</code>, and ask Claude to read one repo's diff and propose a commit — <em>without</em> committing. Then let it call <code>write_commit</code>, and watch the path-guard in action by asking it to commit a path outside the workspace (it should refuse).</li>
+</ul>
+</div>
+
+---
+
+# Level 2 — the cross-repo power (changeset-wide)
 
 Here's the pitch, sharp: **Claude alone can't see a fleet-wide changeset.** It can read one
-repo's diff — but a haw changeset spans N repos at once (`kernel`, `hal`, `app`…), and
-that combined story lives *between* the repos. lazygit can't show it either; it's a
-single-repo tool. haw knows the whole changeset, so haw can hand Claude the whole picture.
+repo's diff — but a haw changeset spans several repos at once (`kernel`, `hal`, `app`…), and
+that combined story lives *between* the repos. A single-repo tool like lazygit can't show it
+either. haw knows the whole changeset, so haw can hand Claude the whole picture.
 
 We add **two tools to the same plugin** — no new script, no new server. They turn
 `haw-commit-ai` from "a nice commit helper" into "the thing that gives an LLM fleet-wide
 vision."
 
-## 🧩 7. Two cross-repo tools
+## 11. Why cross-repo is the unique value
 
-Drop these alongside the Niveau 1 tools (the shipped
+Imagine you add one feature — say an `irq_mask` flag — and it has to land in three repos at
+once: the `kernel` driver that owns the register, the `hal` layer that threads it through,
+and the `app` that exposes it on the CLI. Each repo's diff, read alone, is a fragment. The
+*meaning* — "these three moves are one feature and must land together" — only exists when
+you see all three diffs side by side.
+
+- Claude, on its own, reads one repo at a time. It can't see the fragments as one story.
+- A single-repo tool sees one repo, full stop.
+- **haw knows the changeset**, so it can concatenate every repo's diff into one document and
+  hand that to Claude. Now Claude writes **one** coherent PR that narrates the whole feature.
+
+That combined view is the unique value. Everything in Level 2 exists to deliver it.
+
+## 12. Two cross-repo tools
+
+Drop these alongside the Level 1 tools (the shipped
 [`examples/plugins/haw-commit-ai/haw-commit-ai`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai)
-already has them):
+already has them). First, the helper that builds the combined diff — it concatenates every
+repo's diff under a clear `=== <repo> ===` header:
 
 ```python
 def changeset_diff_text(ctx):
@@ -420,9 +602,12 @@ def changeset_diff_text(ctx):
     return "\n\n".join(chunks)                        # the whole story, top to bottom
 ```
 
-`changeset_diff()` is the **killer tool**: one call, and Claude sees `kernel`, `hal`, and
-`app`'s diffs concatenated under `=== <repo> ===` headers — the fleet-wide changeset as a
-single readable document.
+This is the **killer function**: one call, and Claude sees `kernel`, `hal`, and `app`'s
+diffs concatenated under `=== <repo> ===` headers — the fleet-wide changeset as a single
+readable document.
+
+Next, the helper that builds a single cross-repo PR skeleton — a combined-summary slot plus
+one section per repo, which Claude then fills with prose:
 
 ```python
 def draft_changeset_pr_body(ctx, title):
@@ -439,12 +624,8 @@ def draft_changeset_pr_body(ctx, title):
     return "\n".join(lines)
 ```
 
-`draft_changeset_pr(title)` returns **one** PR body — the plugin assembles the skeleton
-(per-repo sections + a combined-summary slot), and **Claude fills the prose** from the
-diffs. Dry by default; feed the result to `haw change request` to open the linked PRs
-across the fleet.
-
-Both are wrapped as MCP tools with the FastMCP decorator, exactly like the Niveau 1 ones:
+Both are wrapped as MCP tools with the FastMCP decorator, exactly like the Level 1 ones —
+add them inside `run_mcp()`:
 
 ```python
     @mcp.tool()
@@ -460,19 +641,24 @@ Both are wrapped as MCP tools with the FastMCP decorator, exactly like the Nivea
         return draft_changeset_pr_body(read_context(), title)
 ```
 
+`draft_changeset_pr(title)` returns **one** PR body: the plugin assembles the skeleton
+(per-repo sections plus a combined-summary slot), and **Claude fills the prose** from the
+diffs. Dry by default; feed the result to `haw change request` to open the linked PRs across
+the fleet.
+
 <div class="callout note">
 
 **`write_commit` stays path-guarded.** There's no cross-repo "write everything" tool by
-design — for a changeset you commit **per repo** (Claude calls `write_commit` for each,
-each guarded to `root`), then run `haw change request` to open the linked PRs across the
-fleet. Writes stay small, reviewable, and inside your workspace.
+design — for a changeset you commit **per repo** (Claude calls `write_commit` for each, each
+guarded to `root`), then run `haw change request` to open the linked PRs across the fleet.
+Writes stay small, reviewable, and inside your workspace.
 
 </div>
 
-## 🎬 8. Worked example — one PR for a three-repo changeset
+## 13. Worked example — one PR for a three-repo changeset
 
 Touch two or three repos in a changeset — say `kernel`, `hal`, and `app` — stage them, then
-ask Claude, inside the workspace:
+ask Claude, from inside the workspace:
 
 > *"Call `changeset_diff()` to read my whole changeset, then `draft_changeset_pr()` and
 > write one PR that tells the combined story — a section per repo plus a combined summary."*
@@ -482,7 +668,10 @@ Claude will:
 1. call **`changeset_diff()`** → one document with `=== kernel ===`, `=== hal ===`,
    `=== app ===`, each repo's diff underneath,
 2. call **`draft_changeset_pr("…")`** → gets the skeleton with a section per repo,
-3. **fill the prose** into a single coherent narrative, e.g.:
+3. **fill the prose** into a single coherent narrative.
+
+Here's an illustrative result (labelled as illustrative — your prose will match your actual
+diffs):
 
 ```markdown
 # feat: propagate the new irq-mask flag end to end
@@ -500,66 +689,86 @@ Thread `irq_mask` through the HAL's `configure()` and expose it in the C header.
 Surface `--irq-mask` on the CLI and wire it to the HAL call.
 ```
 
-**This is what neither Claude nor lazygit can do alone.** A single-repo tool sees three
-disconnected diffs; haw + this plugin hand Claude the *changeset*, so it writes the one
-story that spans them. When you're happy, commit each repo (`write_commit`, per repo) and
+**This is what neither Claude nor a single-repo tool can do alone.** A single-repo tool sees
+three disconnected diffs; haw plus this plugin hand Claude the *changeset*, so it writes the
+one story that spans them. When you're happy, commit each repo (`write_commit`, per repo) and
 run `haw change request` to open the linked PRs across the fleet.
 
 <!-- render via <img>; giphy hotlink — swap if giphy changes -->
 <img class="meme" src="https://media.giphy.com/media/iyFmY2m2nfyAj5VFi8/giphy.gif" alt="Jubilant celebration reaction">
 
-*One prompt. Three repos. One coherent PR narrative. That's the superpower — go celebrate. 🎉*
+*One prompt. Three repos. One coherent PR narrative. That's the payoff — go celebrate.*
 
-## 🔒 9. Safety notes — this is the important bit
+## 14. Safety notes — this is the important bit
 
-Writing tools + an LLM means guardrails matter — ⚠️ this is the section you *don't* skim.
-This plugin bakes the guardrails in:
+Writing tools plus an LLM means guardrails matter. This is the section you *don't* skim. The
+plugin bakes the guardrails in:
 
 - **Path-guarded writes.** `write_commit` and `draft_pr(submit=True)` refuse any repo path
   that isn't inside the workspace `root` — Claude can't commit outside your fleet.
 - **Dry by default.** `draft_pr` returns text only; it never pushes or force-pushes unless
   you explicitly pass `submit=True`.
-- **No secrets in the plugin.** Forge auth comes from *your* environment — haw's normal
-  token resolution (`GITHUB_TOKEN`, etc.). The plugin stores nothing.
-- **Separate process, honest exit codes.** The plugin runs out-of-process; a bug can't
-  crash haw, and a non-zero exit propagates so CI still gates.
+- **No secrets in the plugin.** Forge authentication comes from *your* environment — haw's
+  normal token resolution (`GITHUB_TOKEN`, and so on). The plugin stores nothing.
+- **Separate process, honest exit codes.** The plugin runs out-of-process; a bug can't crash
+  haw, and a non-zero exit propagates so CI still gates.
 
 <div class="your-turn">
-<strong>🙌 À toi de jouer</strong>
+<strong>Your turn (Level 2)</strong>
 <ul>
-<li>Scaffold your own: <code>haw plugins new commit-ai --lang python</code>, then run the zero-dep face with <code>haw commit-ai --format json</code> and confirm you get a <code>haw.plugin.report/1</code> document.</li>
-<li>Drop the plugin on <code>PATH</code>, open <code>haw dash</code>, press <code>7</code>, and select <code>commit-ai</code> — your <code>haw.plugin.view/1</code> panel renders right in the cockpit.</li>
-<li><code>pip install mcp</code>, register it with <code>claude mcp add …</code>, and ask Claude to read one repo's diff and propose a commit — <em>without</em> committing. Then let it call <code>write_commit</code> and watch the path-guard in action by asking it to commit a path outside the workspace (it should refuse).</li>
-<li><strong>Niveau 2 :</strong> touch <em>three</em> repos in a changeset, then ask Claude to call <code>changeset_diff()</code> and <code>draft_changeset_pr()</code> and write <strong>one</strong> PR narrative covering all three (kernel / hal / app + a combined summary). Compare it to what you'd get asking Claude repo-by-repo — the cross-repo story only appears when it sees the whole changeset at once.</li>
-<li>Extend it: add a <code>repo_log(repo, n)</code> tool so Claude can see recent history for better messages. Keep it read-only.</li>
+<li>Touch <em>three</em> repos in a changeset, then ask Claude to call <code>changeset_diff()</code> and <code>draft_changeset_pr()</code> and write <strong>one</strong> PR narrative covering all three (kernel / hal / app plus a combined summary). Compare it to what you'd get by asking Claude repo-by-repo — the cross-repo story only appears when it sees the whole changeset at once.</li>
+<li>Extend the plugin: add a <code>repo_log(repo, n)</code> tool so Claude can see recent history for better messages. Keep it read-only.</li>
+<li>Add a per-repo line count to the combined diff output, so Claude knows which repo carries the bulk of the change before it starts writing.</li>
 </ul>
 </div>
 
-## ✅ Recap
+---
+
+## Glossary
+
+- **plugin** — an executable named `haw-<name>` on your `PATH`; haw runs it as
+  `haw <name>`.
+- **PATH dispatch** — the convention (shared with git/cargo/kubectl) where haw runs an
+  unknown subcommand by finding a matching executable on `PATH`.
+- **`haw.plugin/1`** — the JSON context haw hands every plugin (via `HAW_JSON` or stdin),
+  describing `root`, `stack`, and `repos`.
+- **`haw.plugin.report/1`** — the machine report a plugin prints for `--format json`.
+- **`haw.plugin.view/1`** — the cockpit panel a plugin prints when haw asks it to render
+  (`HAW_RENDER=1`, `"intent": "render"`).
+- **MCP (Model Context Protocol)** — a standard stdio JSON-RPC protocol that lets an AI
+  assistant call tools you expose.
+- **stdio** — a program's standard input and output streams; MCP messages travel over them.
+- **tool** — a named function (with typed arguments) your MCP server advertises for Claude
+  to call.
+- **FastMCP** — the helper in the official MCP SDK that turns a Python function into an MCP
+  tool with a decorator.
+
+## What you learned
 
 - A plugin is any executable named `haw-<name>` on `PATH`; haw hands it the
   **`haw.plugin/1`** context via `$HAW_JSON` / stdin and propagates its exit code.
 - It can print a **`haw.plugin.report/1`** (`--format json`) and a **`haw.plugin.view/1`**
   panel (render intent, `HAW_RENDER=1`) for the cockpit's Plugins view (`7`).
-- The same script can be an **MCP server** (`--mcp`) using FastMCP, exposing small tools so
-  **Claude** reads your diffs and writes the commit + PR text.
-- **Niveau 1 (mono-repo)** teaches the protocol: `haw_context`, `repo_diff`,
+- MCP is a standard stdio protocol that lets Claude call tools you expose; the same script
+  becomes an **MCP server** with `--mcp`, using FastMCP.
+- **Level 1 (single repo)** teaches the protocol: `haw_context`, `repo_diff`,
   `changeset_repos_tool`, `write_commit`, `draft_pr` — but Claude already sees one repo
   natively.
-- **Niveau 2 (cross-repo)** is the real power: `changeset_diff` hands Claude the *combined*
+- **Level 2 (cross-repo)** is the real power: `changeset_diff` hands Claude the *combined*
   diff across the whole changeset, and `draft_changeset_pr` gets it to write **one**
-  fleet-wide PR narrative — the cross-repo story neither Claude nor lazygit can tell alone.
+  fleet-wide PR narrative — the cross-repo story neither Claude nor a single-repo tool can
+  tell alone.
 - **Guardrails:** path-guard writes to inside `root` (commit per repo, then
   `haw change request`), keep PR drafting dry by default, and never store secrets — auth
-  stays in your env.
+  stays in your environment.
 
-## 👉 Where to next
+## Where to next
 
 You can now extend haw in any language and give an LLM safe, context-rich tools. From here:
 
 - Browse the [Plugins reference](../PLUGINS.md) — lifecycle phases, the community index, and
   the language bindings.
 - Study more real manifests in the [Examples index](../EXAMPLES.md).
-- Keep the [CLI design & keymap](../CLI-DESIGN.md) handy.
+- Keep the [CLI design and keymap](../CLI-DESIGN.md) handy.
 
-That's the whole tool — now go build your own beam. Welcome aboard. ⚓
+That's the whole tool — now go build your own beam. Welcome aboard.
