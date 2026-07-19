@@ -48,13 +48,20 @@ jobs:
           tar xzf mdbook.tar.gz
           sudo install mdbook /usr/local/bin/mdbook
 
+      - name: Install gettext + mdbook-i18n-helpers (French docs)
+        run: |
+          sudo apt-get update && sudo apt-get install -y gettext
+          cargo install mdbook-i18n-helpers --version 0.4.0 --locked
+
       - name: Build the browser cockpit (Ratzilla / WASM)
         working-directory: site
         run: trunk build --release --public-url /hawser/try/
 
-      - name: Build the docs (mdBook)
+      - name: Build the docs (mdBook — English, then French under /fr/)
         working-directory: docs
-        run: mdbook build
+        run: |
+          mdbook build
+          MDBOOK_BOOK__LANGUAGE=fr mdbook build -d book/fr
 
       - name: Assemble the Pages artifact
         run: |

@@ -268,3 +268,25 @@
   margin-top: 0;
   color: #b7bfd0;
 }
+
+/* Bilingual language switcher (EN/FR toggle in the menu bar) */
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.1rem;
+  height: 2.1rem;
+  margin-left: 0.3rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--icons, #67809f);
+  border-radius: 5px;
+  color: var(--icons, #67809f);
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-decoration: none;
+  line-height: 1;
+}
+.lang-switch:hover {
+  color: var(--sidebar-active, #1f6feb);
+  border-color: var(--sidebar-active, #1f6feb);
+}

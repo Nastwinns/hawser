@@ -8,12 +8,20 @@ src = "."
 [build]
 build-dir = "book"
 
+# gettext-based localization (mdbook-i18n-helpers). No-op for the default
+# language (English); for other languages it swaps in translations from
+# po/<lang>.po at build time. Build a translation with:
+#   MDBOOK_BOOK__LANGUAGE=fr mdbook build docs -d book/fr
+[preprocessor.gettext]
+after = ["links"]
+
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/Nastwinns/hawser"
 edit-url-template = "https://github.com/Nastwinns/hawser/edit/main/docs/{path}"
 additional-css = ["assets/learn.css"]
+additional-js = ["assets/i18n.js"]
 
 [output.html.fold]
 enable = true
