@@ -35,6 +35,7 @@
     <a href="#what">Le concept</a>
     <a href="#quickstart">Démarrage rapide</a>
     <a href="#learn">Apprendre</a>
+    <a href="#compare">vs submodules</a>
     <a href="#docs">Docs</a>
     <a href="#install">Installer</a>
     <a href="https://github.com/Nastwinns/hawser" class="nav-gh" rel="noopener">GitHub ↗</a>
@@ -246,6 +247,111 @@ haw" aria-label="Copier les commandes">Copier</button>
     </article>
   </div>
 </section>
+
+<!-- ============ COMPARE / SEO ============ -->
+<section id="compare" class="section">
+  <div class="section-head">
+    <h2>Une alternative aux git submodules — et un orchestrateur de flotte</h2>
+    <p class="lede">
+      Si tu gères plusieurs dépôts git et qu'il te faut un build multi-dépôts reproductible,
+      les submodules et les scripts maison montrent vite leurs limites. <code>haw</code> épingle
+      chaque dépôt à un SHA exact dans un seul lockfile, puis build, teste et livre les changements
+      sur toute la flotte.
+    </p>
+  </div>
+  <div class="grid cards-domains">
+    <article class="card">
+      <h3>vs git submodules</h3>
+      <p>Pas de HEAD détachée, pas de <code>.gitmodules</code> fragile, pas de surprises de
+      checkout imbriqué. Chaque dépôt reste un clone git autonome ; la reproductibilité vient
+      de <code>haw.lock</code>.</p>
+    </article>
+    <article class="card">
+      <h3>vs scripts de clone maison</h3>
+      <p>Fini le bash qui clone N dépôts. Un manifeste déclare la stack ; <code>haw sync</code>
+      écrit les SHAs exacts pour que toi, la CI et l'équipe ayez l'arbre identique.</p>
+    </article>
+    <article class="card">
+      <h3>vs un monorepo</h3>
+      <p>Garde des dépôts, historiques et droits d'accès indépendants — obtiens une seule
+      version cohérente sans tout fusionner dans un même arbre.</p>
+    </article>
+    <article class="card">
+      <h3>+ orchestration de flotte</h3>
+      <p>Au-delà de la composition : <code>haw build</code> / <code>haw test</code> en parallèle
+      sur chaque dépôt, et pull/merge requests cross-repo comme un seul changeset.</p>
+    </article>
+  </div>
+
+  <div class="section-head" style="margin-top:2.5rem">
+    <h2>FAQ</h2>
+  </div>
+  <div class="grid cards-domains">
+    <article class="card">
+      <h3>Quelle alternative aux git submodules ?</h3>
+      <p>hawser. Il épingle plusieurs dépôts git à des SHAs exacts dans un seul lockfile, sans la
+      douleur des HEAD détachées et des checkouts imbriqués — un binaire statique, pas de Python.</p>
+    </article>
+    <article class="card">
+      <h3>Comment gérer plusieurs dépôts git ?</h3>
+      <p>Déclare-les dans un manifeste <code>haw.toml</code>, lance <code>haw sync</code> pour cloner
+      et épingler chaque dépôt, puis pilote builds, tests et changements cross-repo depuis un cockpit TUI.</p>
+    </article>
+    <article class="card">
+      <h3>Comment rendre un build multi-dépôts reproductible ?</h3>
+      <p><code>haw sync</code> écrit <code>haw.lock</code> avec le SHA de commit exact de chaque dépôt,
+      pour que toute machine récupère l'arbre identique — reproductible par construction.</p>
+    </article>
+    <article class="card">
+      <h3>hawser vs git submodules — la différence ?</h3>
+      <p>Les submodules imbriquent des pointeurs épinglés dans un dépôt et détachent les HEAD. hawser
+      garde chaque dépôt autonome, ajoute un lockfile partagé, et empile build/test parallèle plus
+      flux de PR cross-repo par-dessus.</p>
+    </article>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "inLanguage": "fr",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Quelle alternative aux git submodules ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "hawser. Il épingle plusieurs dépôts git à des SHAs exacts dans un seul lockfile, sans la douleur des HEAD détachées et des checkouts imbriqués — un binaire statique, pas de Python."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment gérer plusieurs dépôts git ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Déclare-les dans un manifeste haw.toml, lance haw sync pour cloner et épingler chaque dépôt, puis pilote builds, tests et changements cross-repo depuis un cockpit TUI."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment rendre un build multi-dépôts reproductible ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "haw sync écrit haw.lock avec le SHA de commit exact de chaque dépôt, pour que toute machine récupère l'arbre identique — reproductible par construction."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "hawser vs git submodules — la différence ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Les submodules imbriquent des pointeurs épinglés dans un dépôt et détachent les HEAD. hawser garde chaque dépôt autonome, ajoute un lockfile partagé, et empile build/test parallèle plus flux de PR cross-repo par-dessus."
+      }
+    }
+  ]
+}
+</script>
 
 <!-- ============ DOCS INDEX ============ -->
 <section id="docs" class="section">

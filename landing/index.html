@@ -37,6 +37,7 @@
     <a href="#what">What</a>
     <a href="#quickstart">Quick start</a>
     <a href="#learn">Learn</a>
+    <a href="#compare">vs submodules</a>
     <a href="#docs">Docs</a>
     <a href="#install">Install</a>
     <a href="https://github.com/Nastwinns/hawser" class="nav-gh" rel="noopener">GitHub ↗</a>
@@ -248,6 +249,107 @@ haw" aria-label="Copy commands">Copy</button>
     </article>
   </div>
 </section>
+
+<!-- ============ COMPARE / SEO ============ -->
+<section id="compare" class="section">
+  <div class="section-head">
+    <h2>A git submodules alternative — and a fleet orchestrator</h2>
+    <p class="lede">
+      If you manage multiple git repositories and need a reproducible multi-repo build,
+      submodules and hand-rolled scripts both fall short. <code>haw</code> pins every repo to
+      an exact SHA in one lockfile, then builds, tests, and ships changes across the whole fleet.
+    </p>
+  </div>
+  <div class="grid cards-domains">
+    <article class="card">
+      <h3>vs git submodules</h3>
+      <p>No detached HEADs, no fragile <code>.gitmodules</code>, no nested-checkout surprises.
+      Each repo stays a plain, autonomous git clone; reproducibility comes from <code>haw.lock</code>.</p>
+    </article>
+    <article class="card">
+      <h3>vs manual clone scripts</h3>
+      <p>Stop maintaining a bash script that clones N repos. One manifest declares the stack;
+      <code>haw sync</code> writes exact SHAs so you, CI, and teammates get the identical tree.</p>
+    </article>
+    <article class="card">
+      <h3>vs a monorepo</h3>
+      <p>Keep independent repos, histories, and access control — get monorepo-style
+      "one coherent version" without merging everything into a single tree.</p>
+    </article>
+    <article class="card">
+      <h3>+ fleet orchestration</h3>
+      <p>Beyond composition: run <code>haw build</code> / <code>haw test</code> in parallel across
+      every repo, and open cross-repo pull/merge requests as one changeset.</p>
+    </article>
+  </div>
+
+  <div class="section-head" style="margin-top:2.5rem">
+    <h2>FAQ</h2>
+  </div>
+  <div class="grid cards-domains">
+    <article class="card">
+      <h3>What's a good alternative to git submodules?</h3>
+      <p>hawser. It pins many git repos to exact SHAs in a single lockfile without the detached-HEAD
+      and nested-checkout pain of submodules — one static binary, no Python.</p>
+    </article>
+    <article class="card">
+      <h3>How do I manage multiple git repositories?</h3>
+      <p>Declare them in a <code>haw.toml</code> manifest, run <code>haw sync</code> to clone and pin
+      every repo, then drive builds, tests, and cross-repo changes from one TUI cockpit.</p>
+    </article>
+    <article class="card">
+      <h3>How do I make a multi-repo build reproducible?</h3>
+      <p><code>haw sync</code> writes <code>haw.lock</code> with the exact commit SHA of every repo, so
+      any machine checks out the identical tree — reproducible by construction.</p>
+    </article>
+    <article class="card">
+      <h3>hawser vs git submodules — what's the difference?</h3>
+      <p>Submodules embed pinned pointers inside one repo and detach HEADs. hawser keeps each repo
+      autonomous, adds a shared lockfile, and layers parallel build/test plus cross-repo PR flow on top.</p>
+    </article>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What's a good alternative to git submodules?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "hawser. It pins many git repos to exact SHAs in a single lockfile without the detached-HEAD and nested-checkout pain of submodules — one static binary, no Python."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I manage multiple git repositories?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Declare them in a haw.toml manifest, run haw sync to clone and pin every repo, then drive builds, tests, and cross-repo changes from one TUI cockpit."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I make a multi-repo build reproducible?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "haw sync writes haw.lock with the exact commit SHA of every repo, so any machine checks out the identical tree — reproducible by construction."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "hawser vs git submodules — what's the difference?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Submodules embed pinned pointers inside one repo and detach HEADs. hawser keeps each repo autonomous, adds a shared lockfile, and layers parallel build/test plus cross-repo PR flow on top."
+      }
+    }
+  ]
+}
+</script>
 
 <!-- ============ DOCS INDEX ============ -->
 <section id="docs" class="section">
