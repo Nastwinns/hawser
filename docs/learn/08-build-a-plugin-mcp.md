@@ -459,7 +459,7 @@ parse — something like:
 }
 ```
 
-![The `haw` command line — a plugin runs exactly like these built-in commands, as `haw <name>`](../assets/haw-cli.gif)
+![Running `haw commit-ai` — it reads the fleet's diff and drafts a commit + PR](../assets/haw-plugin.gif)
 
 *No recompile, no core change: drop `haw-commit-ai` on your `PATH` and haw dispatches to it like any built-in.*
 

@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: hawser — the beam that binds the repos\n"
-"POT-Creation-Date: 2026-07-20T02:17:07+02:00\n"
+"POT-Creation-Date: 2026-07-20T12:53:47+02:00\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -3895,7 +3895,9 @@ msgstr "_Une commande. Cinq dépôts fusionnés dans le bon ordre. On l'a fait._
 msgid ""
 "![The low-level `haw merge` flow — plan, resolve conflicts, then clean up]"
 "(../assets/cli-merge.gif)"
-msgstr "![Le flux `haw merge` bas niveau — planifier, résoudre les conflits, puis nettoyer](../assets/cli-merge.gif)"
+msgstr ""
+"![Le flux `haw merge` bas niveau — planifier, résoudre les conflits, puis "
+"nettoyer](../assets/cli-merge.gif)"
 
 #: learn/05-changesets-across-repos.md:197
 msgid ""
@@ -6624,11 +6626,9 @@ msgstr "\"hal : rédiger un commit\""
 
 #: learn/08-build-a-plugin-mcp.md:462
 msgid ""
-"![The `haw` command line — a plugin runs exactly like these built-in "
-"commands, as `haw <name>`](../assets/haw-cli.gif)"
-msgstr ""
-"![La ligne de commande `haw` — un plugin s'exécute exactement comme ces "
-"commandes intégrées, via `haw <name>`](../assets/haw-cli.gif)"
+"![Running `haw commit-ai` — it reads the fleet's diff and drafts a commit + "
+"PR](../assets/haw-plugin.gif)"
+msgstr "![Exécution de `haw commit-ai` — il lit le diff de la flotte et rédige un commit + une PR](../assets/haw-plugin.gif)"
 
 #: learn/08-build-a-plugin-mcp.md:464
 msgid ""
@@ -14808,17 +14808,17 @@ msgstr ""
 "un e-mail au mainteneur. N'ouvrez **pas** de ticket public pour les "
 "problèmes de sécurité."
 
+#~ msgid ""
+#~ "![The `haw` command line — a plugin runs exactly like these built-in "
+#~ "commands, as `haw <name>`](../assets/haw-cli.gif)"
+#~ msgstr ""
+#~ "![La ligne de commande `haw` — un plugin s'exécute exactement comme ces "
+#~ "commandes intégrées, via `haw <name>`](../assets/haw-cli.gif)"
+
 #~ msgid "![Merging a changeset in dependency order](../assets/cli-merge.gif)"
 #~ msgstr ""
 #~ "![Fusionner un changeset dans l'ordre des dépendances](../assets/cli-"
 #~ "merge.gif)"
-
-#~ msgid ""
-#~ "![Running `haw commit-ai` — a plugin haw dispatches to `haw-commit-ai` on "
-#~ "your PATH](../assets/haw-cli.gif)"
-#~ msgstr ""
-#~ "![Exécution de `haw commit-ai` — un plugin vers lequel haw dispatche via "
-#~ "`haw-commit-ai` sur ton PATH](../assets/haw-cli.gif)"
 
 #~ msgid ""
 #~ "![The cockpit's Plugins panel (press `7`) rendering the plugin's "

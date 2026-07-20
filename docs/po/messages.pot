@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: hawser — the beam that binds the repos\n"
-"POT-Creation-Date: 2026-07-20T02:17:07+02:00\n"
+"POT-Creation-Date: 2026-07-20T12:53:47+02:00\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -5101,8 +5101,8 @@ msgstr ""
 
 #: ./learn/08-build-a-plugin-mcp.md:462
 msgid ""
-"![The `haw` command line — a plugin runs exactly like these built-in "
-"commands, as `haw <name>`](../assets/haw-cli.gif)"
+"![Running `haw commit-ai` — it reads the fleet's diff and drafts a commit + "
+"PR](../assets/haw-plugin.gif)"
 msgstr ""
 
 #: ./learn/08-build-a-plugin-mcp.md:464
