@@ -11,14 +11,15 @@ right first.
 *A stack is just building blocks — repos snapped together under one name, declared in the manifest.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Declare a <strong>remote</strong> once and reuse it across repos.</li>
-<li>Add <strong>repos</strong>, each with a <code>rev</code> (branch, tag, or SHA) and free-form <code>groups</code>.</li>
-<li>Compose repos into named <strong>stacks</strong> — shared, never copied.</li>
-<li>Reach for <strong>overlays</strong> when one repo needs per-variant overrides.</li>
-<li>Read a whole <code>haw.toml</code> and know exactly what it will do.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Declare a <strong>remote</strong> once and reuse it across repos.
+- Add <strong>repos</strong>, each with a <code>rev</code> (branch, tag, or SHA) and free-form <code>groups</code>.
+- Compose repos into named <strong>stacks</strong> — shared, never copied.
+- Reach for <strong>overlays</strong> when one repo needs per-variant overrides.
+- Read a whole <code>haw.toml</code> and know exactly what it will do.
+
 </div>
 
 ## 🛠️ 1. Create a workspace
@@ -183,13 +184,15 @@ syncable `haw.toml`. It scales the same way to a hundred repos and a dozen stack
 </div>
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>Make the manifest your own — no sync required, this is all declaration:</p>
-<ul>
-<li>Add a third repo to <code>haw.toml</code> — try <code>octocat/git-consortium.git</code> on the <code>gh</code> remote — give it a <code>rev</code> and put it in a new group.</li>
-<li>Add it to the <code>site</code> stack's <code>repos</code> list, then add a second stack, <code>core-only</code>, that lists just <code>hello-world</code>. Notice the repo is <em>shared</em>, not copied.</li>
-<li>Sketch on paper what you expect on disk after a sync: how many clones? (Hint: one per <em>repo</em>, no matter how many stacks reference it.)</li>
-</ul>
+
+**🙌 Your turn**
+
+Make the manifest your own — no sync required, this is all declaration:
+
+- Add a third repo to <code>haw.toml</code> — try <code>octocat/git-consortium.git</code> on the <code>gh</code> remote — give it a <code>rev</code> and put it in a new group.
+- Add it to the <code>site</code> stack's <code>repos</code> list, then add a second stack, <code>core-only</code>, that lists just <code>hello-world</code>. Notice the repo is <em>shared</em>, not copied.
+- Sketch on paper what you expect on disk after a sync: how many clones? (Hint: one per <em>repo</em>, no matter how many stacks reference it.)
+
 </div>
 
 ## ✅ Recap

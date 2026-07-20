@@ -176,13 +176,15 @@
   line-height: 1.55;
 }
 
-.objectives > strong:first-child {
+.objectives > strong:first-child,
+.objectives > p:first-child {
   display: block;
   color: var(--hw-violet);
   font-size: 1.05em;
   letter-spacing: 0.01em;
-  margin-bottom: 0.55em;
+  margin: 0 0 0.55em 0;
 }
+.objectives > p:first-child > strong { color: inherit; }
 
 .objectives ul {
   margin: 0;
@@ -224,12 +226,14 @@
   line-height: 1.55;
 }
 
-.your-turn > strong:first-child {
+.your-turn > strong:first-child,
+.your-turn > p:first-child {
   display: block;
   color: var(--hw-amber);
   font-size: 1.05em;
-  margin-bottom: 0.45em;
+  margin: 0 0 0.45em 0;
 }
+.your-turn > p:first-child > strong { color: inherit; }
 
 .your-turn > :last-child { margin-bottom: 0; }
 

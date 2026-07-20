@@ -10,14 +10,15 @@ order.
 *One feature, one review flow — even when the code is spread across repos and forges.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Understand what a <strong>changeset</strong> is: one feature = one branch across N repos.</li>
-<li>Start a changeset with <code>haw change start</code> — the same branch in every repo, in one move.</li>
-<li>Track the whole feature on one screen with <code>haw change status</code>.</li>
-<li>Open cross-linked PR/MRs with <code>haw change request</code> — across GitHub, GitLab, and Bitbucket.</li>
-<li>Merge in dependency order with <code>haw change land</code>, so <code>main</code> never breaks.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Understand what a <strong>changeset</strong> is: one feature = one branch across N repos.
+- Start a changeset with <code>haw change start</code> — the same branch in every repo, in one move.
+- Track the whole feature on one screen with <code>haw change status</code>.
+- Open cross-linked PR/MRs with <code>haw change request</code> — across GitHub, GitLab, and Bitbucket.
+- Merge in dependency order with <code>haw change land</code>, so <code>main</code> never breaks.
+
 </div>
 
 ![Driving a cross-repo changeset from the CLI](../assets/cli-changeset.gif)
@@ -191,7 +192,7 @@ correct order, no broken `main`.
 
 *One command. Five repos merged in the right order. We did it.*
 
-![Merging a changeset in dependency order](../assets/cli-merge.gif)
+![The low-level `haw merge` flow — plan, resolve conflicts, then clean up](../assets/cli-merge.gif)
 
 *`change land` merges the linked PR/MRs in topological order — dependencies first — and stops at the first failure.*
 
@@ -222,13 +223,15 @@ multi-repo state later.
 </div>
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>The local half of the flow needs no forge token, so try it in a workspace right now:</p>
-<ul>
-<li>Run <code>haw change start DEMO-1 --repos hello-world,spoon-knife</code> and confirm the same <code>change/DEMO-1</code> branch appears in both repos (peek with <code>haw run 'git branch --show-current'</code>).</li>
-<li>Run <code>haw change status DEMO-1</code> and read the aggregated branch/dirty/HEAD — one dashboard instead of two tabs.</li>
-<li>Now sketch it on paper: for a real feature spanning a shared lib and two services, in what order must they <code>land</code>? (Lib first — that's the <code>deps</code> key doing its job.)</li>
-</ul>
+
+**🙌 Your turn**
+
+The local half of the flow needs no forge token, so try it in a workspace right now:
+
+- Run <code>haw change start DEMO-1 --repos hello-world,spoon-knife</code> and confirm the same <code>change/DEMO-1</code> branch appears in both repos (peek with <code>haw run 'git branch --show-current'</code>).
+- Run <code>haw change status DEMO-1</code> and read the aggregated branch/dirty/HEAD — one dashboard instead of two tabs.
+- Now sketch it on paper: for a real feature spanning a shared lib and two services, in what order must they <code>land</code>? (Lib first — that's the <code>deps</code> key doing its job.)
+
 </div>
 
 ## ✅ Recap

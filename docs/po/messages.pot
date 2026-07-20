@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: hawser — the beam that binds the repos\n"
-"POT-Creation-Date: 2026-07-19T15:00:14+02:00\n"
+"POT-Creation-Date: 2026-07-20T02:17:07+02:00\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -570,7 +570,7 @@ msgstr ""
 msgid "Scoop (Windows)"
 msgstr ""
 
-#: ./INSTALL.md:49 ./learn/01-install-and-first-run.md:36
+#: ./INSTALL.md:49 ./learn/01-install-and-first-run.md:37
 msgid ""
 "```powershell\n"
 "scoop bucket add nastwinns https://github.com/Nastwinns/scoop-bucket\n"
@@ -849,51 +849,80 @@ msgstr ""
 msgid "_Many repos, one coordinated whole — that's the puzzle hawser solves._"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:31
+#: ./learn/00-what-is-hawser.md:23 ./learn/01-install-and-first-run.md:14
+#: ./learn/02-the-manifest.md:15 ./learn/03-sync-and-the-lockfile.md:16
+#: ./learn/04-the-tui-cockpit.md:17 ./learn/05-changesets-across-repos.md:14
+#: ./learn/06-build-test-and-verify.md:18 ./learn/07-going-to-production.md:15
+msgid "**🎯 In this chapter, you'll learn to…**"
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:25
+msgid ""
+"Recognize the three taxes of a multi-repo product: version coordination, "
+"cross-repo PRs, and reproducibility."
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:26
+msgid ""
+"Explain hawser in one line — a <code>package.json</code> + lockfile, but for "
+"a fleet of Git repos."
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:27
+msgid ""
+"Hold the whole mental model in your head: <strong>manifest → lockfile → "
+"stacks</strong>."
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:28
+msgid "Tell when hawser is the right tool for your world."
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:32
 msgid "🧩 The problem: one product, many repos"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:33
+#: ./learn/00-what-is-hawser.md:34
 msgid ""
 "Picture a real product. It's rarely a single repository anymore. It's a "
 "shared library, three or four services, an SDK, some infrastructure — each "
 "in its own Git repo, each with its own branches, its own CI, its own history."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:39
+#: ./learn/00-what-is-hawser.md:40
 msgid "_One product, scattered across a shelf of separate repos._"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:41
+#: ./learn/00-what-is-hawser.md:42
 msgid "That split is _good_ engineering. But it comes with a tax:"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:43
+#: ./learn/00-what-is-hawser.md:44
 msgid ""
 "**\"Which versions go together?\"** Service A works with version 2.1 of the "
 "shared lib — but which commit is 2.1, exactly? And does your teammate have "
 "the same one?"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:45
+#: ./learn/00-what-is-hawser.md:46
 msgid ""
 "**\"One feature, five pull requests.\"** A single change touches four repos. "
 "You branch each one by hand, open four PRs, and pray you merge them in the "
 "right order."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:47
+#: ./learn/00-what-is-hawser.md:48
 msgid ""
 "**\"It works on my machine.\"** Nobody can reproduce the exact set of "
 "commits that were live last March, because that set was never written down "
 "anywhere."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:52
+#: ./learn/00-what-is-hawser.md:53
 msgid "_Managing ten repos and their versions by hand. This is fine. 🔥_"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:54
+#: ./learn/00-what-is-hawser.md:55
 msgid ""
 "Here's the thing: a _single_ repo already solved these problems years ago. "
 "Your `package.json` (or `Cargo.toml`) declares what you depend on, and a "
@@ -902,54 +931,54 @@ msgid ""
 "identical tree."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:61
+#: ./learn/00-what-is-hawser.md:62
 msgid ""
 "**The mental model in one line:** hawser is a `package.json` + lockfile, but "
 "for a **fleet of Git repos** instead of a fleet of npm packages."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:66
+#: ./learn/00-what-is-hawser.md:67
 msgid "⚓ What hawser does"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:68
+#: ./learn/00-what-is-hawser.md:69
 msgid ""
 "**hawser composes a software stack from many Git repos, pins it to a "
 "lockfile, and lets you drive every cross-repo build, PR, review, and CI run "
 "from one place.**"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:71
+#: ./learn/00-what-is-hawser.md:72
 msgid ""
 "It's not a Git wrapper and it doesn't reimplement Git. It's the _layer "
 "above_ Git — the part your `package.json` and your project board and your PR "
 "dashboard were quietly doing for a single repo, now done for many."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:75
+#: ./learn/00-what-is-hawser.md:76
 msgid ""
 "The command-line tool is called `haw`. It's a single binary, written in "
 "Rust, with no runtime to install."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:78
+#: ./learn/00-what-is-hawser.md:79
 msgid "🧠 The mental model: manifest → lockfile → stacks"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:80
+#: ./learn/00-what-is-hawser.md:81
 msgid ""
 "Three concepts carry the whole system. Learn these now and everything else "
 "follows."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:82
+#: ./learn/00-what-is-hawser.md:83
 msgid ""
 "**The manifest — `haw.toml`.** This is your _intent_. You declare which "
 "repos exist, where they live, and which revision you want. Think of it as "
 "the `dependencies` block."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:85
+#: ./learn/00-what-is-hawser.md:86
 msgid ""
 "**The lockfile — `haw.lock`.** This is the _resolved reality_. When you "
 "sync, `haw` pins every repo to an exact commit SHA and writes it here. You "
@@ -957,185 +986,215 @@ msgid ""
 "_identical_ tree, byte for byte."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:89
+#: ./learn/00-what-is-hawser.md:90
 msgid ""
 "**Stacks.** A **stack** is a named composition of repos. One manifest can "
 "define several stacks that share the same repos without copying them. (A "
 "stack in `haw` is just \"these repos, together, under this name.\")"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:99
+#: ./learn/00-what-is-hawser.md:100
 msgid ""
 "On disk there are no submodules, no symlinks, and no detached HEADs — each "
 "repo is a plain, complete Git clone. `haw` just keeps them in sync and "
 "coordinated."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:102
+#: ./learn/00-what-is-hawser.md:103
 msgid "🎯 When to reach for hawser"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:104
+#: ./learn/00-what-is-hawser.md:105
 msgid ""
 "hawser is **domain-agnostic** — a repo is a repo, a build is whatever shell "
 "command you declare. It shines whenever a product is spread across repos:"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:107
+#: ./learn/00-what-is-hawser.md:108
 msgid "If your world looks like…"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:107
+#: ./learn/00-what-is-hawser.md:108
 msgid "…hawser gives you"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:109
+#: ./learn/00-what-is-hawser.md:110
 msgid ""
 "**Backend microservices** — a feature spanning N services + a shared "
 "proto/lib"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:109
+#: ./learn/00-what-is-hawser.md:110
 msgid "one branch + linked PRs across exactly the repos it touches"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:110
+#: ./learn/00-what-is-hawser.md:111
 msgid "**ML / data platforms** — model + pipeline + serving infra"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:110
+#: ./learn/00-what-is-hawser.md:111
 msgid "one pinned, reproducible baseline of all three"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:111
+#: ./learn/00-what-is-hawser.md:112
 msgid "**Platform / infra** — Terraform modules + Helm charts"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:111
+#: ./learn/00-what-is-hawser.md:112
 msgid "a versioned, drift-checked deployed baseline"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:112
+#: ./learn/00-what-is-hawser.md:113
 msgid "**Mobile** — an app + its in-house SDK"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:112
+#: ./learn/00-what-is-hawser.md:113
 msgid "app and SDK changed and released in lockstep"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:113
+#: ./learn/00-what-is-hawser.md:114
 msgid "**Embedded / automotive** — shared HAL/BSP reused across many ECUs"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:113
+#: ./learn/00-what-is-hawser.md:114
 msgid "audit-grade, reproducible baselines + compliance evidence"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:115
+#: ./learn/00-what-is-hawser.md:116
 msgid ""
 "The loop — **compose → pin → change → build/test → govern** — is the same in "
 "every one. Only the repos and the declared build commands differ. See "
 "[Domains](../DOMAINS.md) for how each maps on."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:119
+#: ./learn/00-what-is-hawser.md:120
 msgid "🚀 What you'll be able to do by the end of this course"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:121
-msgid "Write a `haw.toml`, sync it, and read the lockfile with confidence."
-msgstr ""
-
 #: ./learn/00-what-is-hawser.md:122
-msgid ""
-"Run builds, tests, commands, and searches across an entire fleet in parallel."
+msgid "Write a `haw.toml`, sync it, and read the lockfile with confidence."
 msgstr ""
 
 #: ./learn/00-what-is-hawser.md:123
 msgid ""
-"Ship a feature across N repos as one changeset — branch, PR, land in order."
+"Run builds, tests, commands, and searches across an entire fleet in parallel."
 msgstr ""
 
 #: ./learn/00-what-is-hawser.md:124
+msgid ""
+"Ship a feature across N repos as one changeset — branch, PR, land in order."
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:125
 msgid ""
 "Live in the TUI cockpit and merge, approve, and inspect without leaving the "
 "terminal."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:125
+#: ./learn/00-what-is-hawser.md:126
 msgid "Extend `haw` with a plugin you wrote yourself."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:126
+#: ./learn/00-what-is-hawser.md:127
 msgid "Wire it into CI with reproducibility, signing, and audit evidence."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:128
+#: ./learn/00-what-is-hawser.md:129
 msgid ""
 "That's a real, productive skill set — and we'll build it one small step at a "
 "time."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:130
+#: ./learn/00-what-is-hawser.md:131
 msgid ""
 "And here's where we're going — the keyboard cockpit you'll be living in by "
 "Chapter 4:"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:132
+#: ./learn/00-what-is-hawser.md:133
 msgid ""
 "![The hawser TUI cockpit, driving a whole fleet from the "
 "keyboard](../assets/haw-tui.gif)"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:134
+#: ./learn/00-what-is-hawser.md:135
 msgid ""
 "_The `haw` cockpit: read the fleet, drill into any repo or PR, and act — "
 "without leaving the terminal._"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:147 ./learn/01-install-and-first-run.md:144
-#: ./learn/02-the-manifest.md:195 ./learn/03-sync-and-the-lockfile.md:228
-#: ./learn/04-the-tui-cockpit.md:212 ./learn/05-changesets-across-repos.md:234
-#: ./learn/06-build-test-and-verify.md:254
-#: ./learn/07-going-to-production.md:249
+#: ./learn/00-what-is-hawser.md:139 ./learn/01-install-and-first-run.md:158
+#: ./learn/02-the-manifest.md:188 ./learn/03-sync-and-the-lockfile.md:221
+#: ./learn/04-the-tui-cockpit.md:204 ./learn/05-changesets-across-repos.md:227
+#: ./learn/06-build-test-and-verify.md:247
+msgid "**🙌 Your turn**"
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:141
+msgid ""
+"Before we touch a single command, do the thought experiment. Picture the "
+"last product you worked on that lived in more than one repo. Jot down:"
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:143
+msgid "How many repos was it, really?"
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:144
+msgid ""
+"The last time one feature forced you to open PRs in several of them at once "
+"— how did you keep track?"
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:145
+msgid ""
+"Could you reproduce, today, the <em>exact</em> set of commits that were live "
+"three months ago? Hold those answers. By Chapter 3 you'll have a one-command "
+"answer to each."
+msgstr ""
+
+#: ./learn/00-what-is-hawser.md:150 ./learn/01-install-and-first-run.md:145
+#: ./learn/02-the-manifest.md:198 ./learn/03-sync-and-the-lockfile.md:231
+#: ./learn/04-the-tui-cockpit.md:215 ./learn/05-changesets-across-repos.md:237
+#: ./learn/06-build-test-and-verify.md:257
+#: ./learn/07-going-to-production.md:250
 msgid "✅ Recap"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:149
+#: ./learn/00-what-is-hawser.md:152
 msgid ""
 "Splitting a product across many Git repos is normal, but it costs you "
 "version coordination, cross-repo PRs, and reproducibility."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:151
+#: ./learn/00-what-is-hawser.md:154
 msgid ""
 "**hawser is a manifest + lockfile for a fleet of repos** — like "
 "`package.json` + `package-lock.json`, but for whole repositories."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:153
+#: ./learn/00-what-is-hawser.md:156
 msgid ""
 "Three concepts: **manifest** (`haw.toml`, intent) → **lockfile** "
 "(`haw.lock`, pinned reality) → **stacks** (named compositions of repos)."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:155
+#: ./learn/00-what-is-hawser.md:158
 msgid "The CLI is `haw`: one Rust binary, no runtime."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:156
+#: ./learn/00-what-is-hawser.md:159
 msgid "It fits any domain where a product spans repos."
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:158 ./learn/01-install-and-first-run.md:165
-#: ./learn/02-the-manifest.md:207 ./learn/03-sync-and-the-lockfile.md:239
-#: ./learn/04-the-tui-cockpit.md:226 ./learn/05-changesets-across-repos.md:245
-#: ./learn/06-build-test-and-verify.md:265
+#: ./learn/00-what-is-hawser.md:161 ./learn/01-install-and-first-run.md:168
+#: ./learn/02-the-manifest.md:210 ./learn/03-sync-and-the-lockfile.md:242
+#: ./learn/04-the-tui-cockpit.md:229 ./learn/05-changesets-across-repos.md:248
+#: ./learn/06-build-test-and-verify.md:268
 msgid "👉 Next"
 msgstr ""
 
-#: ./learn/00-what-is-hawser.md:160
+#: ./learn/00-what-is-hawser.md:163
 msgid ""
 "Let's get the tool onto your machine and open the cockpit for the first time "
 "→ [1. Install and first run](01-install-and-first-run.md)."
@@ -1157,170 +1216,194 @@ msgstr ""
 msgid "_A one-time setup, then you're at the prompt for the rest of the course._"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:22
+#: ./learn/01-install-and-first-run.md:16
+msgid ""
+"Install <code>haw</code> through the channel that fits your machine — Cargo, "
+"Homebrew, Scoop, or the static musl binary."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:17
+msgid ""
+"Confirm the binary is on your <code>PATH</code> and prints <code>haw "
+"0.1.7</code>."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:18
+msgid ""
+"Turn on shell tab-completion so the shell fills in subcommands and flags as "
+"you learn."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:19
+msgid ""
+"Take a first <code>haw</code> run and watch the cockpit open — a taste of "
+"where you're headed."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:23
 msgid ""
 "The tool ships as a **single binary named `haw`**. There's no runtime, no "
 "interpreter, nothing to keep updated alongside it. The current release is "
 "**v0.1.7**."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:25
+#: ./learn/01-install-and-first-run.md:26
 msgid "📦 1. Install it"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:27
+#: ./learn/01-install-and-first-run.md:28
 msgid ""
 "Pick the line that matches your setup — all of them install the _same_ `haw` "
 "binary."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:30
+#: ./learn/01-install-and-first-run.md:31
 msgid "# Rust / crates.io (canonical)\n"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:31
+#: ./learn/01-install-and-first-run.md:32
 msgid "# macOS + Linux (Homebrew)\n"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:34
+#: ./learn/01-install-and-first-run.md:35
 msgid "On Windows, use Scoop:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:41
+#: ./learn/01-install-and-first-run.md:42
 msgid ""
 "On a Linux server, container, or air-gapped host, the **static musl binary** "
 "is the easiest choice — it's fully static (no glibc, no runtime), so one "
 "file just runs:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:51
+#: ./learn/01-install-and-first-run.md:52
 msgid ""
 "**Tip:** `cargo install hawser` is the canonical Rust install. It builds "
 "from source and drops `haw` into `~/.cargo/bin` — make sure that directory "
 "is on your `PATH`."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:56
+#: ./learn/01-install-and-first-run.md:57
 msgid ""
 "For every other channel (`.deb`/`.rpm`, AUR, Nix, Docker), plus **signature "
 "verification** and the full **air-gap workflow**, see [Installing "
 "hawser](../INSTALL.md)."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:59
+#: ./learn/01-install-and-first-run.md:60
 msgid "✅ 2. Verify it works"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:61
+#: ./learn/01-install-and-first-run.md:62
 msgid "Whatever channel you used, confirm the binary is on your `PATH`:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:67
+#: ./learn/01-install-and-first-run.md:68
 msgid "You should see the version print:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:73
+#: ./learn/01-install-and-first-run.md:74
 msgid ""
 "If you get \"command not found\", the install directory isn't on your `PATH` "
 "yet — for `cargo`, that's `~/.cargo/bin`. Fix that and re-run."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:76
+#: ./learn/01-install-and-first-run.md:77
 msgid ""
 "Now peek at the full command surface — you don't need to read it all, just "
 "get a feel:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:82
+#: ./learn/01-install-and-first-run.md:83
 msgid ""
 "You'll see the subcommands we'll cover: `sync`, `status`, `tree`, `run`, "
 "`build`, `test`, `change`, `plugins`, and more. Every one is a single "
 "guessable word."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:85
+#: ./learn/01-install-and-first-run.md:86
 msgid "![The haw command-line tool in action](../assets/haw-cli.gif)"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:87
+#: ./learn/01-install-and-first-run.md:88
 msgid ""
 "_A quick taste of `haw` at the command line — every subcommand is one "
 "guessable word._"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:89
+#: ./learn/01-install-and-first-run.md:90
 msgid "⌨️ 3. Turn on shell completions"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:91
+#: ./learn/01-install-and-first-run.md:92
 msgid ""
 "This is a small quality-of-life win that pays off all course long: press "
 "`Tab` and the shell fills in subcommands and flags for you."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:94
+#: ./learn/01-install-and-first-run.md:95
 msgid ""
 "`haw completions <shell>` prints a completion script to stdout. Redirect it "
 "to the right place for your shell:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:98
+#: ./learn/01-install-and-first-run.md:99
 msgid "# zsh\n"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:99
+#: ./learn/01-install-and-first-run.md:100
 msgid "# bash\n"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:100
+#: ./learn/01-install-and-first-run.md:101
 msgid "# fish\n"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:105
+#: ./learn/01-install-and-first-run.md:106
 msgid ""
 "**Tip:** For zsh, make sure `~/.zfunc` is on your `$fpath` (add "
 "`fpath=(~/.zfunc $fpath)` before `compinit` in your `~/.zshrc`), then "
 "restart your shell. Now `haw sy<Tab>` completes to `haw sync`."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:111
+#: ./learn/01-install-and-first-run.md:112
 msgid "🚁 4. Your first run — open the cockpit"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:113
+#: ./learn/01-install-and-first-run.md:114
 msgid ""
 "Here's the reward. `haw` isn't only a batch of subcommands: run it with **no "
 "subcommand at all** and it opens a full-screen, keyboard-driven **cockpit** "
 "for your fleet."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:120
+#: ./learn/01-install-and-first-run.md:121
 msgid ""
 "You don't have a workspace yet, so there's nothing real to show. Good news: "
 "there's a built-in **demo controller**, populated with canned repos, PRs, "
 "and CI runs, so every view has something in it — no network, no setup:"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:128
+#: ./learn/01-install-and-first-run.md:129
 msgid ""
 "A live fleet grid fills the terminal. Move with `↑`/`↓` (or `k`/`j`, "
 "Vim-style), press `Enter` to drill into a repo, `Esc` to come back, `?` for "
 "the help overlay, and `q` to quit."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:132 ./learn/04-the-tui-cockpit.md:28
+#: ./learn/01-install-and-first-run.md:133 ./learn/04-the-tui-cockpit.md:29
 msgid ""
 "![The hawser TUI cockpit — mission control for the "
 "fleet](../assets/haw-tui.gif)"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:134
+#: ./learn/01-install-and-first-run.md:135
 msgid ""
 "_The cockpit you just opened: the fleet grid, drill-downs, and keyboard "
 "actions — all in the terminal._"
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:138
+#: ./learn/01-install-and-first-run.md:139
 msgid ""
 "**Just a taste for now.** Poke around, then quit with `q`. We'll give the "
 "cockpit a proper guided tour in [Chapter 4](04-the-tui-cockpit.html) — first "
@@ -1328,36 +1411,61 @@ msgid ""
 "build."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:146
+#: ./learn/01-install-and-first-run.md:147
 msgid ""
 "`haw` is a single binary — install it with `cargo`, `brew`, `scoop`, or the "
 "static musl archive."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:148
+#: ./learn/01-install-and-first-run.md:149
 msgid ""
 "`haw --version` should print `haw 0.1.7`; `haw --help` lists every command."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:149
+#: ./learn/01-install-and-first-run.md:150
 msgid ""
 "`haw completions <shell>` gives you tab completion — set it up now, thank "
 "yourself later."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:151
+#: ./learn/01-install-and-first-run.md:152
 msgid ""
 "Bare `haw` (or `haw dash --demo`) opens the cockpit — your first glimpse of "
 "mission control, explored in depth in Chapter 4."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:153
+#: ./learn/01-install-and-first-run.md:154
 msgid ""
 "The [full install matrix](../INSTALL.md) covers signed releases and "
 "air-gapped hosts."
 msgstr ""
 
-#: ./learn/01-install-and-first-run.md:167
+#: ./learn/01-install-and-first-run.md:160
+msgid "Two-minute checkpoint — prove your setup before moving on:"
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:162
+msgid ""
+"Run <code>haw --version</code> and confirm you see <code>haw 0.1.7</code>. "
+"If it says \"command not found\", the install dir isn't on your "
+"<code>PATH</code> yet — fix that first."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:163
+msgid ""
+"Set up completions for your shell, restart it, then type <code>haw sy</code> "
+"and press <code>Tab</code>. It should complete to <code>haw sync</code>."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:164
+msgid ""
+"Run <code>haw dash --demo</code>, move around with "
+"<code>↑</code>/<code>↓</code>, press <code>Enter</code> to drill into a repo "
+"and <code>Esc</code> to back out, then <code>q</code> to quit. You just met "
+"the cockpit."
+msgstr ""
+
+#: ./learn/01-install-and-first-run.md:170
 msgid ""
 "Now let's give `haw` something real to manage. First stop: the manifest — "
 "where you _declare_ your fleet → [2. The manifest](02-the-manifest.md)."
@@ -1382,11 +1490,35 @@ msgid ""
 "declared in the manifest._"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:24
+#: ./learn/02-the-manifest.md:17
+msgid "Declare a <strong>remote</strong> once and reuse it across repos."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:18
+msgid ""
+"Add <strong>repos</strong>, each with a <code>rev</code> (branch, tag, or "
+"SHA) and free-form <code>groups</code>."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:19
+msgid "Compose repos into named <strong>stacks</strong> — shared, never copied."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:20
+msgid ""
+"Reach for <strong>overlays</strong> when one repo needs per-variant "
+"overrides."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:21
+msgid "Read a whole <code>haw.toml</code> and know exactly what it will do."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:25
 msgid "🛠️ 1. Create a workspace"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:26
+#: ./learn/02-the-manifest.md:27
 msgid ""
 "Make an empty directory and drop in a manifest. We'll use small, real public "
 "repos from GitHub's `octocat` account — the same ones the shipped "
@@ -1395,11 +1527,11 @@ msgid ""
 "no authentication."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:36
+#: ./learn/02-the-manifest.md:37
 msgid "Now create `haw.toml` with this content:"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:38
+#: ./learn/02-the-manifest.md:39
 msgid ""
 "```toml\n"
 "[remote.gh]\n"
@@ -1425,17 +1557,17 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:61
+#: ./learn/02-the-manifest.md:62
 msgid ""
 "Read that top to bottom, because it _is_ the mental model. Let's take it one "
 "block at a time."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:64
+#: ./learn/02-the-manifest.md:65
 msgid "🌐 2. The remote — name a base URL once"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:66
+#: ./learn/02-the-manifest.md:67
 msgid ""
 "```toml\n"
 "[remote.gh]\n"
@@ -1444,7 +1576,7 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:72
+#: ./learn/02-the-manifest.md:73
 msgid ""
 "A `[remote.NAME]` names a base URL once so you don't repeat it on every "
 "repo. `forge` tells `haw` which API to speak later (for PRs, CI, and so on) "
@@ -1453,11 +1585,11 @@ msgid ""
 "on another from a single command."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:77
+#: ./learn/02-the-manifest.md:78
 msgid "📦 3. The repos — one declaration each"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:79
+#: ./learn/02-the-manifest.md:80
 msgid ""
 "```toml\n"
 "[repo.hello-world]\n"
@@ -1468,30 +1600,30 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:87
+#: ./learn/02-the-manifest.md:88
 msgid "Each `[repo.NAME]` declares one repository:"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:89
+#: ./learn/02-the-manifest.md:90
 msgid ""
 "`remote` + `repo` — which remote it lives on and its path there. Combined, "
 "they resolve to `https://github.com/octocat/Hello-World.git`."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:91
+#: ./learn/02-the-manifest.md:92
 msgid ""
 "`rev` — **the revision you want**: a branch (`master`), a tag (`v6.1.2`), or "
 "an exact SHA. `haw` auto-detects which kind it is. This is your _intent_ — a "
 "moving branch until the lockfile freezes it (next chapter)."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:94
+#: ./learn/02-the-manifest.md:95
 msgid ""
 "`groups` — free-form labels you'll filter commands by later (e.g. `haw "
 "status --group core`). A repo can be in several groups."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:99
+#: ./learn/02-the-manifest.md:100
 msgid ""
 "**`rev` is intent, not a pin.** Writing `rev = \"master\"` means \"track "
 "master.\" Nothing is frozen until you sync and a **lockfile** records the "
@@ -1499,11 +1631,11 @@ msgid ""
 "point of Chapter 3."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:105
+#: ./learn/02-the-manifest.md:106
 msgid "🧱 4. Stacks — compose repos under a name"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:107
+#: ./learn/02-the-manifest.md:108
 msgid ""
 "```toml\n"
 "[stack.site]\n"
@@ -1512,14 +1644,14 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:113
+#: ./learn/02-the-manifest.md:114
 msgid ""
 "A **stack** is a named composition of repos. It doesn't copy anything — it "
 "just says \"these repos, together, under this name.\" One manifest can "
 "define several stacks that _share_ the same repos:"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:117
+#: ./learn/02-the-manifest.md:118
 msgid ""
 "```toml\n"
 "[stack.site]\n"
@@ -1530,7 +1662,7 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:125
+#: ./learn/02-the-manifest.md:126
 msgid ""
 "`hello-world` appears in both stacks, but there's only ever one clone of it "
 "on disk. Stacks are how you carve a big fleet into the working sets you "
@@ -1538,11 +1670,11 @@ msgid ""
 "and scope commands to one with `--stack`."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:130
+#: ./learn/02-the-manifest.md:131
 msgid "🧬 5. Overlays — per-variant overrides (when you need them)"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:132
+#: ./learn/02-the-manifest.md:133
 msgid ""
 "Most repos need nothing more than the fields above. But sometimes _one_ repo "
 "should look slightly different in a particular composition — a different "
@@ -1550,7 +1682,7 @@ msgid ""
 "per-repo overrides applied at lock time."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:136
+#: ./learn/02-the-manifest.md:137
 msgid ""
 "```toml\n"
 "[repo.app-mqtt]\n"
@@ -1564,7 +1696,7 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:147
+#: ./learn/02-the-manifest.md:148
 msgid ""
 "With the `release` overlay active, `app-mqtt` locks to `release/2.x` instead "
 "of `main`; everything else stays put. Reach for overlays only when a repo "
@@ -1572,22 +1704,22 @@ msgid ""
 "need one. See [CLI design](../CLI-DESIGN.md) for the full overlay semantics."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:154
+#: ./learn/02-the-manifest.md:155
 msgid ""
 "**Tip:** You don't have to hand-write every repo. `haw repo add` and `haw "
 "stack add` edit the manifest for you, and `haw import` converts an existing "
 "`west.yml` or Google-`repo` `default.xml` straight into a `haw.toml`."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:160
+#: ./learn/02-the-manifest.md:161
 msgid "🗺️ 6. The whole picture"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:162
+#: ./learn/02-the-manifest.md:163
 msgid "Here's the manifest as a shape — intent flowing down into stacks:"
 msgstr ""
 
-#: ./learn/02-the-manifest.md:173
+#: ./learn/02-the-manifest.md:174
 msgid ""
 "That's the complete mental model of the manifest: **remotes** name where, "
 "**repos** declare what and which `rev`, **groups** slice them, **stacks** "
@@ -1595,42 +1727,66 @@ msgid ""
 "touched the network or the disk yet — it's pure declaration."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:180
+#: ./learn/02-the-manifest.md:181
 msgid ""
 "**You just declared a fleet.** A remote, two repos, and a stack — that's a "
 "real, syncable `haw.toml`. It scales the same way to a hundred repos and a "
 "dozen stacks."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:197
+#: ./learn/02-the-manifest.md:190
+msgid "Make the manifest your own — no sync required, this is all declaration:"
+msgstr ""
+
+#: ./learn/02-the-manifest.md:192
+msgid ""
+"Add a third repo to <code>haw.toml</code> — try "
+"<code>octocat/git-consortium.git</code> on the <code>gh</code> remote — give "
+"it a <code>rev</code> and put it in a new group."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:193
+msgid ""
+"Add it to the <code>site</code> stack's <code>repos</code> list, then add a "
+"second stack, <code>core-only</code>, that lists just "
+"<code>hello-world</code>. Notice the repo is <em>shared</em>, not copied."
+msgstr ""
+
+#: ./learn/02-the-manifest.md:194
+msgid ""
+"Sketch on paper what you expect on disk after a sync: how many clones? "
+"(Hint: one per <em>repo</em>, no matter how many stacks reference it.)"
+msgstr ""
+
+#: ./learn/02-the-manifest.md:200
 msgid ""
 "The **manifest** (`haw.toml`) is your _intent_ — nothing is cloned or frozen "
 "until you sync."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:199
+#: ./learn/02-the-manifest.md:202
 msgid "`[remote.NAME]` names a base URL + forge once; repos reference it."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:200
+#: ./learn/02-the-manifest.md:203
 msgid ""
 "`[repo.NAME]` declares one repo with a `rev` (branch/tag/SHA, auto-detected) "
 "and free-form `groups`."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:202
+#: ./learn/02-the-manifest.md:205
 msgid ""
 "`[stack.NAME]` composes repos under a name — **shared, never copied**; a "
 "repo can be in many stacks and groups."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:204
+#: ./learn/02-the-manifest.md:207
 msgid ""
 "`[overlay.…]` applies per-variant overrides at lock time, for the rare repo "
 "that must vary."
 msgstr ""
 
-#: ./learn/02-the-manifest.md:209
+#: ./learn/02-the-manifest.md:212
 msgid ""
 "You've declared the fleet. Now let's make it real — clone it, freeze it to a "
 "lockfile, and watch `haw` catch drift → [3. Sync and the "
@@ -1662,56 +1818,86 @@ msgid ""
 "reproducibility trick._"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:25
+#: ./learn/03-sync-and-the-lockfile.md:18
+msgid ""
+"Run <code>haw sync</code> to clone the fleet and generate "
+"<code>haw.lock</code>."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:19
+msgid ""
+"Read the fleet with <code>haw tree</code> and <code>haw status</code>, and "
+"understand every column."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:20
+msgid ""
+"Read the lockfile's real fields — <code>rev</code> (the resolved SHA), "
+"<code>source-rev</code>, and <code>branch</code>."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:21
+msgid ""
+"Re-sync and confirm it's idempotent — the lock, not the branch, is now the "
+"truth."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:22
+msgid ""
+"Cause <strong>drift</strong> on purpose and catch it with <code>haw "
+"verify</code> (exit 3), then restore."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:26
 msgid ""
 "![Composing a stack: sync, tree, status, and the "
 "lockfile](../assets/cli-compose.gif)"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:27
+#: ./learn/03-sync-and-the-lockfile.md:28
 msgid ""
 "_The full compose loop you're about to run: `sync` clones the fleet, then "
 "`tree` / `status` read it and the lock pins it._"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:29
+#: ./learn/03-sync-and-the-lockfile.md:30
 msgid "🔄 1. Sync — clone everything and write the lock"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:31
+#: ./learn/03-sync-and-the-lockfile.md:32
 msgid "One command materializes the tree:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:37
+#: ./learn/03-sync-and-the-lockfile.md:38
 msgid ""
 "`haw` resolves each repo's `rev` to an exact commit, clones it, and — "
 "because there's no lockfile yet — writes one. You'll see progress per repo "
 "and a summary. Afterwards, look around:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:46
+#: ./learn/03-sync-and-the-lockfile.md:47
 msgid ""
 "There they are: two **real, complete Git clones**, plus a brand-new "
 "`haw.lock`. No submodules, no symlinks — you could `cd hello-world && git "
 "log` and it's just Git."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:51
+#: ./learn/03-sync-and-the-lockfile.md:52
 msgid ""
 "**Tip:** `haw sync` is _idempotent_. Run it again and, since the lock "
 "already pins exact SHAs, `haw` just makes sure your tree matches — no "
 "surprises, safe to repeat in scripts and CI."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:57
+#: ./learn/03-sync-and-the-lockfile.md:58
 msgid "🔍 2. Explore the fleet"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:59
+#: ./learn/03-sync-and-the-lockfile.md:60
 msgid "Now the read commands. First, the shape of things:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:65
+#: ./learn/03-sync-and-the-lockfile.md:66
 msgid ""
 "```console\n"
 "haw.toml\n"
@@ -1721,17 +1907,17 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:72
+#: ./learn/03-sync-and-the-lockfile.md:73
 msgid ""
 "That's your stack → repo tree: the stack `site`, the two repos under it, "
 "each with its declared rev and origin."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:75
+#: ./learn/03-sync-and-the-lockfile.md:76
 msgid "Now the health check:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:87
+#: ./learn/03-sync-and-the-lockfile.md:88
 msgid ""
 "Read the columns left to right: the repo, the branch it's on, its short HEAD "
 "SHA, whether the working tree has uncommitted changes (**DIRTY**), and "
@@ -1739,7 +1925,7 @@ msgid ""
 "is clean and in sync — the dashes mean \"all good.\""
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:94
+#: ./learn/03-sync-and-the-lockfile.md:95
 msgid ""
 "**Tip:** On a terminal these are color-coded — cyan repo names, yellow revs, "
 "green for clean, red for drift. Pipe the output anywhere and it falls back "
@@ -1747,11 +1933,11 @@ msgid ""
 "by default."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:100
+#: ./learn/03-sync-and-the-lockfile.md:101
 msgid "🔒 3. Read the lockfile"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:102
+#: ./learn/03-sync-and-the-lockfile.md:103
 msgid ""
 "Open `haw.lock` in your editor. Each repo is pinned to a **full 40-character "
 "SHA** in its `rev` field — the exact commit, not the branch name — while "
@@ -1759,7 +1945,7 @@ msgid ""
 "that SHA came from:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:106
+#: ./learn/03-sync-and-the-lockfile.md:107
 msgid ""
 "```toml\n"
 "# excerpt — your SHAs will differ\n"
@@ -1777,7 +1963,7 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:118
+#: ./learn/03-sync-and-the-lockfile.md:119
 msgid ""
 "This is the whole reproducibility trick. Your manifest said \"master\" (a "
 "moving target), but the lock froze the _exact_ commit master pointed at when "
@@ -1788,18 +1974,18 @@ msgid ""
 "whatever `master` happens to be today."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:127
+#: ./learn/03-sync-and-the-lockfile.md:128
 msgid ""
 "**Don't hand-edit it.** `haw.lock` is generated. You commit it, but you "
 "change intent in `haw.toml` and let `haw lock` / `haw sync` regenerate the "
 "lock."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:132
+#: ./learn/03-sync-and-the-lockfile.md:133
 msgid "♻️ 4. Prove it's reproducible — re-run sync"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:138
+#: ./learn/03-sync-and-the-lockfile.md:139
 msgid ""
 "Because the lock exists, `haw` syncs _to the pinned SHAs_, not to wherever "
 "the branches have moved. Run `haw status` again and you'll see the same "
@@ -1807,26 +1993,26 @@ msgid ""
 "source of truth now."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:142
+#: ./learn/03-sync-and-the-lockfile.md:143
 msgid "🧭 5. See drift with your own eyes"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:144
+#: ./learn/03-sync-and-the-lockfile.md:145
 msgid ""
 "Reproducibility is only useful if you can _detect_ when the tree wanders off "
 "the baseline. Let's cause that on purpose. Move one repo to a different "
 "commit by hand:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:149
+#: ./learn/03-sync-and-the-lockfile.md:150
 msgid "# step one commit back — now HEAD ≠ the locked SHA\n"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:153
+#: ./learn/03-sync-and-the-lockfile.md:154
 msgid "Ask `haw` what it thinks:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:165
+#: ./learn/03-sync-and-the-lockfile.md:166
 msgid ""
 "There it is — **DRIFT: YES** on `hello-world`. Checking out a specific "
 "commit also detaches HEAD (hence `(detached)` in the BRANCH column), and its "
@@ -1834,72 +2020,97 @@ msgid ""
 "you want a command that _fails_ on drift. That's `verify`:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:175
+#: ./learn/03-sync-and-the-lockfile.md:176
 msgid ""
 "`verify` asserts the on-disk tree matches `haw.lock` and **exits 3** when it "
 "doesn't — a clean, scriptable drift gate. Check the exit code:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:179
-#: ./learn/03-sync-and-the-lockfile.md:200
-#: ./learn/06-build-test-and-verify.md:172
+#: ./learn/03-sync-and-the-lockfile.md:180
+#: ./learn/03-sync-and-the-lockfile.md:201
+#: ./learn/06-build-test-and-verify.md:173
 msgid "\"exit code: $?\""
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:188
+#: ./learn/03-sync-and-the-lockfile.md:189
 msgid ""
 "That exit `3` is what a CI pipeline keys on: \"the tree drifted from the "
 "lock — stop the build.\" (When everything matches, `verify` prints "
 "`verified: tree matches haw.lock (2 repos)` and exits `0`.)"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:194
+#: ./learn/03-sync-and-the-lockfile.md:195
 msgid "_`haw verify` finding drift in CI right before release._"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:196
+#: ./learn/03-sync-and-the-lockfile.md:197
 msgid "Now put it back. `haw sync` restores every repo to its locked SHA:"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:208
+#: ./learn/03-sync-and-the-lockfile.md:209
 msgid ""
 "Clean again. You just watched the full loop: **declare → sync → pin → detect "
 "drift → restore.**"
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:213
+#: ./learn/03-sync-and-the-lockfile.md:214
 msgid ""
 "**You just did the core loop.** Declare intent, pin it, detect drift, and "
 "restore the baseline — the same four moves scale from two octocat repos to a "
 "hundred-repo fleet."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:230
+#: ./learn/03-sync-and-the-lockfile.md:223
+msgid "Prove the lockfile really is the source of truth:"
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:225
+msgid ""
+"Open <code>haw.lock</code> and find each repo's pinned SHA in its "
+"<code>rev</code> field. Confirm it's a 40-char commit, not a branch name, "
+"and that <code>source-rev</code> still shows what you declared."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:226
+msgid ""
+"Drift one repo on purpose (<code>cd hello-world && git checkout HEAD~1 && cd "
+"..</code>), run <code>haw verify; echo $?</code>, and confirm you get exit "
+"code <code>3</code>."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:227
+msgid ""
+"Run <code>haw sync</code> to restore, then <code>haw verify; echo $?</code> "
+"again — back to exit <code>0</code>. That round trip is the reproducibility "
+"guarantee."
+msgstr ""
+
+#: ./learn/03-sync-and-the-lockfile.md:233
 msgid ""
 "`haw sync` clones every repo and writes `haw.lock` — real Git clones, no "
 "submodules/symlinks. It's idempotent."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:232
+#: ./learn/03-sync-and-the-lockfile.md:235
 msgid ""
 "`haw tree` shows the stack→repo shape; `haw status` shows "
 "branch/HEAD/**dirty**/**drift** per repo."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:234
+#: ./learn/03-sync-and-the-lockfile.md:237
 msgid ""
 "`haw.lock` pins each repo to an exact 40-char SHA in `rev`, with "
 "`source-rev` (your declared intent) and `branch` alongside — commit it for "
 "byte-identical rebuilds."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:236
+#: ./learn/03-sync-and-the-lockfile.md:239
 msgid ""
 "**Drift** = HEAD differs from the lock. `haw status` flags it; `haw verify` "
 "**exits 3** on drift (your CI gate). `haw sync` restores the baseline."
 msgstr ""
 
-#: ./learn/03-sync-and-the-lockfile.md:241
+#: ./learn/03-sync-and-the-lockfile.md:244
 msgid ""
 "You can compose and pin a fleet — now let's _live_ in it. Meet the cockpit "
 "that drives the whole thing from the keyboard → [4. The TUI "
@@ -1931,36 +2142,78 @@ msgid ""
 "the terminal._"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:30
+#: ./learn/04-the-tui-cockpit.md:19
+msgid ""
+"Open the cockpit with bare <code>haw</code> (or <code>haw dash --demo</code> "
+"to explore offline)."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:20
+msgid ""
+"Read the live fleet grid — the same columns as <code>haw status</code>, "
+"refreshing themselves."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:21
+msgid ""
+"Work the core loop: <strong>read → drill (<code>Enter</code>) → act → back "
+"(<code>Esc</code>)</strong>."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:22
+msgid ""
+"Act from the home row: sync, mark, run, filter, browse files, and jump to "
+"the PR / CI / governance views with the digits <code>1</code>–<code>7</code>."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:23
+msgid ""
+"Open a view's context <strong>actions menu</strong> with <code>a</code> — "
+"merge, approve, checkout, request-PR, land — each confirm-gated."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:24
+msgid ""
+"Browse any repo's files at any branch, tag, or SHA — local <em>or</em> "
+"straight from the forge, no checkout."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:25
+msgid ""
+"Use the command bar (<code>:</code>) that mirrors the CLI you already "
+"learned."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:31
 msgid ""
 "_Your mission control: the fleet grid, drill-downs, PR/CI views, and "
 "keyboard actions — all in the terminal._"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:32
+#: ./learn/04-the-tui-cockpit.md:33
 msgid "🚁 1. Open it"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:34
+#: ./learn/04-the-tui-cockpit.md:35
 msgid "Run `haw` with **no subcommand**:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:40
+#: ./learn/04-the-tui-cockpit.md:41
 msgid ""
 "Just want to explore without a real workspace or network? Use the built-in "
 "demo controller — it's populated with canned repos, PRs, and CI runs, so "
 "every view has something to show:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:48
+#: ./learn/04-the-tui-cockpit.md:49
 msgid "Either way you land on the **fleet grid** — the cockpit's home screen."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:50
+#: ./learn/04-the-tui-cockpit.md:51
 msgid "📋 2. Read the fleet grid"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:65
+#: ./learn/04-the-tui-cockpit.md:66
 msgid ""
 "This is `haw status`, alive. Each row is a repo; the columns are the same "
 "ones you already know — branch, HEAD, dirty, drift, ahead/behind. The `▸` is "
@@ -1970,122 +2223,122 @@ msgid ""
 "demand."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:71
+#: ./learn/04-the-tui-cockpit.md:72
 msgid "Move with `↑`/`↓` (or `k`/`j`), exactly like Vim."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:73
+#: ./learn/04-the-tui-cockpit.md:74
 msgid "🔬 3. Drill in — the core loop is read → drill → act"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:75
+#: ./learn/04-the-tui-cockpit.md:76
 msgid ""
 "Put the cursor on a repo and press **`Enter`**. You drill into that repo's "
 "Git detail: branch, SHA, working-tree status, recent log, diffstat, remotes. "
 "Press `Esc` (or `b`) to come back up a level."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:79
+#: ./learn/04-the-tui-cockpit.md:80
 msgid ""
 "That's the rhythm of the whole cockpit: **read** the grid → **drill** into a "
 "thing → **act** on it → back out. You're never more than a keystroke from "
 "detail or from action."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:82
+#: ./learn/04-the-tui-cockpit.md:83
 msgid "⌨️ 4. Act on the fleet from the home row"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:84
+#: ./learn/04-the-tui-cockpit.md:85
 msgid "Single keys on the cursor row do things. The essentials:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:86 ./learn/04-the-tui-cockpit.md:117
-#: ./learn/04-the-tui-cockpit.md:150 ./CLI-DESIGN.md:100 ./CLI-DESIGN.md:117
+#: ./learn/04-the-tui-cockpit.md:87 ./learn/04-the-tui-cockpit.md:118
+#: ./learn/04-the-tui-cockpit.md:151 ./CLI-DESIGN.md:100 ./CLI-DESIGN.md:117
 #: ./CLI-DESIGN.md:132 ./CLI-DESIGN.md:151 ./CLI-DESIGN.md:172
 #: ./CLI-DESIGN.md:184 ./CLI-DESIGN.md:218
 msgid "Key"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:86 ./learn/04-the-tui-cockpit.md:135
-#: ./learn/04-the-tui-cockpit.md:150 ./CLI-DESIGN.md:27
+#: ./learn/04-the-tui-cockpit.md:87 ./learn/04-the-tui-cockpit.md:136
+#: ./learn/04-the-tui-cockpit.md:151 ./CLI-DESIGN.md:27
 msgid "Does"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:88 ./CLI-DESIGN.md:134
+#: ./learn/04-the-tui-cockpit.md:89 ./CLI-DESIGN.md:134
 msgid "`s`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:88
+#: ./learn/04-the-tui-cockpit.md:89
 msgid "**sync** — the marked repos if any, else the cursor repo, else the stack"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:89 ./CLI-DESIGN.md:139 ./CLI-DESIGN.md:157
+#: ./learn/04-the-tui-cockpit.md:90 ./CLI-DESIGN.md:139 ./CLI-DESIGN.md:157
 msgid "`f`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:89
+#: ./learn/04-the-tui-cockpit.md:90
 msgid "browse the repo's **files** — local disk or straight from the forge"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:90 ./CLI-DESIGN.md:138 ./CLI-DESIGN.md:180
+#: ./learn/04-the-tui-cockpit.md:91 ./CLI-DESIGN.md:138 ./CLI-DESIGN.md:180
 msgid "`x`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:90
+#: ./learn/04-the-tui-cockpit.md:91
 msgid "drop into a **shell** in that repo (exits the cockpit)"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:91 ./CLI-DESIGN.md:140
+#: ./learn/04-the-tui-cockpit.md:92 ./CLI-DESIGN.md:140
 msgid "`!`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:91
+#: ./learn/04-the-tui-cockpit.md:92
 msgid "run one **command** (`exec`) in the repo, in its detail view"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:92 ./CLI-DESIGN.md:106
+#: ./learn/04-the-tui-cockpit.md:93 ./CLI-DESIGN.md:106
 msgid "`/`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:92
+#: ./learn/04-the-tui-cockpit.md:93
 msgid "fuzzy **filter** the grid live — `/knl` narrows to `kernel`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:93 ./CLI-DESIGN.md:137
+#: ./learn/04-the-tui-cockpit.md:94 ./CLI-DESIGN.md:137
 msgid "`p`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:93
+#: ./learn/04-the-tui-cockpit.md:94
 msgid "**problems-only** view — just the repos that need attention"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:94
+#: ./learn/04-the-tui-cockpit.md:95
 msgid "`Space`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:94
+#: ./learn/04-the-tui-cockpit.md:95
 msgid "**mark** / unmark the cursor repo (`◉`)"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:95 ./learn/04-the-tui-cockpit.md:153
+#: ./learn/04-the-tui-cockpit.md:96 ./learn/04-the-tui-cockpit.md:154
 #: ./CLI-DESIGN.md:136 ./CLI-DESIGN.md:176 ./CLI-DESIGN.md:188
 msgid "`r`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:95
+#: ./learn/04-the-tui-cockpit.md:96
 msgid "**run** a command — across the marked repos if any, else the whole fleet"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:96 ./CLI-DESIGN.md:111 ./CLI-DESIGN.md:223
+#: ./learn/04-the-tui-cockpit.md:97 ./CLI-DESIGN.md:111 ./CLI-DESIGN.md:223
 msgid "`g`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:96
+#: ./learn/04-the-tui-cockpit.md:97
 msgid "**goto** — quit and print the cursor repo's path (`cd \"$(haw dash)\"`)"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:98
+#: ./learn/04-the-tui-cockpit.md:99
 msgid ""
 "Git-fetch, switch-stack, and lock moved to the command bar — `:fetch`, "
 "`:stack` (picker) or `:stack NAME`, and `:lock`. One key you'll use "
@@ -2095,118 +2348,118 @@ msgid ""
 "`y/n` first. Views with no actions just say so."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:106
+#: ./learn/04-the-tui-cockpit.md:107
 msgid ""
 "**Tip:** Marks are the cockpit's superpower. Press `Space` on a few repos, "
 "then `s` (sync) or `r` (run) acts on _just that set_. It's how you do a "
 "surgical fleet operation without touching a manifest."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:112
+#: ./learn/04-the-tui-cockpit.md:113
 msgid "🌐 5. The network views — PRs, CI, and acting on them"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:114
+#: ./learn/04-the-tui-cockpit.md:115
 msgid ""
 "View-switching is one keystroke: the **digits `1`–`7`** jump straight to a "
 "view from any top-level list. The network ones load on demand (nothing hits "
 "the network until you ask):"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:117 ./CLI-DESIGN.md:117
+#: ./learn/04-the-tui-cockpit.md:118 ./CLI-DESIGN.md:117
 msgid "View"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:117 ./CLI-DESIGN.md:117
+#: ./learn/04-the-tui-cockpit.md:118 ./CLI-DESIGN.md:117
 msgid "`:` alias"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:119 ./CLI-DESIGN.md:119
+#: ./learn/04-the-tui-cockpit.md:120 ./CLI-DESIGN.md:119
 msgid "`1`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:119 ./learn/07-going-to-production.md:114
+#: ./learn/04-the-tui-cockpit.md:120 ./learn/07-going-to-production.md:115
 #: ./CLI-DESIGN.md:119
 msgid "fleet"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:119 ./CLI-DESIGN.md:119
+#: ./learn/04-the-tui-cockpit.md:120 ./CLI-DESIGN.md:119
 msgid "`:fleet`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:120 ./CLI-DESIGN.md:120
+#: ./learn/04-the-tui-cockpit.md:121 ./CLI-DESIGN.md:120
 msgid "`2`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:120 ./CLI-DESIGN.md:120
+#: ./learn/04-the-tui-cockpit.md:121 ./CLI-DESIGN.md:120
 msgid "changesets"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:120 ./CLI-DESIGN.md:120
+#: ./learn/04-the-tui-cockpit.md:121 ./CLI-DESIGN.md:120
 msgid "`:changesets`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:121 ./CLI-DESIGN.md:121
+#: ./learn/04-the-tui-cockpit.md:122 ./CLI-DESIGN.md:121
 msgid "`3`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:121
+#: ./learn/04-the-tui-cockpit.md:122
 msgid "**PR/MRs** — every open PR/MR across the fleet"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:121 ./CLI-DESIGN.md:121
+#: ./learn/04-the-tui-cockpit.md:122 ./CLI-DESIGN.md:121
 msgid "`:prs`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:122 ./CLI-DESIGN.md:122
+#: ./learn/04-the-tui-cockpit.md:123 ./CLI-DESIGN.md:122
 msgid "`4`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:122
+#: ./learn/04-the-tui-cockpit.md:123
 msgid "**CI runs** — recent runs, live progress"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:122 ./CLI-DESIGN.md:122
+#: ./learn/04-the-tui-cockpit.md:123 ./CLI-DESIGN.md:122
 msgid "`:ci`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:123 ./CLI-DESIGN.md:123
+#: ./learn/04-the-tui-cockpit.md:124 ./CLI-DESIGN.md:123
 msgid "`5`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:123 ./CLI-DESIGN.md:123
+#: ./learn/04-the-tui-cockpit.md:124 ./CLI-DESIGN.md:123
 msgid "tree"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:123 ./CLI-DESIGN.md:123
+#: ./learn/04-the-tui-cockpit.md:124 ./CLI-DESIGN.md:123
 msgid "`:tree`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:124 ./CLI-DESIGN.md:124
+#: ./learn/04-the-tui-cockpit.md:125 ./CLI-DESIGN.md:124
 msgid "`6`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:124
+#: ./learn/04-the-tui-cockpit.md:125
 msgid "**governance** — plugins, SBOM, findings"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:124 ./CLI-DESIGN.md:124
+#: ./learn/04-the-tui-cockpit.md:125 ./CLI-DESIGN.md:124
 msgid "`:governance`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:125 ./CLI-DESIGN.md:125
+#: ./learn/04-the-tui-cockpit.md:126 ./CLI-DESIGN.md:125
 msgid "`7`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:125
+#: ./learn/04-the-tui-cockpit.md:126
 msgid "**plugins**"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:125 ./CLI-DESIGN.md:125
+#: ./learn/04-the-tui-cockpit.md:126 ./CLI-DESIGN.md:125
 msgid "`:plugins`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:127
+#: ./learn/04-the-tui-cockpit.md:128
 msgid ""
 "Inside the PR/MR (`3`) or CI (`4`) views, `Enter` drills into detail — a "
 "PR's reviewers and checks, or a CI run's jobs and live progress. Press `d` "
@@ -2216,40 +2469,40 @@ msgid ""
 "than an error.)"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:133
+#: ./learn/04-the-tui-cockpit.md:134
 msgid ""
 "To _act_, press **`a`** for the actions menu. In the PR/MR view it offers:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:135
+#: ./learn/04-the-tui-cockpit.md:136
 msgid "Sub-key"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:137
+#: ./learn/04-the-tui-cockpit.md:138
 msgid "`m`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:137
+#: ./learn/04-the-tui-cockpit.md:138
 msgid "**merge** the PR/MR on its forge"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:138 ./CLI-DESIGN.md:154 ./CLI-DESIGN.md:222
+#: ./learn/04-the-tui-cockpit.md:139 ./CLI-DESIGN.md:154 ./CLI-DESIGN.md:222
 msgid "`a`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:138
+#: ./learn/04-the-tui-cockpit.md:139
 msgid "**approve** the PR/MR"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:139
+#: ./learn/04-the-tui-cockpit.md:140
 msgid "`c`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:139
+#: ./learn/04-the-tui-cockpit.md:140
 msgid "**checkout** the PR branch locally"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:141
+#: ./learn/04-the-tui-cockpit.md:142
 msgid ""
 "Every write is **confirm-gated** with a `y/n` so you never merge by "
 "fat-finger. `o` opens the cursor row in your browser. So the full "
@@ -2257,50 +2510,50 @@ msgid ""
 "keyboard-only, all under `a`."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:145
+#: ./learn/04-the-tui-cockpit.md:146
 msgid "📂 6. Browsing files & branches — any ref, local or forge"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:147
+#: ./learn/04-the-tui-cockpit.md:148
 msgid ""
 "Press **`f`** on any repo to open its **file browser** — a _read-only_ view "
 "(it never stages or commits, only reads). Three keys turn it into a proper "
 "code explorer:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:152 ./CLI-DESIGN.md:175 ./CLI-DESIGN.md:189
+#: ./learn/04-the-tui-cockpit.md:153 ./CLI-DESIGN.md:175 ./CLI-DESIGN.md:189
 msgid "`T`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:152
+#: ./learn/04-the-tui-cockpit.md:153
 msgid ""
 "**toggle** the flat one-directory list ⇄ a navigable **tree** (`▸`/`▾` to "
 "expand/collapse, `→`/`Enter` expand, `←` collapse)"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:153
+#: ./learn/04-the-tui-cockpit.md:154
 msgid ""
 "**ref picker** — pick a branch or tag from the list, or type any SHA; the "
 "view reloads _as of_ that ref and the header shows `@ <ref>`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:154 ./CLI-DESIGN.md:177
+#: ./learn/04-the-tui-cockpit.md:155 ./CLI-DESIGN.md:177
 msgid "`e`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:154
+#: ./learn/04-the-tui-cockpit.md:155
 msgid "**edit** the file under the cursor in your `$EDITOR` (local files only)"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:155 ./CLI-DESIGN.md:178 ./CLI-DESIGN.md:190
+#: ./learn/04-the-tui-cockpit.md:156 ./CLI-DESIGN.md:178 ./CLI-DESIGN.md:190
 msgid "`R`"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:155
+#: ./learn/04-the-tui-cockpit.md:156
 msgid "**toggle** local disk ⇄ the forge"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:157
+#: ./learn/04-the-tui-cockpit.md:158
 msgid ""
 "The payoff: with `r` you can read a file **as it exists on any branch of the "
 "remote** — across GitHub, GitLab, or Bitbucket — **without checking anything "
@@ -2310,26 +2563,26 @@ msgid ""
 "fix, then reloads the listing."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:163
+#: ./learn/04-the-tui-cockpit.md:164
 msgid "💬 7. The command bar — one language for CLI and TUI"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:165
+#: ./learn/04-the-tui-cockpit.md:166
 msgid ""
 "Press **`:`** to open the command bar (the command palette). Its verbs "
 "_mirror the CLI you already learned_, and the status line echoes the exact "
 "command each one runs — so the cockpit doubles as a way to discover the CLI:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:177
+#: ./learn/04-the-tui-cockpit.md:178
 msgid "Learn one, know both. `:name` also jumps the cursor to a repo by name."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:179
+#: ./learn/04-the-tui-cockpit.md:180
 msgid "🎨 8. Two more views, and themes"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:181
+#: ./learn/04-the-tui-cockpit.md:182
 msgid ""
 "**`7`** (`:plugins`) — the **Plugins** view: every available plugin "
 "(manifest `[plugins]` keys unioned with `haw-*` executables on your `PATH`); "
@@ -2337,68 +2590,104 @@ msgid ""
 "lands here in [Chapter 8](08-build-a-plugin-mcp.md)."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:185
+#: ./learn/04-the-tui-cockpit.md:186
 msgid ""
 "**`:errors`** (`:err`) — the **Errors** view: a rolling log of this "
 "session's failures, so a transient error never scrolls away before you can "
 "read it."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:188
+#: ./learn/04-the-tui-cockpit.md:189
 msgid ""
 "**Themes.** Six built-in skins — `catppuccin` (default), `dracula`, `nord`, "
 "`gruvbox`, `solarized`, `monochrome`. Switch live with `:theme nord`, set "
 "one at startup with `HAW_THEME=nord haw`, and `NO_COLOR` forces `monochrome`."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:192
+#: ./learn/04-the-tui-cockpit.md:193
 msgid ""
 "Press **`?`** any time for the help overlay, and `q` (or `Ctrl-C`) to quit."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:196
+#: ./learn/04-the-tui-cockpit.md:197
 msgid ""
 "**Tip:** Every heavy action runs on a background worker, so the UI never "
 "freezes while a sync, a fetch, or a forge call is in flight. Keep navigating."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:214
+#: ./learn/04-the-tui-cockpit.md:206
+msgid ""
+"No workspace or network needed — the demo controller has everything to poke "
+"at:"
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:208
+msgid ""
+"Launch <code>haw dash --demo</code>. Move with "
+"<code>↑</code>/<code>↓</code>, then press <code>Enter</code> to drill into a "
+"repo and <code>Esc</code> to come back — feel the read → drill → act → back "
+"rhythm."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:209
+msgid ""
+"Press <code>Space</code> to mark a couple of repos (watch the "
+"<code>◉</code>), then <code>/</code> to fuzzy-filter the grid. Press "
+"<code>3</code> for PRs and <code>4</code> for CI, then <code>a</code> to see "
+"the actions menu. Press <code>?</code> for the help overlay."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:210
+msgid ""
+"Press <code>f</code> on a repo to browse its files, then <code>T</code> for "
+"the tree and <code>r</code> to read a file as of another branch or tag. "
+"Press <code>b</code> to come back."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:211
+msgid ""
+"Press <code>:</code> and type <code>:theme nord</code>. The skin changes "
+"live — and the status line echoes the exact command, so the cockpit is "
+"teaching you the CLI as you go."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:217
 msgid ""
 "Bare `haw` (or `haw dash --demo`) opens the cockpit — a live `haw status` "
 "you can act on."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:215
+#: ./learn/04-the-tui-cockpit.md:218
 msgid "The loop is **read → drill (`Enter`) → act → back (`Esc`)**."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:216
+#: ./learn/04-the-tui-cockpit.md:219
 msgid ""
 "Fleet keys: `s` sync, `f` files, `x` shell, `!` exec, `/` filter, `p` "
 "problems, `Space` mark, `r` run, `g` goto, `a` actions."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:218
+#: ./learn/04-the-tui-cockpit.md:221
 msgid ""
 "View jumps are the digits **`1`–`7`**: `1` fleet, `2` changesets, `3` PRs, "
 "`4` CI, `5` tree, `6` governance, `7` plugins. In PRs/CI, `a` (actions) does "
 "merge/approve/checkout (confirm-gated), `d` diff, `l` logs, `f` PR files."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:221
+#: ./learn/04-the-tui-cockpit.md:224
 msgid ""
 "File browser (`f`): `T` toggles tree, `r` picks a branch/tag/SHA (read any "
 "ref, local or forge, no checkout), `e` edits locally, `R` toggles local ⇄ "
 "forge."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:223
+#: ./learn/04-the-tui-cockpit.md:226
 msgid ""
 "`:` is a command bar (palette) mirroring the CLI; `:plugins` and `:errors` "
 "reach those views; six themes via `:theme` / `HAW_THEME`."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:228
+#: ./learn/04-the-tui-cockpit.md:231
 msgid ""
 "You've seen the whole cockpit read the fleet. Now the signature move it "
 "drives — shipping _one feature across many repos_ as a single coordinated "
@@ -2423,44 +2712,73 @@ msgid ""
 "and forges._"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:23
+#: ./learn/05-changesets-across-repos.md:16
+msgid ""
+"Understand what a <strong>changeset</strong> is: one feature = one branch "
+"across N repos."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:17
+msgid ""
+"Start a changeset with <code>haw change start</code> — the same branch in "
+"every repo, in one move."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:18
+msgid ""
+"Track the whole feature on one screen with <code>haw change status</code>."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:19
+msgid ""
+"Open cross-linked PR/MRs with <code>haw change request</code> — across "
+"GitHub, GitLab, and Bitbucket."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:20
+msgid ""
+"Merge in dependency order with <code>haw change land</code>, so "
+"<code>main</code> never breaks."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:24
 msgid ""
 "![Driving a cross-repo changeset from the CLI](../assets/cli-changeset.gif)"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:25
+#: ./learn/05-changesets-across-repos.md:26
 msgid ""
 "_One feature, many repos: `change start` branches them all, `status` "
 "aggregates, `request` opens linked PRs._"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:27
+#: ./learn/05-changesets-across-repos.md:28
 msgid "😤 1. The pain this removes"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:29
+#: ./learn/05-changesets-across-repos.md:30
 msgid "Think back to the last time a feature spanned repos. You did this dance:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:31
+#: ./learn/05-changesets-across-repos.md:32
 msgid "`git checkout -b feature` in repo A. And repo B. And repo C."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:32
+#: ./learn/05-changesets-across-repos.md:33
 msgid "Push each. Open a PR in A. Then B. Then C."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:33
+#: ./learn/05-changesets-across-repos.md:34
 msgid "Chase reviews across three separate PR pages."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:34
+#: ./learn/05-changesets-across-repos.md:35
 msgid ""
 "Merge them — and remember that the shared library **must** merge _before_ "
 "the services that depend on it, or `main` breaks."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:37
+#: ./learn/05-changesets-across-repos.md:38
 msgid ""
 "Nothing tied those three PRs together. There was no single artifact that "
 "said \"these are one feature.\" A **changeset** is exactly that artifact: "
@@ -2468,63 +2786,63 @@ msgid ""
 "land."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:43
+#: ./learn/05-changesets-across-repos.md:44
 msgid ""
 "Changesets need a real forge (GitHub, GitLab, or Bitbucket) and a token to "
 "open PRs. The `start` and `status` steps are local and safe to try anywhere; "
 "`request` and `land` talk to the forge. We'll flag which is which."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:49
+#: ./learn/05-changesets-across-repos.md:50
 msgid "🌱 2. Start the changeset"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:51
+#: ./learn/05-changesets-across-repos.md:52
 msgid "You name the feature and (optionally) the repos it touches:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:64
+#: ./learn/05-changesets-across-repos.md:65
 msgid ""
 "In one move, `haw` created the **same branch** — `change/FEAT-42` by default "
 "— in each of the three repos. Now you make your changes and commit in each "
 "repo as normal Git. The branch name ties them together."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:68
+#: ./learn/05-changesets-across-repos.md:69
 msgid "A few useful options at start time:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:70
+#: ./learn/05-changesets-across-repos.md:71
 msgid ""
 "`--repos a,b,c` — limit to the repos the feature touches (default: all "
 "repos)."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:71
+#: ./learn/05-changesets-across-repos.md:72
 msgid "`--branch <name>` — use a custom branch name instead of `change/<id>`."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:72
+#: ./learn/05-changesets-across-repos.md:73
 msgid ""
 "`--skip-branch` — adopt whatever branch each repo is already on, instead of "
 "creating one."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:73
+#: ./learn/05-changesets-across-repos.md:74
 msgid ""
 "`--label <l>` — attach a label (repeatable) that gets forwarded to the "
 "PR/MRs later."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:75
+#: ./learn/05-changesets-across-repos.md:76
 msgid "📊 3. Watch it come together — `change status`"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:77
+#: ./learn/05-changesets-across-repos.md:78
 msgid "At any point, get the whole feature on one screen:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:83
+#: ./learn/05-changesets-across-repos.md:84
 msgid ""
 "This aggregates, per repo: the branch, whether each repo is **on it**, "
 "whether it's dirty, its HEAD — and once PRs exist, the review state and CI "
@@ -2533,20 +2851,20 @@ msgid ""
 "are the two octocat clones):"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:96
+#: ./learn/05-changesets-across-repos.md:97
 msgid ""
 "Instead of three browser tabs, one dashboard. It's the changeset equivalent "
 "of `haw status`."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:101
+#: ./learn/05-changesets-across-repos.md:102
 msgid ""
 "**Tip:** Add `--format json` to `change status` (it emits a stable "
 "`haw.change-status/1` document) when you want to pipe the state into another "
 "tool or a script:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:104
+#: ./learn/05-changesets-across-repos.md:105
 msgid ""
 "```console\n"
 "$ haw change status DEMO-1 --format json\n"
@@ -2568,17 +2886,17 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:125
+#: ./learn/05-changesets-across-repos.md:126
 msgid "🔀 4. Open the pull requests — `change request`"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:127
+#: ./learn/05-changesets-across-repos.md:128
 msgid ""
 "When your branches are pushed and ready, one command opens **cross-linked "
 "PR/MRs** — one per repo — on whichever forge each repo lives on:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:134
+#: ./learn/05-changesets-across-repos.md:135
 msgid ""
 "Here's the quietly powerful part: your repos don't all have to be on the "
 "same forge. `haw` speaks **GitHub, GitLab, _and_ Bitbucket**, so a feature "
@@ -2588,31 +2906,31 @@ msgid ""
 "<branch>`."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:142
+#: ./learn/05-changesets-across-repos.md:143
 msgid ""
 "This step needs a forge token in your environment — e.g. `export "
 "GITHUB_TOKEN=$(gh auth token)`. `haw` reads tokens from env vars only, never "
 "stores them. Read-only steps (`start`, `status`) need no token."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:148
+#: ./learn/05-changesets-across-repos.md:149
 msgid "🛬 5. Land in dependency order — `change land`"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:150
+#: ./learn/05-changesets-across-repos.md:151
 msgid ""
 "Reviews are in, checks are green. Now merge — but in the _right order_. "
 "Remember `proto` is a shared library that `api` and `billing` depend on. "
 "Merging a service before its library lands is how you break `main`."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:154
+#: ./learn/05-changesets-across-repos.md:155
 msgid ""
 "`haw` knows the order because your manifest declares it. Recall the `deps` "
 "key from the microservices example:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:157
+#: ./learn/05-changesets-across-repos.md:158
 msgid ""
 "```toml\n"
 "[repo.gateway]\n"
@@ -2620,14 +2938,14 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:162
+#: ./learn/05-changesets-across-repos.md:163
 msgid ""
 "So `land` merges the PR/MRs in **stable topological order** — dependencies "
 "first — and stops at the first failure rather than leaving a half-merged "
 "mess:"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:179
+#: ./learn/05-changesets-across-repos.md:180
 msgid ""
 "**Forge step — needs a token.** Like `request`, `land` talks to the forge "
 "and requires a token (e.g. `export GITHUB_TOKEN=$(gh auth token)`) plus "
@@ -2637,31 +2955,33 @@ msgid ""
 "and a token."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:187
+#: ./learn/05-changesets-across-repos.md:188
 msgid ""
 "`proto` merged first because everything depends on it; the services "
 "followed. One command, correct order, no broken `main`."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:192
+#: ./learn/05-changesets-across-repos.md:193
 msgid "_One command. Five repos merged in the right order. We did it._"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:194
-msgid "![Merging a changeset in dependency order](../assets/cli-merge.gif)"
+#: ./learn/05-changesets-across-repos.md:195
+msgid ""
+"![The low-level `haw merge` flow — plan, resolve conflicts, then clean "
+"up](../assets/cli-merge.gif)"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:196
+#: ./learn/05-changesets-across-repos.md:197
 msgid ""
 "_`change land` merges the linked PR/MRs in topological order — dependencies "
 "first — and stops at the first failure._"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:198
+#: ./learn/05-changesets-across-repos.md:199
 msgid "🖼️ 6. The value, in one picture"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:211
+#: ./learn/05-changesets-across-repos.md:212
 msgid ""
 "You never lost track of which PRs were \"the feature,\" you never merged in "
 "the wrong order, and you drove all of it from four commands. That's the "
@@ -2669,7 +2989,7 @@ msgid ""
 "single, coherent change.**"
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:217
+#: ./learn/05-changesets-across-repos.md:218
 msgid ""
 "**Tip:** Working across repos and want to hop into one? `haw change goto "
 "FEAT-42 <repo>` prints its path so you can `cd \"$(haw change goto FEAT-42 "
@@ -2677,42 +2997,68 @@ msgid ""
 "HEAD so you can restore the exact multi-repo state later."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:236
+#: ./learn/05-changesets-across-repos.md:229
+msgid ""
+"The local half of the flow needs no forge token, so try it in a workspace "
+"right now:"
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:231
+msgid ""
+"Run <code>haw change start DEMO-1 --repos hello-world,spoon-knife</code> and "
+"confirm the same <code>change/DEMO-1</code> branch appears in both repos "
+"(peek with <code>haw run 'git branch --show-current'</code>)."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:232
+msgid ""
+"Run <code>haw change status DEMO-1</code> and read the aggregated "
+"branch/dirty/HEAD — one dashboard instead of two tabs."
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:233
+msgid ""
+"Now sketch it on paper: for a real feature spanning a shared lib and two "
+"services, in what order must they <code>land</code>? (Lib first — that's the "
+"<code>deps</code> key doing its job.)"
+msgstr ""
+
+#: ./learn/05-changesets-across-repos.md:239
 msgid ""
 "A **changeset** is one feature across N repos: a shared branch, linked "
 "PR/MRs, an ordered merge."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:238
+#: ./learn/05-changesets-across-repos.md:241
 msgid ""
 "`haw change start <id> --repos a,b,c` creates the same branch in each repo."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:239
+#: ./learn/05-changesets-across-repos.md:242
 msgid ""
 "`haw change status <id>` aggregates branch + review + CI across the whole "
 "feature."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:240
+#: ./learn/05-changesets-across-repos.md:243
 msgid ""
 "`haw change request <id>` opens cross-linked PR/MRs on **GitHub, GitLab, and "
 "Bitbucket**."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:241
+#: ./learn/05-changesets-across-repos.md:244
 msgid ""
 "`haw change land <id>` merges in **dependency order** (from each repo's "
 "`deps`), stopping on the first failure."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:243
+#: ./learn/05-changesets-across-repos.md:246
 msgid ""
 "`start`/`status` are local; `request`/`land` need a forge token in the "
 "environment."
 msgstr ""
 
-#: ./learn/05-changesets-across-repos.md:247
+#: ./learn/05-changesets-across-repos.md:250
 msgid ""
 "You can ship a feature across the fleet. Now let's _build, test, and verify_ "
 "the whole thing — the daily workflow that keeps it green → [6. Build, test, "
@@ -2744,58 +3090,85 @@ msgid ""
 "`for` loop._"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:27
+#: ./learn/06-build-test-and-verify.md:20
+msgid "Fan any command across every repo with <code>haw run</code>."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:21
+msgid ""
+"Declare <code>build =</code> / <code>test =</code> per repo and drive the "
+"whole fleet with <code>haw build</code> / <code>haw test</code> — "
+"live-streamed, per-repo color."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:22
+msgid "Search every repo at once with <code>haw grep</code>."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:23
+msgid ""
+"Gate the fleet against the lock with <code>haw verify</code> — the CI drift "
+"gate."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:24
+msgid ""
+"Control the blast radius with <code>\\-j</code> (parallelism) and "
+"<code>\\--group</code> (scope)."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:28
 msgid ""
 "![Running commands and verifying across the "
 "fleet](../assets/cli-run-verify.gif)"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:29
+#: ./learn/06-build-test-and-verify.md:30
 msgid ""
 "_`haw run` fans a command across every repo in parallel; `verify` gates the "
 "fleet against the lock._"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:31
+#: ./learn/06-build-test-and-verify.md:32
 msgid "⚙️ 1. Run any command across every repo — `haw run`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:33
+#: ./learn/06-build-test-and-verify.md:34
 msgid ""
 "The workhorse. `haw run` takes a command _positionally_ and runs it in every "
 "repo, in parallel:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:37
+#: ./learn/06-build-test-and-verify.md:38
 msgid "'git log -1 --oneline'"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:48
+#: ./learn/06-build-test-and-verify.md:49
 msgid ""
 "`haw` groups the output per repo so you always know which repo said what. "
 "Anything you'd type in one repo works: `git fetch`, `git status -s`, a "
 "linter, a shell one-liner."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:53
+#: ./learn/06-build-test-and-verify.md:54
 msgid ""
 "**Tip:** Quote the command. `haw run 'git status -s'` passes the whole "
 "string as one command; without quotes your shell would try to interpret the "
 "flags itself."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:58
+#: ./learn/06-build-test-and-verify.md:59
 msgid "🔨 2. Declare build and test — then run them fleet-wide"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:60
+#: ./learn/06-build-test-and-verify.md:61
 msgid ""
 "`haw` stays build-system-agnostic: each repo names the shell command that "
 "builds or tests _it_, and `haw` fans those out. You declare them in the "
 "manifest with `build =` and `test =`."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:64
+#: ./learn/06-build-test-and-verify.md:65
 msgid ""
 "In the real world each repo brings its _own_ toolchain. Here's the shape, "
 "from the shipped "
@@ -2803,7 +3176,7 @@ msgid ""
 "example:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:68
+#: ./learn/06-build-test-and-verify.md:69
 msgid ""
 "```toml\n"
 "[repo.proto]\n"
@@ -2824,19 +3197,19 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:86
+#: ./learn/06-build-test-and-verify.md:87
 msgid ""
 "Our octocat repos have nothing real to compile — and if you run `haw build` "
 "now, it tells you so and exits non-zero:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:94
+#: ./learn/06-build-test-and-verify.md:95
 msgid ""
 "So let's declare trivial commands to see the mechanism. Add a `build =` and "
 "`test =` line to **both** repos in your `my-first-stack/haw.toml`:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:97
+#: ./learn/06-build-test-and-verify.md:98
 msgid ""
 "```toml\n"
 "[repo.hello-world]\n"
@@ -2857,19 +3230,19 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:115
+#: ./learn/06-build-test-and-verify.md:116
 msgid "Now two commands drive the whole fleet:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:118
+#: ./learn/06-build-test-and-verify.md:119
 msgid "# runs every repo's `build =`, in parallel\n"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:119
+#: ./learn/06-build-test-and-verify.md:120
 msgid "# runs every repo's `test =`, in parallel\n"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:131
+#: ./learn/06-build-test-and-verify.md:132
 msgid ""
 "Output is **live-streamed** as each repo runs and grouped under a per-repo "
 "header, so on a color terminal each repo's stream carries its own color — "
@@ -2878,24 +3251,24 @@ msgid ""
 "simply skipped. And here's the detail that makes this a CI building block:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:139
+#: ./learn/06-build-test-and-verify.md:140
 msgid ""
 "**CI building block:** `haw build` and `haw test` **exit non-zero if any "
 "repo fails**. That's why the same command you run locally drops straight "
 "into a pipeline — the pipeline stops when any repo's build breaks."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:145
+#: ./learn/06-build-test-and-verify.md:146
 msgid "🔎 3. Search the whole fleet — `haw grep`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:147
+#: ./learn/06-build-test-and-verify.md:148
 msgid ""
 "Need to find every use of a symbol, a TODO, a deprecated API across _all_ "
 "repos? `haw grep` fans `git grep` across every cloned repo at once:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:154
+#: ./learn/06-build-test-and-verify.md:155
 msgid ""
 "```console\n"
 "spoon-knife (1 hit(s))\n"
@@ -2907,7 +3280,7 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:160
+#: ./learn/06-build-test-and-verify.md:161
 msgid ""
 "Each repo with a match gets a header and its hits underneath, and a final "
 "line totals the hits and repos searched — a repo with no match just doesn't "
@@ -2916,18 +3289,18 @@ msgid ""
 "the fleet is large."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:165
+#: ./learn/06-build-test-and-verify.md:166
 msgid "🛡️ 4. Verify — the CI gate"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:167
+#: ./learn/06-build-test-and-verify.md:168
 msgid ""
 "Building and testing green is only half the story. Before any of it, CI must "
 "prove the tree is _the one you pinned_ — no drift from `haw.lock`. That's "
 "`haw verify`, which you met in Chapter 3:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:180
+#: ./learn/06-build-test-and-verify.md:181
 msgid ""
 "`verify` asserts the on-disk tree matches the lock and **exits 3** on drift "
 "— a clean, scriptable gate. It's the first real step of every pipeline: sync "
@@ -2935,36 +3308,36 @@ msgid ""
 "the full `sync → verify → build → test` job."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:187
+#: ./learn/06-build-test-and-verify.md:188
 msgid ""
 "**Tip:** `verify` reads the tree and the lock only — no network, no builds. "
 "It's cheap enough to run as a git pre-commit hook (`haw hooks install`) so "
 "drift never even reaches CI."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:193
+#: ./learn/06-build-test-and-verify.md:194
 msgid "🎚️ 5. Control the blast radius: parallelism and groups"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:195
+#: ./learn/06-build-test-and-verify.md:196
 msgid "Two levers keep fleet-wide commands under control."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:197
+#: ./learn/06-build-test-and-verify.md:198
 msgid ""
 "**Parallelism — `-j`.** By default `haw` runs up to `min(cores, 8)` repos at "
 "once. Cap it when a task is heavy (or a CI runner is small):"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:201
+#: ./learn/06-build-test-and-verify.md:202
 msgid "# at most 4 repos building/testing at a time\n"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:202
+#: ./learn/06-build-test-and-verify.md:203
 msgid "'git fetch'   # fully serial\n"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:205
+#: ./learn/06-build-test-and-verify.md:206
 msgid ""
 "**Groups — `--group`.** Remember the `groups = [...]` labels from your "
 "manifest? They exist precisely so you can act on a slice of the fleet. In "
@@ -2972,7 +3345,7 @@ msgid ""
 "`web`:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:218
+#: ./learn/06-build-test-and-verify.md:219
 msgid ""
 "Only the `core` repo. The same `--group` filter works on `sync`, `status`, "
 "and `run` (and `build`/`test`), and it's _repeatable_ — pass it twice to "
@@ -2980,151 +3353,176 @@ msgid ""
 "ungrouped repos."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:223
+#: ./learn/06-build-test-and-verify.md:224
 msgid "'git log -1 --oneline'   # only core repos\n"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:226
+#: ./learn/06-build-test-and-verify.md:227
 msgid "🗺️ 6. When to reach for each"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:228
+#: ./learn/06-build-test-and-verify.md:229
 msgid "A quick map so you pick the right verb without thinking:"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:230
+#: ./learn/06-build-test-and-verify.md:231
 msgid "You want to…"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:230
+#: ./learn/06-build-test-and-verify.md:231
 msgid "Use"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:230
+#: ./learn/06-build-test-and-verify.md:231
 msgid "Why"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:232
+#: ./learn/06-build-test-and-verify.md:233
 msgid "run an ad-hoc command everywhere"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:232 ./CLI-DESIGN.md:33
+#: ./learn/06-build-test-and-verify.md:233 ./CLI-DESIGN.md:33
 msgid "`haw run '<cmd>'`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:232
+#: ./learn/06-build-test-and-verify.md:233
 msgid "one-off, not part of the manifest"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:233
+#: ./learn/06-build-test-and-verify.md:234
 msgid "build the whole product"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:233 ./CLI-DESIGN.md:43
+#: ./learn/06-build-test-and-verify.md:234 ./CLI-DESIGN.md:43
 msgid "`haw build`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:233
+#: ./learn/06-build-test-and-verify.md:234
 msgid "runs each repo's declared `build =`, CI-ready exit code"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:234
+#: ./learn/06-build-test-and-verify.md:235
 msgid "test the whole product"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:234 ./CLI-DESIGN.md:44
+#: ./learn/06-build-test-and-verify.md:235 ./CLI-DESIGN.md:44
 msgid "`haw test`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:234
+#: ./learn/06-build-test-and-verify.md:235
 msgid "runs each repo's declared `test =`, fails on any failure"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:235
+#: ./learn/06-build-test-and-verify.md:236
 msgid "prove the tree matches the lock"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:235 ./CLI-DESIGN.md:42
+#: ./learn/06-build-test-and-verify.md:236 ./CLI-DESIGN.md:42
 msgid "`haw verify`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:235
+#: ./learn/06-build-test-and-verify.md:236
 msgid "drift gate, exit 3 on drift"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:236
+#: ./learn/06-build-test-and-verify.md:237
 msgid "find text across all repos"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:236 ./CLI-DESIGN.md:41
+#: ./learn/06-build-test-and-verify.md:237 ./CLI-DESIGN.md:41
 msgid "`haw grep <pat>`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:236
+#: ./learn/06-build-test-and-verify.md:237
 msgid "fleet-wide `git grep`, grouped output"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:237
+#: ./learn/06-build-test-and-verify.md:238
 msgid "limit to part of the fleet"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:237
+#: ./learn/06-build-test-and-verify.md:238
 msgid "add `--group <g>`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:237
+#: ./learn/06-build-test-and-verify.md:238
 msgid "act on a labeled slice"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:238
+#: ./learn/06-build-test-and-verify.md:239
 msgid "tame a heavy or CI run"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:238
+#: ./learn/06-build-test-and-verify.md:239
 msgid "add `-j <n>`"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:238
+#: ./learn/06-build-test-and-verify.md:239
 msgid "cap concurrent repos"
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:240
+#: ./learn/06-build-test-and-verify.md:241
 msgid ""
 "The rule of thumb: **`run` for one-off commands, `build`/`test` for the "
 "commands your repos declare, `verify` to gate.** The declared ones are the "
 "ones you'll want identical locally and in CI."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:256
+#: ./learn/06-build-test-and-verify.md:249
+msgid "Put the fleet through its paces in <code>my-first-stack</code>:"
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:251
+msgid ""
+"Add the trivial <code>build =</code> / <code>test =</code> lines above, then "
+"run <code>haw build</code> and <code>haw test</code> — watch the per-repo "
+"streamed output and the <code>2/2 repos</code> summary."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:252
+msgid ""
+"Run <code>haw grep guide</code> across the fleet (a real hit in "
+"<code>spoon-knife</code>). Then narrow it: <code>haw run --group core 'git "
+"log -1 --oneline'</code> — only the <code>core</code> repo should answer."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:253
+msgid ""
+"Run <code>haw verify; echo $?</code> and confirm exit <code>0</code> on a "
+"clean tree. Force it fully serial with <code>haw run -j 1 'git status "
+"-s'</code> and watch the repos process one at a time."
+msgstr ""
+
+#: ./learn/06-build-test-and-verify.md:259
 msgid ""
 "`haw run '<cmd>'` runs any command in every repo in parallel, output grouped "
 "per repo."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:257
+#: ./learn/06-build-test-and-verify.md:260
 msgid ""
 "Declare `build =` / `test =` per repo; `haw build` / `haw test` fan them "
 "out, live-stream per-repo output, and **exit non-zero on any failure** — so "
 "they double as CI steps."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:260
+#: ./learn/06-build-test-and-verify.md:263
 msgid "`haw grep <pattern>` is a fleet-wide `git grep`."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:261
+#: ./learn/06-build-test-and-verify.md:264
 msgid ""
 "`haw verify` gates the tree against `haw.lock` (**exit 3** on drift) — the "
 "first move of every pipeline."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:263
+#: ./learn/06-build-test-and-verify.md:266
 msgid ""
 "`-j N` caps parallelism; `--group G` (repeatable) scopes commands to labeled "
 "repos."
 msgstr ""
 
-#: ./learn/06-build-test-and-verify.md:267
+#: ./learn/06-build-test-and-verify.md:270
 msgid ""
 "You can build, test, and gate the fleet locally. Now let's make all of it "
 "production-grade — trust, CI, signing, and audit → [7. Going to "
@@ -3150,26 +3548,63 @@ msgid ""
 "launch._"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:25
+#: ./learn/07-going-to-production.md:17
+msgid ""
+"Internalize the <strong>trust model</strong> — the manifest is trusted code, "
+"tokens live only in the environment."
+msgstr ""
+
+#: ./learn/07-going-to-production.md:18
+msgid ""
+"Wire the four-move CI pipeline: <strong><code>sync → verify → build → "
+"test</code></strong>."
+msgstr ""
+
+#: ./learn/07-going-to-production.md:19
+msgid ""
+"Enforce reproducibility with <code>haw sync --locked</code> and <code>haw "
+"verify</code>."
+msgstr ""
+
+#: ./learn/07-going-to-production.md:20
+msgid ""
+"Extend <code>haw</code> with <strong>plugins</strong> — any unknown "
+"<code>haw \\<name\\></code> runs <code>haw-\\<name\\></code>, no fork "
+"required."
+msgstr ""
+
+#: ./learn/07-going-to-production.md:21
+msgid ""
+"Distribute artifacts with <code>haw publish</code>, and produce SBOM, "
+"provenance, and signatures."
+msgstr ""
+
+#: ./learn/07-going-to-production.md:22
+msgid ""
+"Bundle an audit trail with <code>haw evidence</code> and map it to "
+"compliance standards."
+msgstr ""
+
+#: ./learn/07-going-to-production.md:26
 msgid "🛡️ 1. First, the trust model — because it matters"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:27
+#: ./learn/07-going-to-production.md:28
 msgid "Before you run `haw` on anything you didn't write, internalize one rule:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:31
+#: ./learn/07-going-to-production.md:32
 msgid ""
 "_Treat a `haw.toml` like a Makefile: powerful, and only run one you trust._"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:35
+#: ./learn/07-going-to-production.md:36
 msgid ""
 "**The manifest is trusted code.** A `haw.toml`'s `build`, `test`, `run`, and "
 "`exec` commands are executed through _your_ shell."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:40
+#: ./learn/07-going-to-production.md:41
 msgid ""
 "Running `haw build`, `haw run`, or `haw sync` on an **untrusted** checkout "
 "is equivalent to running its `Makefile`. Treat `haw.toml` exactly like a "
@@ -3177,18 +3612,18 @@ msgid ""
 "you trust.**"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:44
+#: ./learn/07-going-to-production.md:45
 msgid "Two corollaries you already half-know:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:46
+#: ./learn/07-going-to-production.md:47
 msgid ""
 "**Plugins are trusted binaries.** `haw <name>` runs `haw-<name>` from your "
 "`PATH` with your full environment (including any tokens). Install only "
 "plugins you trust; keep `PATH` clean."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:49
+#: ./learn/07-going-to-production.md:50
 msgid ""
 "**Tokens live in the environment only.** `haw` reads forge tokens from env "
 "vars at call time, and **never stores or logs them**. Git transport auth "
@@ -3196,17 +3631,17 @@ msgid ""
 "it."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:53
+#: ./learn/07-going-to-production.md:54
 msgid ""
 "Read the full [trust model](../SECURITY.md) before you wire `haw` into "
 "anything shared."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:55
+#: ./learn/07-going-to-production.md:56
 msgid "🧩 2. Extend it with plugins — no fork required"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:57
+#: ./learn/07-going-to-production.md:58
 msgid ""
 "Before we wire the pipeline, meet the escape hatch that powers the "
 "governance features below. `haw` follows the same pattern as `git`, `cargo`, "
@@ -3214,17 +3649,17 @@ msgid ""
 "`haw-<name>` executable on your `PATH`.**"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:63
+#: ./learn/07-going-to-production.md:64
 msgid ""
 "_A plugin is just a program that reads some JSON and prints some JSON — "
 "write one in any language._"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:66
+#: ./learn/07-going-to-production.md:67
 msgid "# not built in → runs `haw-jira sync`\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:69
+#: ./learn/07-going-to-production.md:70
 msgid ""
 "The plugin runs as a **separate process** (a broken plugin can never crash "
 "`haw`), `haw` hands it the current fleet as JSON via `HAW_JSON` + stdin "
@@ -3232,23 +3667,23 @@ msgid ""
 "is a first-class CI gate. Discover, install, and scaffold them:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:75
+#: ./learn/07-going-to-production.md:76
 msgid "# first-party + installed plugins\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:76
+#: ./learn/07-going-to-production.md:77
 msgid "# the community index\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:77
+#: ./learn/07-going-to-production.md:78
 msgid "# shells out to cargo install\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:78
+#: ./learn/07-going-to-production.md:79
 msgid "# runnable skeleton (rust|python|go|shell)\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:81
+#: ./learn/07-going-to-production.md:82
 msgid ""
 "The scaffold is a complete, runnable plugin: it reads the context, handles "
 "`--help` and `--format json`, emits a `haw.plugin.report/1` document, and "
@@ -3256,7 +3691,7 @@ msgid ""
 "subcommand — no rebuild of `haw`."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:87
+#: ./learn/07-going-to-production.md:88
 msgid ""
 "**Tip:** `haw`'s own governance features — SBOM, signing, secret-gate — ship "
 "_as plugins_ on exactly this model, so nothing here is second-class. The "
@@ -3264,111 +3699,111 @@ msgid ""
 "[Plugins](../PLUGINS.md)."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:93
+#: ./learn/07-going-to-production.md:94
 msgid ""
 "The real power is **lifecycle hooks**: subscribe a plugin to a phase in "
 "`[plugins]` and it fires automatically around fleet operations — which is "
 "exactly how the supply-chain features below are wired."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:97
+#: ./learn/07-going-to-production.md:98
 msgid "🔧 3. The CI pipeline — always the same four moves"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:99
+#: ./learn/07-going-to-production.md:100
 msgid ""
 "Here's the payoff of everything you learned in Chapters 3 and 6. A `haw` "
 "pipeline is the same shape everywhere:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:106
+#: ./learn/07-going-to-production.md:107
 msgid "**`sync`** the tree to the SHAs pinned in `haw.lock`,"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:107
+#: ./learn/07-going-to-production.md:108
 msgid ""
 "**`verify`** that the tree matches the lock — the drift gate, **exit 3** on "
 "drift,"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:108
+#: ./learn/07-going-to-production.md:109
 msgid "**`build`** and **`test`** the whole fleet (each fails the job non-zero)."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:110
+#: ./learn/07-going-to-production.md:111
 msgid "A GitHub Actions job, straight from the README:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:113
+#: ./learn/07-going-to-production.md:114
 msgid "jobs"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:115
+#: ./learn/07-going-to-production.md:116
 msgid "runs-on"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:115
+#: ./learn/07-going-to-production.md:116
 msgid "ubuntu-latest"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:116
+#: ./learn/07-going-to-production.md:117
 msgid "steps"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:117 ./EXTENDING.md:154
+#: ./learn/07-going-to-production.md:118 ./EXTENDING.md:154
 msgid "uses"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:117
+#: ./learn/07-going-to-production.md:118
 msgid "actions/checkout@v4          # the manifest repo (haw.toml + haw.lock)\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:118 ./learn/07-going-to-production.md:119
-#: ./learn/07-going-to-production.md:120 ./learn/07-going-to-production.md:121
-#: ./learn/07-going-to-production.md:122 ./EXTENDING.md:155 ./EXTENDING.md:156
+#: ./learn/07-going-to-production.md:119 ./learn/07-going-to-production.md:120
+#: ./learn/07-going-to-production.md:121 ./learn/07-going-to-production.md:122
+#: ./learn/07-going-to-production.md:123 ./EXTENDING.md:155 ./EXTENDING.md:156
 #: ./EXTENDING.md:158 ./EXTENDING.md:159
 msgid "run"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:118
+#: ./learn/07-going-to-production.md:119
 msgid "cargo install hawser          # or download the signed musl binary\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:119
+#: ./learn/07-going-to-production.md:120
 msgid "haw sync --filter=blob:none   # partial clone → fast on large fleets\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:120
+#: ./learn/07-going-to-production.md:121
 msgid "haw verify                    # exit 3 if the tree drifts from haw.lock\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:121
+#: ./learn/07-going-to-production.md:122
 msgid "haw build"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:122
+#: ./learn/07-going-to-production.md:123
 msgid "haw test"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:123 ./EXTENDING.md:157
+#: ./learn/07-going-to-production.md:124 ./EXTENDING.md:157
 msgid "env"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:124 ./EXTENDING.md:157
+#: ./learn/07-going-to-production.md:125 ./EXTENDING.md:157
 msgid "GITHUB_TOKEN"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:124
+#: ./learn/07-going-to-production.md:125
 msgid "${{ secrets.GITHUB_TOKEN }}   # only if a step hits the forge API\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:127
+#: ./learn/07-going-to-production.md:128
 msgid ""
 "GitLab CI is the identical four moves with `variables: { GITLAB_TOKEN: "
 "$CI_JOB_TOKEN }`."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:131
+#: ./learn/07-going-to-production.md:132
 msgid ""
 "**Tip:** On a big fleet, pair `haw sync --filter=blob:none` (partial clone — "
 "all history, lazy blobs) with a cache of the shared object store. Clones "
@@ -3376,23 +3811,23 @@ msgid ""
 "reachable."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:137
+#: ./learn/07-going-to-production.md:138
 msgid "♻️ 4. Reproducibility, enforced"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:139
+#: ./learn/07-going-to-production.md:140
 msgid "The whole pipeline rests on `haw.lock`. Two flags make it airtight in CI:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:142
+#: ./learn/07-going-to-production.md:143
 msgid "# fail unless haw.lock exists (no rev resolution)\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:143
+#: ./learn/07-going-to-production.md:144
 msgid "# assert tree == lock, exit 3 on drift\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:146
+#: ./learn/07-going-to-production.md:147
 msgid ""
 "`--locked` refuses to invent a lock on the fly — CI must build from the "
 "_committed_ baseline, never resolve fresh. `verify` then proves the checkout "
@@ -3400,21 +3835,21 @@ msgid ""
 "you committed."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:150
+#: ./learn/07-going-to-production.md:151
 msgid "📦 5. Distribution — publish what the fleet produced"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:152
+#: ./learn/07-going-to-production.md:153
 msgid ""
 "Once the fleet builds, `haw publish` uploads its artifacts to a generic/raw "
 "artifact registry — **Nexus, Artifactory, GitLab, or Bitbucket**:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:157
+#: ./learn/07-going-to-production.md:158
 msgid "# print the plan, no creds, no network\n"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:160
+#: ./learn/07-going-to-production.md:161
 msgid ""
 "`--dry-run` prints exactly what _would_ upload (target, name, version, each "
 "file) without touching the network or needing credentials — perfect for "
@@ -3422,11 +3857,11 @@ msgid ""
 "(e.g. `NEXUS_URL`, `NEXUS_USER`, `NEXUS_PASS`)."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:164
+#: ./learn/07-going-to-production.md:165
 msgid "🔏 6. Signing, SBOM, and provenance — the supply chain"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:166
+#: ./learn/07-going-to-production.md:167
 msgid ""
 "This is where `haw` earns its keep for serious releases. Every signed "
 "release ships with a `.sha256` checksum and a **keyless cosign signature** "
@@ -3434,13 +3869,13 @@ msgid ""
 "[Installing hawser](../INSTALL.md))."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:170
+#: ./learn/07-going-to-production.md:171
 msgid ""
 "For _your_ fleet, the supply-chain features ship as the governance plugins "
 "you met at the top of this chapter, subscribed to lifecycle phases:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:173
+#: ./learn/07-going-to-production.md:174
 msgid ""
 "```toml\n"
 "[plugins]\n"
@@ -3452,87 +3887,87 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:180
+#: ./learn/07-going-to-production.md:181
 msgid ""
 "**SBOM** — a bill of materials (CycloneDX + SPDX) of what went into the "
 "build."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:181
+#: ./learn/07-going-to-production.md:182
 msgid "**Provenance** — SLSA/in-toto records of _how_ it was built and by whom."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:182
+#: ./learn/07-going-to-production.md:183
 msgid ""
 "**Signing** — cosign/minisign signatures so consumers can verify "
 "authenticity."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:184
+#: ./learn/07-going-to-production.md:185
 msgid ""
 "And when someone asks \"what exactly shipped?\", `haw evidence` bundles the "
 "manifest, the lock, the audit log, and status into one archive:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:195
+#: ./learn/07-going-to-production.md:196
 msgid ""
 "(Run bare, `haw evidence` writes `./haw-evidence.tar.gz` by default; `--out` "
 "just picks the path.)"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:197
+#: ./learn/07-going-to-production.md:198
 msgid "🏛️ 7. The compliance / automotive angle"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:199
+#: ./learn/07-going-to-production.md:200
 msgid ""
 "If you work under a standard — ISO 26262, DO-178C, Automotive SPICE, CRA — "
 "the pieces above _are_ your evidence, because they're grounded in the pinned "
 "lock:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:202 ./DOMAINS.md:140
+#: ./learn/07-going-to-production.md:203 ./DOMAINS.md:140
 msgid "Standard / artifact"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:202 ./DOMAINS.md:140
+#: ./learn/07-going-to-production.md:203 ./DOMAINS.md:140
 msgid "How `haw` covers it"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:204
+#: ./learn/07-going-to-production.md:205
 msgid "**Automotive SPICE**"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:204
+#: ./learn/07-going-to-production.md:205
 msgid "`haw-aspice` emits repo → pinned SHA → process-area traceability"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:205 ./DOMAINS.md:143
+#: ./learn/07-going-to-production.md:206 ./DOMAINS.md:143
 msgid "**MISRA C**"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:205
+#: ./learn/07-going-to-production.md:206
 msgid ""
 "`haw-misra` runs `cppcheck --addon=misra` fleet-wide as a `pre-request` gate"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:206 ./DOMAINS.md:144
+#: ./learn/07-going-to-production.md:207 ./DOMAINS.md:144
 msgid "**ISO 26262 / DO-178C**"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:206
+#: ./learn/07-going-to-production.md:207
 msgid "`haw evidence` bundle + SBOM + provenance from the governance plugins"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:207 ./DOMAINS.md:145
+#: ./learn/07-going-to-production.md:208 ./DOMAINS.md:145
 msgid "**AUTOSAR ARXML**"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:207
+#: ./learn/07-going-to-production.md:208
 msgid "config repos pinned to exact SHAs in `haw.lock`, versioned with the code"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:209
+#: ./learn/07-going-to-production.md:210
 msgid ""
 "The reproducible lock is the foundation: it makes \"the baseline that was "
 "live in March\" an exact, re-buildable, auditable fact rather than a guess. "
@@ -3540,18 +3975,18 @@ msgid ""
 "mapping."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:213
+#: ./learn/07-going-to-production.md:214
 msgid "🪝 8. Integrity hooks — catch drift before it's committed"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:215
+#: ./learn/07-going-to-production.md:216
 msgid ""
 "One last guardrail. `haw hooks install` writes a pre-commit hook in every "
 "repo that runs `haw verify` — so a commit that would drift the tree from the "
 "lock is caught _locally_, before it ever reaches CI:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:229
+#: ./learn/07-going-to-production.md:230
 msgid ""
 "`haw hooks list` shows the _lifecycle_ hooks the workspace defines "
 "(executables under `.haw/hooks`) — separate from the per-repo integrity "
@@ -3559,61 +3994,61 @@ msgid ""
 "where to add them:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:243
+#: ./learn/07-going-to-production.md:244
 msgid ""
 "**That's the whole production loop.** Pinned lock, drift gate, fleet "
 "build/test, signed artifacts, and an evidence bundle — the same primitives "
 "serve a hobby project or an ISO 26262 audit."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:251
+#: ./learn/07-going-to-production.md:252
 msgid ""
 "**The manifest is trusted code** — only run `haw` on `haw.toml` / plugins "
 "you trust; tokens stay in the environment, never stored."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:253
+#: ./learn/07-going-to-production.md:254
 msgid ""
 "The CI pipeline is always **`sync → verify → build → test`**; `verify` exits "
 "3 on drift."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:254
+#: ./learn/07-going-to-production.md:255
 msgid ""
 "`--locked` + `verify` enforce that CI builds the _committed_ baseline, "
 "reproducibly."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:255
+#: ./learn/07-going-to-production.md:256
 msgid ""
 "`haw publish --to <nexus|artifactory|gitlab|bitbucket>` distributes "
 "artifacts (`--dry-run` to preview)."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:257
+#: ./learn/07-going-to-production.md:258
 msgid ""
 "Any unknown `haw <name>` runs a `haw-<name>` **plugin** from `PATH` — no "
 "fork; governance plugins add **SBOM, provenance, and signing** on lifecycle "
 "phases; `haw evidence` bundles the audit trail; releases are cosign-signed."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:260
+#: ./learn/07-going-to-production.md:261
 msgid ""
 "The same primitives map straight onto ASPICE / ISO 26262 / DO-178C / CRA "
 "compliance."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:262
+#: ./learn/07-going-to-production.md:263
 msgid "🎉 You did it"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:266
+#: ./learn/07-going-to-production.md:267
 msgid ""
 "_The whole loop, checked off — compose, orchestrate, ship, extend, and "
 "govern._"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:268
+#: ./learn/07-going-to-production.md:269
 msgid ""
 "You've gone from \"what even is this?\" to composing a fleet, pinning it to "
 "a lockfile, living in the cockpit, shipping cross-repo changesets, building "
@@ -3621,32 +4056,32 @@ msgid ""
 "in production with an audit trail. That's the whole tool."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:273
+#: ./learn/07-going-to-production.md:274
 msgid "Where to next:"
 msgstr ""
 
-#: ./learn/07-going-to-production.md:274
+#: ./learn/07-going-to-production.md:275
 msgid ""
 "Ready to build your own? [8. Build a plugin — and let Claude write your "
 "commits](08-build-a-plugin-mcp.md) turns everything you learned into a real "
 "plugin that doubles as an MCP server for Claude."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:276
+#: ./learn/07-going-to-production.md:277
 msgid "Keep the [CLI design & keymap](../CLI-DESIGN.md) handy as a reference."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:277
+#: ./learn/07-going-to-production.md:278
 msgid "Deepen the domain fit in [Domains](../DOMAINS.md)."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:278
+#: ./learn/07-going-to-production.md:279
 msgid ""
 "Extend further with [Plugins](../PLUGINS.md) and "
 "[Extending](../EXTENDING.md)."
 msgstr ""
 
-#: ./learn/07-going-to-production.md:280
+#: ./learn/07-going-to-production.md:281
 msgid "Now go compose something. Welcome aboard."
 msgstr ""
 
@@ -3700,11 +4135,50 @@ msgid ""
 "thing neither Claude nor a single-repo tool like lazygit can do alone."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:47
+#: ./learn/08-build-a-plugin-mcp.md:35
+msgid "**In this chapter, you'll learn to…**"
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:37
+msgid "Understand what a haw plugin actually is, and how haw finds and runs it."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:38
+msgid ""
+"Read the <code>haw.plugin/1</code> context that haw hands every plugin, "
+"field by field."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:39
+msgid "Scaffold a working plugin with <code>haw plugins new</code>."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:40
+msgid ""
+"Emit the two machine shapes haw understands: a "
+"<code>haw.plugin.report/1</code> for <code>\\--format json</code> and a "
+"<code>haw.plugin.view/1</code> panel for the cockpit's Plugins view "
+"(<code>7</code>)."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:41
+msgid ""
+"Understand what MCP is, and turn the same script into an <strong>MCP "
+"server</strong> so Claude can call small, safe tools."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:42
+msgid ""
+"<strong>Level 2:</strong> hand Claude the <em>combined</em> cross-repo diff "
+"and let it draft a single fleet-wide PR — the cross-repo story no "
+"single-repo tool can tell."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:48
 msgid "Level 1 — the foundation (single repo)"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:49
+#: ./learn/08-build-a-plugin-mcp.md:50
 msgid ""
 "This is the base you build everything on: one repo at a time, and every "
 "concept you need to understand the plugin protocol and the MCP handshake. "
@@ -3712,17 +4186,17 @@ msgid ""
 "cross-repo power."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:53
+#: ./learn/08-build-a-plugin-mcp.md:54
 msgid ""
 "Think of Level 1 as the training wheels: useful, honest, and on purpose not "
 "yet magical. Stay through to Level 2 — that's where it takes off."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:56
+#: ./learn/08-build-a-plugin-mcp.md:57
 msgid "1. What a haw plugin actually is"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:58
+#: ./learn/08-build-a-plugin-mcp.md:59
 msgid ""
 "Let's start from zero. **A haw plugin is nothing more than an executable "
 "program named `haw-<name>` that lives somewhere on your `PATH`.** That's the "
@@ -3730,40 +4204,40 @@ msgid ""
 "to load, no special API to link against."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:62
+#: ./learn/08-build-a-plugin-mcp.md:63
 msgid ""
 "haw follows the same convention as `git`, `cargo`, and `kubectl`: when you "
 "type a subcommand it doesn't recognize, it looks for a matching executable "
 "and runs it. Here's the flow in words:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:66
+#: ./learn/08-build-a-plugin-mcp.md:67
 msgid "You type `haw commit-ai`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:67
+#: ./learn/08-build-a-plugin-mcp.md:68
 msgid "haw checks its built-in subcommands. `commit-ai` isn't one of them."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:68
+#: ./learn/08-build-a-plugin-mcp.md:69
 msgid ""
 "haw searches every directory on your `PATH` for an executable named "
 "`haw-commit-ai`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:69
+#: ./learn/08-build-a-plugin-mcp.md:70
 msgid ""
 "It finds one, runs it as a **separate process**, and forwards your arguments "
 "to it."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:70
+#: ./learn/08-build-a-plugin-mcp.md:71
 msgid ""
 "Whatever that program prints becomes the output; whatever exit code it "
 "returns becomes haw's exit code."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:73
+#: ./learn/08-build-a-plugin-mcp.md:74
 msgid ""
 "So `haw commit-ai` is really just \"run the program `haw-commit-ai`, and "
 "hand it some context about my workspace.\" This is called **PATH dispatch**, "
@@ -3772,41 +4246,41 @@ msgid ""
 "runs in its own process."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:78
+#: ./learn/08-build-a-plugin-mcp.md:79
 msgid "You can see exactly which directories haw scans:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:81
+#: ./learn/08-build-a-plugin-mcp.md:82
 msgid "# prints the PATH directories haw searches for haw-* binaries\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:84
+#: ./learn/08-build-a-plugin-mcp.md:85
 msgid ""
 "We're going to build a plugin called **`haw-commit-ai`**. It has two faces, "
 "both from a single script:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:87
+#: ./learn/08-build-a-plugin-mcp.md:88
 msgid ""
 "As an ordinary plugin (`haw commit-ai`) it drafts commit messages and PR "
 "text from your diffs."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:89
+#: ./learn/08-build-a-plugin-mcp.md:90
 msgid ""
 "As an **MCP server** it lets **Claude** read your workspace and diffs and "
 "write the real commit and PR text itself — safely."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:92
+#: ./learn/08-build-a-plugin-mcp.md:93
 msgid "We'll do the plain plugin first, then add the MCP face."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:94
+#: ./learn/08-build-a-plugin-mcp.md:95
 msgid "2. The context haw hands every plugin: `haw.plugin/1`"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:96
+#: ./learn/08-build-a-plugin-mcp.md:97
 msgid ""
 "When haw runs your plugin, it doesn't just launch a blind program. It hands "
 "the plugin a **context**: a JSON document that describes your workspace. "
@@ -3814,170 +4288,170 @@ msgid ""
 "between haw and every plugin."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:100
+#: ./learn/08-build-a-plugin-mcp.md:101
 msgid ""
 "**Where does it come from?** haw provides the same JSON in two places, so "
 "you can read whichever is convenient:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:103
+#: ./learn/08-build-a-plugin-mcp.md:104
 msgid "the **`HAW_JSON`** environment variable, and"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:104
+#: ./learn/08-build-a-plugin-mcp.md:105
 msgid "the plugin's **standard input (stdin)**."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:106
+#: ./learn/08-build-a-plugin-mcp.md:107
 msgid ""
 "The content is identical in both. The environment variable is usually easier "
 "because reading it never blocks."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:109
+#: ./learn/08-build-a-plugin-mcp.md:110
 msgid ""
 "**What's inside?** Here's a real example of the context inside a workspace:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:113 ./learn/08-build-a-plugin-mcp.md:154
-#: ./learn/08-build-a-plugin-mcp.md:158 ./learn/08-build-a-plugin-mcp.md:159
-#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:288
-#: ./learn/08-build-a-plugin-mcp.md:450 ./PLUGINS.md:43 ./PLUGINS.md:64
+#: ./learn/08-build-a-plugin-mcp.md:114 ./learn/08-build-a-plugin-mcp.md:155
+#: ./learn/08-build-a-plugin-mcp.md:159 ./learn/08-build-a-plugin-mcp.md:160
+#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:289
+#: ./learn/08-build-a-plugin-mcp.md:451 ./PLUGINS.md:43 ./PLUGINS.md:64
 #: ./PLUGINS.md:87 ./PLUGINS.md:103 ./PLUGINS.md:157 ./PLUGINS.md:270
 msgid "\"schema\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:113 ./learn/08-build-a-plugin-mcp.md:154
-#: ./learn/08-build-a-plugin-mcp.md:158 ./learn/08-build-a-plugin-mcp.md:159
+#: ./learn/08-build-a-plugin-mcp.md:114 ./learn/08-build-a-plugin-mcp.md:155
+#: ./learn/08-build-a-plugin-mcp.md:159 ./learn/08-build-a-plugin-mcp.md:160
 #: ./PLUGINS.md:43 ./PLUGINS.md:64 ./PLUGINS.md:87
 msgid "\"haw.plugin/1\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:114 ./learn/08-build-a-plugin-mcp.md:259
-#: ./learn/08-build-a-plugin-mcp.md:354 ./learn/08-build-a-plugin-mcp.md:371
-#: ./learn/08-build-a-plugin-mcp.md:384 ./PLUGINS.md:44 ./PLUGINS.md:89
+#: ./learn/08-build-a-plugin-mcp.md:115 ./learn/08-build-a-plugin-mcp.md:260
+#: ./learn/08-build-a-plugin-mcp.md:355 ./learn/08-build-a-plugin-mcp.md:372
+#: ./learn/08-build-a-plugin-mcp.md:385 ./PLUGINS.md:44 ./PLUGINS.md:89
 msgid "\"root\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:114 ./PLUGINS.md:44 ./PLUGINS.md:89
+#: ./learn/08-build-a-plugin-mcp.md:115 ./PLUGINS.md:44 ./PLUGINS.md:89
 msgid "\"/path/to/workspace\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:115 ./learn/08-build-a-plugin-mcp.md:354
+#: ./learn/08-build-a-plugin-mcp.md:116 ./learn/08-build-a-plugin-mcp.md:355
 #: ./PLUGINS.md:45 ./PLUGINS.md:90
 msgid "\"stack\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:115 ./PLUGINS.md:45 ./PLUGINS.md:90
+#: ./learn/08-build-a-plugin-mcp.md:116 ./PLUGINS.md:45 ./PLUGINS.md:90
 msgid "\"gateway\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:116 ./learn/08-build-a-plugin-mcp.md:241
-#: ./learn/08-build-a-plugin-mcp.md:265 ./learn/08-build-a-plugin-mcp.md:354
+#: ./learn/08-build-a-plugin-mcp.md:117 ./learn/08-build-a-plugin-mcp.md:242
+#: ./learn/08-build-a-plugin-mcp.md:266 ./learn/08-build-a-plugin-mcp.md:355
 #: ./PLUGINS.md:46 ./PLUGINS.md:91
 msgid "\"repos\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./learn/08-build-a-plugin-mcp.md:118
-#: ./learn/08-build-a-plugin-mcp.md:265 ./learn/08-build-a-plugin-mcp.md:266
-#: ./learn/08-build-a-plugin-mcp.md:339 ./PLUGINS.md:47 ./PLUGINS.md:48
+#: ./learn/08-build-a-plugin-mcp.md:118 ./learn/08-build-a-plugin-mcp.md:119
+#: ./learn/08-build-a-plugin-mcp.md:266 ./learn/08-build-a-plugin-mcp.md:267
+#: ./learn/08-build-a-plugin-mcp.md:340 ./PLUGINS.md:47 ./PLUGINS.md:48
 #: ./PLUGINS.md:160 ./PLUGINS.md:273
 msgid "\"name\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./PLUGINS.md:47
+#: ./learn/08-build-a-plugin-mcp.md:118 ./PLUGINS.md:47
 msgid "\"kernel\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./learn/08-build-a-plugin-mcp.md:118
-#: ./learn/08-build-a-plugin-mcp.md:270 ./learn/08-build-a-plugin-mcp.md:339
-#: ./learn/08-build-a-plugin-mcp.md:599 ./learn/08-build-a-plugin-mcp.md:620
+#: ./learn/08-build-a-plugin-mcp.md:118 ./learn/08-build-a-plugin-mcp.md:119
+#: ./learn/08-build-a-plugin-mcp.md:271 ./learn/08-build-a-plugin-mcp.md:340
+#: ./learn/08-build-a-plugin-mcp.md:601 ./learn/08-build-a-plugin-mcp.md:622
 #: ./PLUGINS.md:47 ./PLUGINS.md:48
 msgid "\"path\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./PLUGINS.md:47
+#: ./learn/08-build-a-plugin-mcp.md:118 ./PLUGINS.md:47
 msgid "\"/path/to/workspace/kernel\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./learn/08-build-a-plugin-mcp.md:118
+#: ./learn/08-build-a-plugin-mcp.md:118 ./learn/08-build-a-plugin-mcp.md:119
 #: ./PLUGINS.md:47 ./PLUGINS.md:48
 msgid "\"rev\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./PLUGINS.md:47
+#: ./learn/08-build-a-plugin-mcp.md:118 ./PLUGINS.md:47
 msgid "\"v6.1.2\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./learn/08-build-a-plugin-mcp.md:118
+#: ./learn/08-build-a-plugin-mcp.md:118 ./learn/08-build-a-plugin-mcp.md:119
 #: ./PLUGINS.md:47 ./PLUGINS.md:48
 msgid "\"groups\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:117 ./learn/08-build-a-plugin-mcp.md:118
+#: ./learn/08-build-a-plugin-mcp.md:118 ./learn/08-build-a-plugin-mcp.md:119
 #: ./PLUGINS.md:47 ./PLUGINS.md:48
 msgid "\"firmware\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:118 ./PLUGINS.md:48
+#: ./learn/08-build-a-plugin-mcp.md:119 ./PLUGINS.md:48
 msgid "\"hal\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:118 ./PLUGINS.md:48
+#: ./learn/08-build-a-plugin-mcp.md:119 ./PLUGINS.md:48
 msgid "\"/path/to/workspace/hal\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:118 ./PLUGINS.md:48
+#: ./learn/08-build-a-plugin-mcp.md:119 ./PLUGINS.md:48
 msgid "\"main\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:123
+#: ./learn/08-build-a-plugin-mcp.md:124
 msgid "Let's read it field by field:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:125
+#: ./learn/08-build-a-plugin-mcp.md:126
 msgid ""
 "**`schema`** — always `\"haw.plugin/1\"`. It tells you which contract "
 "version you're looking at."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:127
+#: ./learn/08-build-a-plugin-mcp.md:128
 msgid ""
 "**`root`** — the absolute path to the workspace root (the directory that "
 "holds your manifest). Everything the plugin writes should stay inside this."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:129
+#: ./learn/08-build-a-plugin-mcp.md:130
 msgid ""
 "**`stack`** — the name of the active stack (the named selection of repos "
 "you're working with). Here it's `\"gateway\"`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:131
+#: ./learn/08-build-a-plugin-mcp.md:132
 msgid "**`repos`** — the list of repositories in play. Each entry has:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:132
+#: ./learn/08-build-a-plugin-mcp.md:133
 msgid "**`name`** — the repo's short name (`kernel`, `hal`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:133
+#: ./learn/08-build-a-plugin-mcp.md:134
 msgid ""
 "**`path`** — its absolute on-disk location. This is the important one: to "
 "run `git diff` or `git commit` on a repo, you shell out into this `path`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:135
+#: ./learn/08-build-a-plugin-mcp.md:136
 msgid ""
 "**`rev`** — the pinned revision (a tag like `v6.1.2` or a branch like "
 "`main`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:136
+#: ./learn/08-build-a-plugin-mcp.md:137
 msgid "**`groups`** — the groups the repo belongs to (`[\"firmware\"]`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:138
+#: ./learn/08-build-a-plugin-mcp.md:139
 msgid ""
 "**Run outside a workspace**, the context degrades to just `{\"schema\": "
 "\"haw.plugin/1\"}` — no `root`, no `repos`. A well-behaved plugin checks "
@@ -3985,76 +4459,76 @@ msgid ""
 "they're absent."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:142
+#: ./learn/08-build-a-plugin-mcp.md:143
 msgid ""
 "Here is how you read that context in Python, step by step. Read the "
 "environment variable first; if it's empty, fall back to stdin; if there's "
 "nothing at all, return the minimal context so the plugin never crashes:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:150 ./PLUGINS.md:378
+#: ./learn/08-build-a-plugin-mcp.md:151 ./PLUGINS.md:378
 msgid "\"HAW_JSON\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:150 ./learn/08-build-a-plugin-mcp.md:599
-#: ./learn/08-build-a-plugin-mcp.md:616 ./learn/08-build-a-plugin-mcp.md:617
-#: ./learn/08-build-a-plugin-mcp.md:618 ./learn/08-build-a-plugin-mcp.md:620
-#: ./learn/08-build-a-plugin-mcp.md:621 ./learn/08-build-a-plugin-mcp.md:622
-#: ./learn/08-build-a-plugin-mcp.md:623 ./PLUGINS.md:383
+#: ./learn/08-build-a-plugin-mcp.md:151 ./learn/08-build-a-plugin-mcp.md:601
+#: ./learn/08-build-a-plugin-mcp.md:618 ./learn/08-build-a-plugin-mcp.md:619
+#: ./learn/08-build-a-plugin-mcp.md:620 ./learn/08-build-a-plugin-mcp.md:622
+#: ./learn/08-build-a-plugin-mcp.md:623 ./learn/08-build-a-plugin-mcp.md:624
+#: ./learn/08-build-a-plugin-mcp.md:625 ./PLUGINS.md:383
 msgid "\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:150
+#: ./learn/08-build-a-plugin-mcp.md:151
 msgid "# 1. prefer the env var (never blocks)\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:151
+#: ./learn/08-build-a-plugin-mcp.md:152
 msgid "# 2. fall back to stdin if it's piped in\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:153
+#: ./learn/08-build-a-plugin-mcp.md:154
 msgid "# 3. nothing at all → minimal context\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:156
+#: ./learn/08-build-a-plugin-mcp.md:157
 msgid "# 4. parse the JSON\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:158
+#: ./learn/08-build-a-plugin-mcp.md:159
 msgid "# 5. malformed → degrade gracefully\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:162
+#: ./learn/08-build-a-plugin-mcp.md:163
 msgid ""
 "Once you have `ctx`, everything else is ordinary shell work: "
 "`ctx[\"repos\"]` gives you each repo's on-disk `path`, and `git diff` / `git "
 "commit` are just subprocess calls into that path."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:166
+#: ./learn/08-build-a-plugin-mcp.md:167
 msgid "3. The three output shapes a plugin can print"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:168
+#: ./learn/08-build-a-plugin-mcp.md:169
 msgid ""
 "A plugin can print three different kinds of output, depending on how it's "
 "called. You don't have to support all three, but a good one does:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:171
+#: ./learn/08-build-a-plugin-mcp.md:172
 msgid ""
 "**Plain text** — the default. When someone runs `haw commit-ai` in a "
 "terminal, print friendly human-readable text."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:173
+#: ./learn/08-build-a-plugin-mcp.md:174
 msgid ""
 "**A machine report** — when called with `--format json`, print a "
 "**`haw.plugin.report/1`** document: `{schema, plugin, ok, summary, "
 "findings}`. Tools and CI parse this instead of scraping human text."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:176
+#: ./learn/08-build-a-plugin-mcp.md:177
 msgid ""
 "**A cockpit panel** — when haw wants to render your plugin inside the TUI "
 "cockpit, it sets the environment variable `HAW_RENDER=1` and puts "
@@ -4063,36 +4537,36 @@ msgid ""
 "those lines in the cockpit's Plugins view (press `7`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:182
+#: ./learn/08-build-a-plugin-mcp.md:183
 msgid ""
 "The three JSON schemas live in "
 "[`schemas/`](https://github.com/Nastwinns/hawser/tree/main/schemas) — "
 "they're the source of truth for every field."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:186
+#: ./learn/08-build-a-plugin-mcp.md:187
 msgid "4. Scaffold the plugin"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:188
+#: ./learn/08-build-a-plugin-mcp.md:189
 msgid ""
 "You don't have to write any of this from a blank file. haw generates a "
 "runnable skeleton that already implements the contract for you."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:191
+#: ./learn/08-build-a-plugin-mcp.md:192
 msgid "**Prerequisite:** you need Python 3 installed. Check it:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:194
+#: ./learn/08-build-a-plugin-mcp.md:195
 msgid "# any recent Python 3.x is fine\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:197
+#: ./learn/08-build-a-plugin-mcp.md:198
 msgid "Now scaffold:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:203
+#: ./learn/08-build-a-plugin-mcp.md:204
 msgid ""
 "```console\n"
 "created ./haw-commit-ai/haw-commit-ai   (executable, python3)\n"
@@ -4103,21 +4577,21 @@ msgid ""
 "```"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:211
+#: ./learn/08-build-a-plugin-mcp.md:212
 msgid "Two files land in a new `./haw-commit-ai/` directory:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:213
+#: ./learn/08-build-a-plugin-mcp.md:214
 msgid ""
 "**`haw-commit-ai`** — the plugin executable itself (a Python script with a "
 "`#!/usr/bin/env python3` shebang, already marked executable)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:215
+#: ./learn/08-build-a-plugin-mcp.md:216
 msgid "**`README.md`** — notes for the plugin."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:217
+#: ./learn/08-build-a-plugin-mcp.md:218
 msgid ""
 "The scaffold already reads `$HAW_JSON`, handles `--help` and `--format "
 "json`, and emits a `haw.plugin.report/1`. It's a correct, working plugin "
@@ -4125,7 +4599,7 @@ msgid ""
 "version."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:223
+#: ./learn/08-build-a-plugin-mcp.md:224
 msgid ""
 "**Why Python?** Because the MCP SDK we'll use for the Claude side is "
 "Python-first. The plugin _face_ stays zero-dependency (standard library "
@@ -4133,216 +4607,216 @@ msgid ""
 "with `pip install mcp`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:229
+#: ./learn/08-build-a-plugin-mcp.md:230
 msgid "5. The plugin faces: human text, JSON report, and cockpit panel"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:231
+#: ./learn/08-build-a-plugin-mcp.md:232
 msgid ""
 "Let's build the plugin. We'll introduce it piece by piece so nothing is a "
 "mystery, then show you the full script."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:234
+#: ./learn/08-build-a-plugin-mcp.md:235
 msgid ""
 "First, a few small helpers. `context_repos` pulls the repo list out of the "
 "context safely, and `_run` is a thin wrapper around running a shell command "
 "and capturing its output:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:248
+#: ./learn/08-build-a-plugin-mcp.md:249
 msgid "# staged + unstaged changes vs HEAD\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:249 ./learn/08-build-a-plugin-mcp.md:270
-#: ./learn/08-build-a-plugin-mcp.md:373 ./PLUGINS.md:275
+#: ./learn/08-build-a-plugin-mcp.md:250 ./learn/08-build-a-plugin-mcp.md:271
+#: ./learn/08-build-a-plugin-mcp.md:374 ./PLUGINS.md:275
 msgid "\"git\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:249 ./learn/08-build-a-plugin-mcp.md:270
-#: ./learn/08-build-a-plugin-mcp.md:373
+#: ./learn/08-build-a-plugin-mcp.md:250 ./learn/08-build-a-plugin-mcp.md:271
+#: ./learn/08-build-a-plugin-mcp.md:374
 msgid "\"-C\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:249
+#: ./learn/08-build-a-plugin-mcp.md:250
 msgid "\"diff\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:249
+#: ./learn/08-build-a-plugin-mcp.md:250
 msgid "\"HEAD\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:253
+#: ./learn/08-build-a-plugin-mcp.md:254
 msgid ""
 "Next, `changeset_repos` figures out _which_ repos to act on. It asks haw "
 "which repos the current changeset touched; if that comes back empty, it "
 "falls back to any repo with dirty (uncommitted) changes:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:258
+#: ./learn/08-build-a-plugin-mcp.md:259
 msgid "# touched repos, else dirty repos\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:261 ./learn/08-build-a-plugin-mcp.md:383
+#: ./learn/08-build-a-plugin-mcp.md:262 ./learn/08-build-a-plugin-mcp.md:384
 msgid "\"haw\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:261 ./learn/08-build-a-plugin-mcp.md:383
+#: ./learn/08-build-a-plugin-mcp.md:262 ./learn/08-build-a-plugin-mcp.md:384
 msgid "\"change\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:261 ./learn/08-build-a-plugin-mcp.md:270
+#: ./learn/08-build-a-plugin-mcp.md:262 ./learn/08-build-a-plugin-mcp.md:271
 msgid "\"status\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:261 ./learn/08-build-a-plugin-mcp.md:413
+#: ./learn/08-build-a-plugin-mcp.md:262 ./learn/08-build-a-plugin-mcp.md:414
 #: ./PLUGINS.md:335 ./PLUGINS.md:385
 msgid "\"--format\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:261 ./learn/08-build-a-plugin-mcp.md:413
+#: ./learn/08-build-a-plugin-mcp.md:262 ./learn/08-build-a-plugin-mcp.md:414
 #: ./PLUGINS.md:335 ./PLUGINS.md:385
 msgid "\"json\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:270
+#: ./learn/08-build-a-plugin-mcp.md:271
 msgid "\"--porcelain\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:275
+#: ./learn/08-build-a-plugin-mcp.md:276
 msgid ""
 "Now the two machine outputs. `emit_report` prints the `haw.plugin.report/1` "
 "document for `--format json`, and `emit_view` prints the `haw.plugin.view/1` "
 "panel for the cockpit:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:281 ./learn/08-build-a-plugin-mcp.md:455
-#: ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:457
 msgid "\"level\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:281 ./learn/08-build-a-plugin-mcp.md:455
-#: ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:457
 msgid "\"info\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:281 ./learn/08-build-a-plugin-mcp.md:455
-#: ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:457
 msgid "\"message\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:281 ./learn/08-build-a-plugin-mcp.md:283
-#: ./learn/08-build-a-plugin-mcp.md:287 ./learn/08-build-a-plugin-mcp.md:360
-#: ./learn/08-build-a-plugin-mcp.md:374 ./learn/08-build-a-plugin-mcp.md:379
-#: ./learn/08-build-a-plugin-mcp.md:385 ./learn/08-build-a-plugin-mcp.md:601
-#: ./learn/08-build-a-plugin-mcp.md:616 ./learn/08-build-a-plugin-mcp.md:622
+#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:284
+#: ./learn/08-build-a-plugin-mcp.md:288 ./learn/08-build-a-plugin-mcp.md:361
+#: ./learn/08-build-a-plugin-mcp.md:375 ./learn/08-build-a-plugin-mcp.md:380
+#: ./learn/08-build-a-plugin-mcp.md:386 ./learn/08-build-a-plugin-mcp.md:603
+#: ./learn/08-build-a-plugin-mcp.md:618 ./learn/08-build-a-plugin-mcp.md:624
 msgid "\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:281 ./learn/08-build-a-plugin-mcp.md:287
-#: ./learn/08-build-a-plugin-mcp.md:601 ./learn/08-build-a-plugin-mcp.md:622
+#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:288
+#: ./learn/08-build-a-plugin-mcp.md:603 ./learn/08-build-a-plugin-mcp.md:624
 msgid "'name'"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:281
+#: ./learn/08-build-a-plugin-mcp.md:282
 msgid ": draft a commit\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:450
+#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:451
 msgid "\"haw.plugin.report/1\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:451
+#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:452
 msgid "\"plugin\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:282 ./learn/08-build-a-plugin-mcp.md:451
+#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:452
 msgid "\"commit-ai\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:452
+#: ./learn/08-build-a-plugin-mcp.md:284 ./learn/08-build-a-plugin-mcp.md:453
 msgid "\"ok\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:453
+#: ./learn/08-build-a-plugin-mcp.md:284 ./learn/08-build-a-plugin-mcp.md:454
 msgid "\"summary\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:283
+#: ./learn/08-build-a-plugin-mcp.md:284
 msgid " repo(s)\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:283 ./learn/08-build-a-plugin-mcp.md:454
+#: ./learn/08-build-a-plugin-mcp.md:284 ./learn/08-build-a-plugin-mcp.md:455
 msgid "\"findings\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:287
+#: ./learn/08-build-a-plugin-mcp.md:288
 msgid " draft a commit\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:287
+#: ./learn/08-build-a-plugin-mcp.md:288
 msgid "\"nothing to commit\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:288 ./PLUGINS.md:103
+#: ./learn/08-build-a-plugin-mcp.md:289 ./PLUGINS.md:103
 msgid "\"haw.plugin.view/1\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:289 ./PLUGINS.md:104
+#: ./learn/08-build-a-plugin-mcp.md:290 ./PLUGINS.md:104
 msgid "\"title\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:289
+#: ./learn/08-build-a-plugin-mcp.md:290
 msgid "\"commit-ai — proposed commits\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:289 ./PLUGINS.md:105
+#: ./learn/08-build-a-plugin-mcp.md:290 ./PLUGINS.md:105
 msgid "\"lines\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:292
+#: ./learn/08-build-a-plugin-mcp.md:293
 msgid ""
 "That's the entire plugin face — the part that needs no external packages at "
 "all. The MCP face comes next."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:295
+#: ./learn/08-build-a-plugin-mcp.md:296
 msgid "6. What MCP is, and why it matters here"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:297
+#: ./learn/08-build-a-plugin-mcp.md:298
 msgid ""
 "Before we write the MCP face, let's define MCP, because you can't wire up "
 "what you don't understand."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:300
+#: ./learn/08-build-a-plugin-mcp.md:301
 msgid ""
 "**MCP (Model Context Protocol) is a standard way for an AI assistant to call "
 "tools you expose.** In three sentences:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:303
+#: ./learn/08-build-a-plugin-mcp.md:304
 msgid ""
 "It's a simple protocol spoken over stdio (standard input/output) using "
 "JSON-RPC messages — your program reads requests on stdin and writes "
 "responses on stdout."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:305
+#: ./learn/08-build-a-plugin-mcp.md:306
 msgid ""
 "Your program advertises a set of **tools** (named functions with typed "
 "arguments), and an AI assistant like Claude can call them and read the "
 "results."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:307
+#: ./learn/08-build-a-plugin-mcp.md:308
 msgid ""
 "That's it: MCP is the bridge that lets Claude _do things in your world_ — "
 "read a diff, commit a repo — instead of only chatting about it."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:310
+#: ./learn/08-build-a-plugin-mcp.md:311
 msgid ""
 "**Why it matters here:** haw knows about your whole fleet — every repo, "
 "every path, every changeset. If we expose that knowledge as MCP tools, "
@@ -4350,7 +4824,7 @@ msgid ""
 "and PR text. Claude stops guessing and starts working from the real diff."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:315
+#: ./learn/08-build-a-plugin-mcp.md:316
 msgid ""
 "The good news: you don't implement the JSON-RPC wire protocol yourself. The "
 "official MCP SDK ships a helper called **FastMCP** that turns a plain Python "
@@ -4358,11 +4832,11 @@ msgid ""
 "handles the protocol."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:319
+#: ./learn/08-build-a-plugin-mcp.md:320
 msgid "7. The MCP face: the tools Claude will call"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:321
+#: ./learn/08-build-a-plugin-mcp.md:322
 msgid ""
 "Here's the `run_mcp()` function. It imports FastMCP (failing gracefully if "
 "the package isn't installed), creates a server, and registers each tool with "
@@ -4370,211 +4844,211 @@ msgid ""
 "sees as the tool's description, so we write them clearly."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:326
+#: ./learn/08-build-a-plugin-mcp.md:327
 msgid ""
 "Two small guards are defined first: `_repo_path` looks up a repo's on-disk "
 "path by name, and `_within_root` ensures any write stays inside the "
 "workspace `root`:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:334
+#: ./learn/08-build-a-plugin-mcp.md:335
 msgid "\"haw-commit-ai --mcp needs the MCP SDK: pip install mcp\\n\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:336 ./learn/08-build-a-plugin-mcp.md:491
+#: ./learn/08-build-a-plugin-mcp.md:337 ./learn/08-build-a-plugin-mcp.md:492
 msgid "\"haw-commit-ai\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:341
+#: ./learn/08-build-a-plugin-mcp.md:342
 msgid "# path-guard: writes stay inside root\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:347
+#: ./learn/08-build-a-plugin-mcp.md:348
 msgid ""
 "Now the five Level 1 tools. Read the docstrings — that's what Claude reads "
 "too:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:352
+#: ./learn/08-build-a-plugin-mcp.md:353
 msgid ""
 "\"\"\"Workspace root, current stack, and repos (name, path, rev, "
 "groups).\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:358
+#: ./learn/08-build-a-plugin-mcp.md:359
 msgid "\"\"\"The staged+unstaged git diff for a repo — see what changed.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:360
+#: ./learn/08-build-a-plugin-mcp.md:361
 msgid "\"no repo named "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:364
+#: ./learn/08-build-a-plugin-mcp.md:365
 msgid "\"\"\"Repos touched by the current changeset, else the dirty repos.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:369
+#: ./learn/08-build-a-plugin-mcp.md:370
 msgid "\"\"\"git commit -m in a repo. Path-guarded to the workspace root.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:372
+#: ./learn/08-build-a-plugin-mcp.md:373
 msgid "\"refused: "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:372
+#: ./learn/08-build-a-plugin-mcp.md:373
 msgid " is outside the workspace root.\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:373
+#: ./learn/08-build-a-plugin-mcp.md:374
 msgid "\"commit\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:373
+#: ./learn/08-build-a-plugin-mcp.md:374
 msgid "\"-m\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:374
+#: ./learn/08-build-a-plugin-mcp.md:375
 msgid "\"committed "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:374
+#: ./learn/08-build-a-plugin-mcp.md:375
 msgid ":\\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:374
+#: ./learn/08-build-a-plugin-mcp.md:375
 msgid "\"commit failed:\\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:378
+#: ./learn/08-build-a-plugin-mcp.md:379
 msgid ""
 "\"\"\"Return PR text. Dry by default — never pushes unless submit=True.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:379 ./learn/08-build-a-plugin-mcp.md:616
+#: ./learn/08-build-a-plugin-mcp.md:380 ./learn/08-build-a-plugin-mcp.md:618
 msgid "\"# "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:379
+#: ./learn/08-build-a-plugin-mcp.md:380
 msgid "\\n\\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:381
+#: ./learn/08-build-a-plugin-mcp.md:382
 msgid "\"\\n\\n(dry run — pass submit=True to run `haw change request`)\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:383
+#: ./learn/08-build-a-plugin-mcp.md:384
 msgid "\"request\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:383
+#: ./learn/08-build-a-plugin-mcp.md:384
 msgid "\"--title\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:383
+#: ./learn/08-build-a-plugin-mcp.md:384
 msgid "\"--body\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:385
+#: ./learn/08-build-a-plugin-mcp.md:386
 msgid "\\n\\n[request: "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:385
+#: ./learn/08-build-a-plugin-mcp.md:386
 msgid "'ok'"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:385
+#: ./learn/08-build-a-plugin-mcp.md:386
 msgid "'failed'"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:385
+#: ./learn/08-build-a-plugin-mcp.md:386
 msgid "]\\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:391
+#: ./learn/08-build-a-plugin-mcp.md:392
 msgid "Here's what each tool does and why it exists:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:393
+#: ./learn/08-build-a-plugin-mcp.md:394
 msgid ""
 "**`haw_context()`** — hands Claude the workspace shape: root, stack, and "
 "repos. This is how Claude learns your fleet exists."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:395
+#: ./learn/08-build-a-plugin-mcp.md:396
 msgid ""
 "**`repo_diff(repo)`** — returns one repo's diff so Claude reads exactly what "
 "changed before writing about it."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:397
+#: ./learn/08-build-a-plugin-mcp.md:398
 msgid ""
 "**`changeset_repos_tool()`** — tells Claude which repos are in play right "
 "now."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:398
+#: ./learn/08-build-a-plugin-mcp.md:399
 msgid ""
 "**`write_commit(repo, message)`** — actually commits, but only inside the "
 "workspace root (the path-guard refuses anything outside)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:400
+#: ./learn/08-build-a-plugin-mcp.md:401
 msgid ""
 "**`draft_pr(repo, title, body)`** — returns PR text; **dry by default**, so "
 "it never pushes anything unless you explicitly pass `submit=True`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:403
+#: ./learn/08-build-a-plugin-mcp.md:404
 msgid ""
 "Finally, `main()` ties every face together — help, MCP, JSON report, cockpit "
 "render, and the default human text:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:409 ./PLUGINS.md:372
+#: ./learn/08-build-a-plugin-mcp.md:410 ./PLUGINS.md:372
 msgid "\"-h\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:409 ./PLUGINS.md:372
+#: ./learn/08-build-a-plugin-mcp.md:410 ./PLUGINS.md:372
 msgid "\"--help\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:410
+#: ./learn/08-build-a-plugin-mcp.md:411
 msgid "\"haw-commit-ai — draft commits/PRs; --mcp to serve Claude\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:411 ./learn/08-build-a-plugin-mcp.md:493
+#: ./learn/08-build-a-plugin-mcp.md:412 ./learn/08-build-a-plugin-mcp.md:494
 msgid "\"--mcp\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:414
+#: ./learn/08-build-a-plugin-mcp.md:415
 msgid "\"HAW_RENDER\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:414
+#: ./learn/08-build-a-plugin-mcp.md:415
 msgid "\"1\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:414 ./PLUGINS.md:88
+#: ./learn/08-build-a-plugin-mcp.md:415 ./PLUGINS.md:88
 msgid "\"intent\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:414 ./PLUGINS.md:88
+#: ./learn/08-build-a-plugin-mcp.md:415 ./PLUGINS.md:88
 msgid "\"render\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:417
+#: ./learn/08-build-a-plugin-mcp.md:418
 msgid "\"haw-commit-ai — "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:417
+#: ./learn/08-build-a-plugin-mcp.md:418
 msgid " repo(s). Run with --mcp to let Claude write.\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:420
+#: ./learn/08-build-a-plugin-mcp.md:421
 msgid "\"__main__\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:426
+#: ./learn/08-build-a-plugin-mcp.md:427
 msgid ""
 "The listing above is the **Level 1** version. The shipped "
 "[`examples/plugins/haw-commit-ai/haw-commit-ai`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai) "
@@ -4584,121 +5058,121 @@ msgid ""
 "in plugin mode."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:434
+#: ./learn/08-build-a-plugin-mcp.md:435
 msgid "8. Run the plugin — no MCP, no Claude yet"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:436
+#: ./learn/08-build-a-plugin-mcp.md:437
 msgid ""
 "Let's prove it works as a plain plugin first. Make the file executable and "
 "put its directory on your `PATH` for the command:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:441 ./learn/08-build-a-plugin-mcp.md:442
+#: ./learn/08-build-a-plugin-mcp.md:442 ./learn/08-build-a-plugin-mcp.md:443
 #: ./PLUGINS.md:351
 msgid "\"$PWD:$PATH\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:441
+#: ./learn/08-build-a-plugin-mcp.md:442
 msgid "# human draft\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:442
+#: ./learn/08-build-a-plugin-mcp.md:443
 msgid "# a haw.plugin.report/1\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:445
+#: ./learn/08-build-a-plugin-mcp.md:446
 msgid ""
 "The first command prints a friendly one-liner. The second prints a JSON "
 "report you can parse — something like:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:453
+#: ./learn/08-build-a-plugin-mcp.md:454
 msgid "\"2 repo(s)\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:455
+#: ./learn/08-build-a-plugin-mcp.md:456
 msgid "\"kernel: draft a commit\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:456
+#: ./learn/08-build-a-plugin-mcp.md:457
 msgid "\"hal: draft a commit\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:461
+#: ./learn/08-build-a-plugin-mcp.md:462
 msgid ""
-"![Running `haw commit-ai` — a plugin haw dispatches to `haw-commit-ai` on "
-"your PATH](../assets/haw-cli.gif)"
+"![The `haw` command line — a plugin runs exactly like these built-in "
+"commands, as `haw <name>`](../assets/haw-cli.gif)"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:463
+#: ./learn/08-build-a-plugin-mcp.md:464
 msgid ""
 "_No recompile, no core change: drop `haw-commit-ai` on your `PATH` and haw "
 "dispatches to it like any built-in._"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:465
+#: ./learn/08-build-a-plugin-mcp.md:466
 msgid ""
 "And because it also emits a `haw.plugin.view/1`, your plugin gets a home in "
 "the cockpit — open `haw dash`, press `7`, and there it is in the Plugins "
 "panel:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:468
+#: ./learn/08-build-a-plugin-mcp.md:469
 msgid ""
-"![The cockpit's Plugins panel (press `7`) rendering the plugin's "
-"`haw.plugin.view/1`](../assets/haw-tui.gif)"
+"![The `haw dash` cockpit, where plugins get their own Plugins view (press "
+"`7`)](../assets/haw-tui.gif)"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:470
+#: ./learn/08-build-a-plugin-mcp.md:471
 msgid "9. Wire the MCP server into Claude Code"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:472
+#: ./learn/08-build-a-plugin-mcp.md:473
 msgid ""
 "Now the Claude side. First install the MCP SDK — this is the only "
 "dependency, and only the `--mcp` face needs it:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:479
+#: ./learn/08-build-a-plugin-mcp.md:480
 msgid ""
 "Register the server with Claude Code — one command. Use an **absolute path** "
 "to your plugin file:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:486
+#: ./learn/08-build-a-plugin-mcp.md:487
 msgid "Or, per project, drop it in a `.mcp.json` file at your project root:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:490
+#: ./learn/08-build-a-plugin-mcp.md:491
 msgid "\"mcpServers\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:492
+#: ./learn/08-build-a-plugin-mcp.md:493
 msgid "\"command\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:492
+#: ./learn/08-build-a-plugin-mcp.md:493
 msgid "\"python3\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:493
+#: ./learn/08-build-a-plugin-mcp.md:494
 msgid "\"args\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:493
+#: ./learn/08-build-a-plugin-mcp.md:494
 msgid "\"/abs/path/to/haw-commit-ai\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:499
+#: ./learn/08-build-a-plugin-mcp.md:500
 msgid "Verify Claude sees the server:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:502
+#: ./learn/08-build-a-plugin-mcp.md:503
 msgid "# haw-commit-ai should be listed\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:505
+#: ./learn/08-build-a-plugin-mcp.md:506
 msgid ""
 "Inside a Claude session, `/mcp` shows the connected server and its tools. At "
 "Level 1 that's `haw_context`, `repo_diff`, `changeset_repos_tool`, "
@@ -4706,62 +5180,62 @@ msgid ""
 "and `draft_changeset_pr` join them."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:509
+#: ./learn/08-build-a-plugin-mcp.md:510
 msgid "10. Worked example — Claude writes your commit and PR text"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:511
+#: ./learn/08-build-a-plugin-mcp.md:512
 msgid ""
 "Make a change across two repos in your workspace (say `kernel` and `hal`), "
 "stage them, then ask Claude — from inside the workspace directory:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:514
+#: ./learn/08-build-a-plugin-mcp.md:515
 msgid ""
 "_\"Read the diffs for the repos touched by my current changeset and write a "
 "conventional-commit message for each. Then draft a single cross-repo PR "
 "body. Commit each repo with its message; leave the PR as a dry draft.\"_"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:518 ./learn/08-build-a-plugin-mcp.md:666
+#: ./learn/08-build-a-plugin-mcp.md:519 ./learn/08-build-a-plugin-mcp.md:668
 msgid "Claude will:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:520
+#: ./learn/08-build-a-plugin-mcp.md:521
 msgid "call **`changeset_repos_tool()`** → sees `kernel`, `hal`,"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:521
+#: ./learn/08-build-a-plugin-mcp.md:522
 msgid ""
 "call **`repo_diff(\"kernel\")`** and **`repo_diff(\"hal\")`** → reads "
 "exactly what changed,"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:522
+#: ./learn/08-build-a-plugin-mcp.md:523
 msgid ""
 "write conventional-commit messages (e.g. `fix(kernel): guard against null "
 "irq handler`),"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:523
+#: ./learn/08-build-a-plugin-mcp.md:524
 msgid ""
 "call **`write_commit(\"kernel\", …)`** and **`write_commit(\"hal\", …)`** — "
 "each **path-guarded** to your workspace,"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:525
+#: ./learn/08-build-a-plugin-mcp.md:526
 msgid ""
 "call **`draft_pr(\"kernel\", \"…\", \"…\")`** → returns a PR body **dry** "
 "(nothing pushed)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:527
+#: ./learn/08-build-a-plugin-mcp.md:528
 msgid ""
 "You review the drafts, and when you're happy, run `haw change request` "
 "yourself (or let Claude call `draft_pr(..., submit=True)`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:532
+#: ./learn/08-build-a-plugin-mcp.md:533
 msgid ""
 "**Being honest about Level 1.** At this point, Claude Code already sees a "
 "single repo's diff natively — you haven't given it a superpower yet, you've "
@@ -4770,23 +5244,50 @@ msgid ""
 "in a single view."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:539
+#: ./learn/08-build-a-plugin-mcp.md:540
 msgid ""
 "So far we've mostly reinvented what Claude does for one repo for free. Keep "
 "the faith: the next level is the part it _can't_ do on its own."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:545
+#: ./learn/08-build-a-plugin-mcp.md:546
 msgid ""
 "_\"We built a whole plugin to do what Claude already did.\" This is fine — "
 "Level 2 fixes it._"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:558
-msgid "Level 2 — the cross-repo power (changeset-wide)"
+#: ./learn/08-build-a-plugin-mcp.md:550
+msgid "**Your turn (Level 1)**"
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:552
+msgid ""
+"Scaffold your own: <code>haw plugins new commit-ai --lang python</code>, "
+"then run the zero-dependency face with <code>haw commit-ai --format "
+"json</code> and confirm you get a <code>haw.plugin.report/1</code> document."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:553
+msgid ""
+"Drop the plugin on <code>PATH</code>, open <code>haw dash</code>, press "
+"<code>7</code>, and select <code>commit-ai</code> — your "
+"<code>haw.plugin.view/1</code> panel renders right in the cockpit."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:554
+msgid ""
+"<code>pip install mcp</code>, register it with <code>claude mcp add "
+"…</code>, and ask Claude to read one repo's diff and propose a commit — "
+"<em>without</em> committing. Then let it call <code>write_commit</code>, and "
+"watch the path-guard in action by asking it to commit a path outside the "
+"workspace (it should refuse)."
 msgstr ""
 
 #: ./learn/08-build-a-plugin-mcp.md:560
+msgid "Level 2 — the cross-repo power (changeset-wide)"
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:562
 msgid ""
 "Here's the pitch, sharp: **Claude alone can't see a fleet-wide changeset.** "
 "It can read one repo's diff — but a haw changeset spans several repos at "
@@ -4795,18 +5296,18 @@ msgid ""
 "whole changeset, so haw can hand Claude the whole picture."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:565
+#: ./learn/08-build-a-plugin-mcp.md:567
 msgid ""
 "We add **two tools to the same plugin** — no new script, no new server. They "
 "turn `haw-commit-ai` from \"a nice commit helper\" into \"the thing that "
 "gives an LLM fleet-wide vision.\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:569
+#: ./learn/08-build-a-plugin-mcp.md:571
 msgid "11. Why cross-repo is the unique value"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:571
+#: ./learn/08-build-a-plugin-mcp.md:573
 msgid ""
 "Imagine you add one feature — say an `irq_mask` flag — and it has to land in "
 "three repos at once: the `kernel` driver that owns the register, the `hal` "
@@ -4816,34 +5317,34 @@ msgid ""
 "all three diffs side by side."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:577
+#: ./learn/08-build-a-plugin-mcp.md:579
 msgid ""
 "Claude, on its own, reads one repo at a time. It can't see the fragments as "
 "one story."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:578
+#: ./learn/08-build-a-plugin-mcp.md:580
 msgid "A single-repo tool sees one repo, full stop."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:579
+#: ./learn/08-build-a-plugin-mcp.md:581
 msgid ""
 "**haw knows the changeset**, so it can concatenate every repo's diff into "
 "one document and hand that to Claude. Now Claude writes **one** coherent PR "
 "that narrates the whole feature."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:582
+#: ./learn/08-build-a-plugin-mcp.md:584
 msgid ""
 "That combined view is the unique value. Everything in Level 2 exists to "
 "deliver it."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:584
+#: ./learn/08-build-a-plugin-mcp.md:586
 msgid "12. Two cross-repo tools"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:586
+#: ./learn/08-build-a-plugin-mcp.md:588
 msgid ""
 "Drop these alongside the Level 1 tools (the shipped "
 "[`examples/plugins/haw-commit-ai/haw-commit-ai`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai) "
@@ -4851,132 +5352,132 @@ msgid ""
 "concatenates every repo's diff under a clear `=== <repo> ===` header:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:593
+#: ./learn/08-build-a-plugin-mcp.md:595
 msgid ""
 "\"\"\"The COMBINED git diff across every repo of the current changeset.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:596
+#: ./learn/08-build-a-plugin-mcp.md:598
 msgid "\"no changeset and no dirty repos — nothing to diff.\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:598
+#: ./learn/08-build-a-plugin-mcp.md:600
 msgid "# clear per-repo headers\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:600
+#: ./learn/08-build-a-plugin-mcp.md:602
 msgid "\"(no changes)\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:601
+#: ./learn/08-build-a-plugin-mcp.md:603
 msgid "\"=== "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:601 ./learn/08-build-a-plugin-mcp.md:622
+#: ./learn/08-build-a-plugin-mcp.md:603 ./learn/08-build-a-plugin-mcp.md:624
 msgid "'?'"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:601
+#: ./learn/08-build-a-plugin-mcp.md:603
 msgid " ===\\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:602
+#: ./learn/08-build-a-plugin-mcp.md:604
 msgid "\"\\n\\n\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:602
+#: ./learn/08-build-a-plugin-mcp.md:604
 msgid "# the whole story, top to bottom\n"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:605
+#: ./learn/08-build-a-plugin-mcp.md:607
 msgid ""
 "This is the **killer function**: one call, and Claude sees `kernel`, `hal`, "
 "and `app`'s diffs concatenated under `=== <repo> ===` headers — the "
 "fleet-wide changeset as a single readable document."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:609
+#: ./learn/08-build-a-plugin-mcp.md:611
 msgid ""
 "Next, the helper that builds a single cross-repo PR skeleton — a "
 "combined-summary slot plus one section per repo, which Claude then fills "
 "with prose:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:614
+#: ./learn/08-build-a-plugin-mcp.md:616
 msgid ""
 "\"\"\"ONE coherent cross-repo PR skeleton narrating every repo "
 "together.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:616
+#: ./learn/08-build-a-plugin-mcp.md:618
 msgid "\"## Combined summary\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:617
+#: ./learn/08-build-a-plugin-mcp.md:619
 msgid "\"<!-- one narrative covering all repos and why they move together -->\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:618
+#: ./learn/08-build-a-plugin-mcp.md:620
 msgid "\"## Per-repo changes\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:621
+#: ./learn/08-build-a-plugin-mcp.md:623
 msgid "\" ("
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:621
+#: ./learn/08-build-a-plugin-mcp.md:623
 msgid " file(s), "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:621
+#: ./learn/08-build-a-plugin-mcp.md:623
 msgid " line(s))\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:622
+#: ./learn/08-build-a-plugin-mcp.md:624
 msgid "\"### "
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:622
+#: ./learn/08-build-a-plugin-mcp.md:624
 msgid "\"<!-- what changed here and why -->\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:623
+#: ./learn/08-build-a-plugin-mcp.md:625
 msgid "\"## Testing\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:623
+#: ./learn/08-build-a-plugin-mcp.md:625
 msgid "\"- [ ] `haw build`\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:623
+#: ./learn/08-build-a-plugin-mcp.md:625
 msgid "\"- [ ] `haw test`\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:624
+#: ./learn/08-build-a-plugin-mcp.md:626
 msgid "\"\\n\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:627
+#: ./learn/08-build-a-plugin-mcp.md:629
 msgid ""
 "Both are wrapped as MCP tools with the FastMCP decorator, exactly like the "
 "Level 1 ones — add them inside `run_mcp()`:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:633
+#: ./learn/08-build-a-plugin-mcp.md:635
 msgid ""
 "\"\"\"The COMBINED git diff across ALL changeset repos, with =-headers per "
 "repo.\n"
 "        The fleet-wide view a single-repo tool can't give you.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:639
+#: ./learn/08-build-a-plugin-mcp.md:641
 msgid ""
 "\"\"\"ONE coherent cross-repo PR skeleton narrating every repo together.\n"
 "        Dry — assembles the scaffold; you fill the prose, then `haw change "
 "request`.\"\"\""
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:644
+#: ./learn/08-build-a-plugin-mcp.md:646
 msgid ""
 "`draft_changeset_pr(title)` returns **one** PR body: the plugin assembles "
 "the skeleton (per-repo sections plus a combined-summary slot), and **Claude "
@@ -4984,7 +5485,7 @@ msgid ""
 "change request` to open the linked PRs across the fleet."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:651
+#: ./learn/08-build-a-plugin-mcp.md:653
 msgid ""
 "**`write_commit` stays path-guarded.** There's no cross-repo \"write "
 "everything\" tool by design — for a changeset you commit **per repo** "
@@ -4993,46 +5494,46 @@ msgid ""
 "small, reviewable, and inside your workspace."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:658
+#: ./learn/08-build-a-plugin-mcp.md:660
 msgid "13. Worked example — one PR for a three-repo changeset"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:660
+#: ./learn/08-build-a-plugin-mcp.md:662
 msgid ""
 "Touch two or three repos in a changeset — say `kernel`, `hal`, and `app` — "
 "stage them, then ask Claude, from inside the workspace:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:663
+#: ./learn/08-build-a-plugin-mcp.md:665
 msgid ""
 "_\"Call `changeset_diff()` to read my whole changeset, then "
 "`draft_changeset_pr()` and write one PR that tells the combined story — a "
 "section per repo plus a combined summary.\"_"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:668
+#: ./learn/08-build-a-plugin-mcp.md:670
 msgid ""
 "call **`changeset_diff()`** → one document with `=== kernel ===`, `=== hal "
 "===`, `=== app ===`, each repo's diff underneath,"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:670
+#: ./learn/08-build-a-plugin-mcp.md:672
 msgid ""
 "call **`draft_changeset_pr(\"…\")`** → gets the skeleton with a section per "
 "repo,"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:671
+#: ./learn/08-build-a-plugin-mcp.md:673
 msgid "**fill the prose** into a single coherent narrative."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:673
+#: ./learn/08-build-a-plugin-mcp.md:675
 msgid ""
 "Here's an illustrative result (labelled as illustrative — your prose will "
 "match your actual diffs):"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:692
+#: ./learn/08-build-a-plugin-mcp.md:694
 msgid ""
 "**This is what neither Claude nor a single-repo tool can do alone.** A "
 "single-repo tool sees three disconnected diffs; haw plus this plugin hand "
@@ -5041,138 +5542,164 @@ msgid ""
 "change request` to open the linked PRs across the fleet."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:700
+#: ./learn/08-build-a-plugin-mcp.md:702
 msgid ""
 "_One prompt. Three repos. One coherent PR narrative. That's the payoff — go "
 "celebrate._"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:702
+#: ./learn/08-build-a-plugin-mcp.md:704
 msgid "14. Safety notes — this is the important bit"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:704
+#: ./learn/08-build-a-plugin-mcp.md:706
 msgid ""
 "Writing tools plus an LLM means guardrails matter. This is the section you "
 "_don't_ skim. The plugin bakes the guardrails in:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:707
+#: ./learn/08-build-a-plugin-mcp.md:709
 msgid ""
 "**Path-guarded writes.** `write_commit` and `draft_pr(submit=True)` refuse "
 "any repo path that isn't inside the workspace `root` — Claude can't commit "
 "outside your fleet."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:709
+#: ./learn/08-build-a-plugin-mcp.md:711
 msgid ""
 "**Dry by default.** `draft_pr` returns text only; it never pushes or "
 "force-pushes unless you explicitly pass `submit=True`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:711
+#: ./learn/08-build-a-plugin-mcp.md:713
 msgid ""
 "**No secrets in the plugin.** Forge authentication comes from _your_ "
 "environment — haw's normal token resolution (`GITHUB_TOKEN`, and so on). The "
 "plugin stores nothing."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:713
+#: ./learn/08-build-a-plugin-mcp.md:715
 msgid ""
 "**Separate process, honest exit codes.** The plugin runs out-of-process; a "
 "bug can't crash haw, and a non-zero exit propagates so CI still gates."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:727
+#: ./learn/08-build-a-plugin-mcp.md:720
+msgid "**Your turn (Level 2)**"
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:722
+msgid ""
+"Touch <em>three</em> repos in a changeset, then ask Claude to call "
+"<code>changeset_diff()</code> and <code>draft_changeset_pr()</code> and "
+"write <strong>one</strong> PR narrative covering all three (kernel / hal / "
+"app plus a combined summary). Compare it to what you'd get by asking Claude "
+"repo-by-repo — the cross-repo story only appears when it sees the whole "
+"changeset at once."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:723
+msgid ""
+"Extend the plugin: add a <code>repo_log(repo, n)</code> tool so Claude can "
+"see recent history for better messages. Keep it read-only."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:724
+msgid ""
+"Add a per-repo line count to the combined diff output, so Claude knows which "
+"repo carries the bulk of the change before it starts writing."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:730
 msgid "Glossary"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:729
+#: ./learn/08-build-a-plugin-mcp.md:732
 msgid ""
 "**plugin** — an executable named `haw-<name>` on your `PATH`; haw runs it as "
 "`haw <name>`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:731
+#: ./learn/08-build-a-plugin-mcp.md:734
 msgid ""
 "**PATH dispatch** — the convention (shared with git/cargo/kubectl) where haw "
 "runs an unknown subcommand by finding a matching executable on `PATH`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:733
+#: ./learn/08-build-a-plugin-mcp.md:736
 msgid ""
 "**`haw.plugin/1`** — the JSON context haw hands every plugin (via `HAW_JSON` "
 "or stdin), describing `root`, `stack`, and `repos`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:735
+#: ./learn/08-build-a-plugin-mcp.md:738
 msgid ""
 "**`haw.plugin.report/1`** — the machine report a plugin prints for `--format "
 "json`."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:736
+#: ./learn/08-build-a-plugin-mcp.md:739
 msgid ""
 "**`haw.plugin.view/1`** — the cockpit panel a plugin prints when haw asks it "
 "to render (`HAW_RENDER=1`, `\"intent\": \"render\"`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:738
+#: ./learn/08-build-a-plugin-mcp.md:741
 msgid ""
 "**MCP (Model Context Protocol)** — a standard stdio JSON-RPC protocol that "
 "lets an AI assistant call tools you expose."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:740
+#: ./learn/08-build-a-plugin-mcp.md:743
 msgid ""
 "**stdio** — a program's standard input and output streams; MCP messages "
 "travel over them."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:741
+#: ./learn/08-build-a-plugin-mcp.md:744
 msgid ""
 "**tool** — a named function (with typed arguments) your MCP server "
 "advertises for Claude to call."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:743
+#: ./learn/08-build-a-plugin-mcp.md:746
 msgid ""
 "**FastMCP** — the helper in the official MCP SDK that turns a Python "
 "function into an MCP tool with a decorator."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:746
+#: ./learn/08-build-a-plugin-mcp.md:749
 msgid "What you learned"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:748
+#: ./learn/08-build-a-plugin-mcp.md:751
 msgid ""
 "A plugin is any executable named `haw-<name>` on `PATH`; haw hands it the "
 "**`haw.plugin/1`** context via `$HAW_JSON` / stdin and propagates its exit "
 "code."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:750
+#: ./learn/08-build-a-plugin-mcp.md:753
 msgid ""
 "It can print a **`haw.plugin.report/1`** (`--format json`) and a "
 "**`haw.plugin.view/1`** panel (render intent, `HAW_RENDER=1`) for the "
 "cockpit's Plugins view (`7`)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:752
+#: ./learn/08-build-a-plugin-mcp.md:755
 msgid ""
 "MCP is a standard stdio protocol that lets Claude call tools you expose; the "
 "same script becomes an **MCP server** with `--mcp`, using FastMCP."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:754
+#: ./learn/08-build-a-plugin-mcp.md:757
 msgid ""
 "**Level 1 (single repo)** teaches the protocol: `haw_context`, `repo_diff`, "
 "`changeset_repos_tool`, `write_commit`, `draft_pr` — but Claude already sees "
 "one repo natively."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:757
+#: ./learn/08-build-a-plugin-mcp.md:760
 msgid ""
 "**Level 2 (cross-repo)** is the real power: `changeset_diff` hands Claude "
 "the _combined_ diff across the whole changeset, and `draft_changeset_pr` "
@@ -5180,38 +5707,38 @@ msgid ""
 "neither Claude nor a single-repo tool can tell alone."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:761
+#: ./learn/08-build-a-plugin-mcp.md:764
 msgid ""
 "**Guardrails:** path-guard writes to inside `root` (commit per repo, then "
 "`haw change request`), keep PR drafting dry by default, and never store "
 "secrets — auth stays in your environment."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:765
+#: ./learn/08-build-a-plugin-mcp.md:768
 msgid "Where to next"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:767
+#: ./learn/08-build-a-plugin-mcp.md:770
 msgid ""
 "You can now extend haw in any language and give an LLM safe, context-rich "
 "tools. From here:"
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:769
+#: ./learn/08-build-a-plugin-mcp.md:772
 msgid ""
 "Browse the [Plugins reference](../PLUGINS.md) — lifecycle phases, the "
 "community index, and the language bindings."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:771
+#: ./learn/08-build-a-plugin-mcp.md:774
 msgid "Study more real manifests in the [Examples index](../EXAMPLES.md)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:772
+#: ./learn/08-build-a-plugin-mcp.md:775
 msgid "Keep the [CLI design and keymap](../CLI-DESIGN.md) handy."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:774
+#: ./learn/08-build-a-plugin-mcp.md:777
 msgid "That's the whole tool — now go build your own beam. Welcome aboard."
 msgstr ""
 

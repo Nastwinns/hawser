@@ -12,14 +12,15 @@ command as you read. Keep the `my-first-stack` workspace from Chapter 2 open.
 *Sync clones the fleet; the lockfile freezes it to exact commits — the whole reproducibility trick.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Run <code>haw sync</code> to clone the fleet and generate <code>haw.lock</code>.</li>
-<li>Read the fleet with <code>haw tree</code> and <code>haw status</code>, and understand every column.</li>
-<li>Read the lockfile's real fields — <code>rev</code> (the resolved SHA), <code>source-rev</code>, and <code>branch</code>.</li>
-<li>Re-sync and confirm it's idempotent — the lock, not the branch, is now the truth.</li>
-<li>Cause <strong>drift</strong> on purpose and catch it with <code>haw verify</code> (exit 3), then restore.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Run <code>haw sync</code> to clone the fleet and generate <code>haw.lock</code>.
+- Read the fleet with <code>haw tree</code> and <code>haw status</code>, and understand every column.
+- Read the lockfile's real fields — <code>rev</code> (the resolved SHA), <code>source-rev</code>, and <code>branch</code>.
+- Re-sync and confirm it's idempotent — the lock, not the branch, is now the truth.
+- Cause <strong>drift</strong> on purpose and catch it with <code>haw verify</code> (exit 3), then restore.
+
 </div>
 
 ![Composing a stack: sync, tree, status, and the lockfile](../assets/cli-compose.gif)
@@ -216,13 +217,15 @@ baseline — the same four moves scale from two octocat repos to a hundred-repo 
 </div>
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>Prove the lockfile really is the source of truth:</p>
-<ul>
-<li>Open <code>haw.lock</code> and find each repo's pinned SHA in its <code>rev</code> field. Confirm it's a 40-char commit, not a branch name, and that <code>source-rev</code> still shows what you declared.</li>
-<li>Drift one repo on purpose (<code>cd hello-world &amp;&amp; git checkout HEAD~1 &amp;&amp; cd ..</code>), run <code>haw verify; echo $?</code>, and confirm you get exit code <code>3</code>.</li>
-<li>Run <code>haw sync</code> to restore, then <code>haw verify; echo $?</code> again — back to exit <code>0</code>. That round trip is the reproducibility guarantee.</li>
-</ul>
+
+**🙌 Your turn**
+
+Prove the lockfile really is the source of truth:
+
+- Open <code>haw.lock</code> and find each repo's pinned SHA in its <code>rev</code> field. Confirm it's a 40-char commit, not a branch name, and that <code>source-rev</code> still shows what you declared.
+- Drift one repo on purpose (<code>cd hello-world &amp;&amp; git checkout HEAD~1 &amp;&amp; cd ..</code>), run <code>haw verify; echo $?</code>, and confirm you get exit code <code>3</code>.
+- Run <code>haw sync</code> to restore, then <code>haw verify; echo $?</code> again — back to exit <code>0</code>. That round trip is the reproducibility guarantee.
+
 </div>
 
 ## ✅ Recap

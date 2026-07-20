@@ -13,16 +13,17 @@ guided tour. Open it and follow along.
 *Mission control for the whole fleet — read, drill, and act without leaving the terminal.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Open the cockpit with bare <code>haw</code> (or <code>haw dash --demo</code> to explore offline).</li>
-<li>Read the live fleet grid — the same columns as <code>haw status</code>, refreshing themselves.</li>
-<li>Work the core loop: <strong>read → drill (<code>Enter</code>) → act → back (<code>Esc</code>)</strong>.</li>
-<li>Act from the home row: sync, mark, run, filter, browse files, and jump to the PR / CI / governance views with the digits <code>1</code>–<code>7</code>.</li>
-<li>Open a view's context <strong>actions menu</strong> with <code>a</code> — merge, approve, checkout, request-PR, land — each confirm-gated.</li>
-<li>Browse any repo's files at any branch, tag, or SHA — local <em>or</em> straight from the forge, no checkout.</li>
-<li>Use the command bar (<code>:</code>) that mirrors the CLI you already learned.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Open the cockpit with bare <code>haw</code> (or <code>haw dash --demo</code> to explore offline).
+- Read the live fleet grid — the same columns as <code>haw status</code>, refreshing themselves.
+- Work the core loop: <strong>read → drill (<code>Enter</code>) → act → back (<code>Esc</code>)</strong>.
+- Act from the home row: sync, mark, run, filter, browse files, and jump to the PR / CI / governance views with the digits <code>1</code>–<code>7</code>.
+- Open a view's context <strong>actions menu</strong> with <code>a</code> — merge, approve, checkout, request-PR, land — each confirm-gated.
+- Browse any repo's files at any branch, tag, or SHA — local <em>or</em> straight from the forge, no checkout.
+- Use the command bar (<code>:</code>) that mirrors the CLI you already learned.
+
 </div>
 
 ![The hawser TUI cockpit — mission control for the fleet](../assets/haw-tui.gif)
@@ -199,14 +200,16 @@ sync, a fetch, or a forge call is in flight. Keep navigating.
 </div>
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>No workspace or network needed — the demo controller has everything to poke at:</p>
-<ul>
-<li>Launch <code>haw dash --demo</code>. Move with <code>↑</code>/<code>↓</code>, then press <code>Enter</code> to drill into a repo and <code>Esc</code> to come back — feel the read → drill → act → back rhythm.</li>
-<li>Press <code>Space</code> to mark a couple of repos (watch the <code>◉</code>), then <code>/</code> to fuzzy-filter the grid. Press <code>3</code> for PRs and <code>4</code> for CI, then <code>a</code> to see the actions menu. Press <code>?</code> for the help overlay.</li>
-<li>Press <code>f</code> on a repo to browse its files, then <code>T</code> for the tree and <code>r</code> to read a file as of another branch or tag. Press <code>b</code> to come back.</li>
-<li>Press <code>:</code> and type <code>:theme nord</code>. The skin changes live — and the status line echoes the exact command, so the cockpit is teaching you the CLI as you go.</li>
-</ul>
+
+**🙌 Your turn**
+
+No workspace or network needed — the demo controller has everything to poke at:
+
+- Launch <code>haw dash --demo</code>. Move with <code>↑</code>/<code>↓</code>, then press <code>Enter</code> to drill into a repo and <code>Esc</code> to come back — feel the read → drill → act → back rhythm.
+- Press <code>Space</code> to mark a couple of repos (watch the <code>◉</code>), then <code>/</code> to fuzzy-filter the grid. Press <code>3</code> for PRs and <code>4</code> for CI, then <code>a</code> to see the actions menu. Press <code>?</code> for the help overlay.
+- Press <code>f</code> on a repo to browse its files, then <code>T</code> for the tree and <code>r</code> to read a file as of another branch or tag. Press <code>b</code> to come back.
+- Press <code>:</code> and type <code>:theme nord</code>. The skin changes live — and the status line echoes the exact command, so the cockpit is teaching you the CLI as you go.
+
 </div>
 
 ## ✅ Recap

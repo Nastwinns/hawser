@@ -19,13 +19,14 @@ suddenly makes sense.
 *Many repos, one coordinated whole — that's the puzzle hawser solves.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Recognize the three taxes of a multi-repo product: version coordination, cross-repo PRs, and reproducibility.</li>
-<li>Explain hawser in one line — a <code>package.json</code> + lockfile, but for a fleet of Git repos.</li>
-<li>Hold the whole mental model in your head: <strong>manifest → lockfile → stacks</strong>.</li>
-<li>Tell when hawser is the right tool for your world.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Recognize the three taxes of a multi-repo product: version coordination, cross-repo PRs, and reproducibility.
+- Explain hawser in one line — a <code>package.json</code> + lockfile, but for a fleet of Git repos.
+- Hold the whole mental model in your head: <strong>manifest → lockfile → stacks</strong>.
+- Tell when hawser is the right tool for your world.
+
 </div>
 
 ## 🧩 The problem: one product, many repos
@@ -134,14 +135,16 @@ And here's where we're going — the keyboard cockpit you'll be living in by Cha
 *The `haw` cockpit: read the fleet, drill into any repo or PR, and act — without leaving the terminal.*
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>Before we touch a single command, do the thought experiment. Picture the last product you worked on that lived in more than one repo. Jot down:</p>
-<ul>
-<li>How many repos was it, really?</li>
-<li>The last time one feature forced you to open PRs in several of them at once — how did you keep track?</li>
-<li>Could you reproduce, today, the <em>exact</em> set of commits that were live three months ago?</li>
-</ul>
-<p>Hold those answers. By Chapter 3 you'll have a one-command answer to each.</p>
+
+**🙌 Your turn**
+
+Before we touch a single command, do the thought experiment. Picture the last product you worked on that lived in more than one repo. Jot down:
+
+- How many repos was it, really?
+- The last time one feature forced you to open PRs in several of them at once — how did you keep track?
+- Could you reproduce, today, the <em>exact</em> set of commits that were live three months ago?
+Hold those answers. By Chapter 3 you'll have a one-command answer to each.
+
 </div>
 
 ## ✅ Recap

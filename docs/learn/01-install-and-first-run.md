@@ -10,13 +10,14 @@ is heading.
 *A one-time setup, then you're at the prompt for the rest of the course.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Install <code>haw</code> through the channel that fits your machine — Cargo, Homebrew, Scoop, or the static musl binary.</li>
-<li>Confirm the binary is on your <code>PATH</code> and prints <code>haw 0.1.7</code>.</li>
-<li>Turn on shell tab-completion so the shell fills in subcommands and flags as you learn.</li>
-<li>Take a first <code>haw</code> run and watch the cockpit open — a taste of where you're headed.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Install <code>haw</code> through the channel that fits your machine — Cargo, Homebrew, Scoop, or the static musl binary.
+- Confirm the binary is on your <code>PATH</code> and prints <code>haw 0.1.7</code>.
+- Turn on shell tab-completion so the shell fills in subcommands and flags as you learn.
+- Take a first <code>haw</code> run and watch the cockpit open — a taste of where you're headed.
+
 </div>
 
 The tool ships as a **single binary named `haw`**. There's no runtime, no interpreter,
@@ -153,13 +154,15 @@ it at, which is what the next three chapters build.
 - The [full install matrix](../INSTALL.md) covers signed releases and air-gapped hosts.
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>Two-minute checkpoint — prove your setup before moving on:</p>
-<ul>
-<li>Run <code>haw --version</code> and confirm you see <code>haw 0.1.7</code>. If it says "command not found", the install dir isn't on your <code>PATH</code> yet — fix that first.</li>
-<li>Set up completions for your shell, restart it, then type <code>haw sy</code> and press <code>Tab</code>. It should complete to <code>haw sync</code>.</li>
-<li>Run <code>haw dash --demo</code>, move around with <code>↑</code>/<code>↓</code>, press <code>Enter</code> to drill into a repo and <code>Esc</code> to back out, then <code>q</code> to quit. You just met the cockpit.</li>
-</ul>
+
+**🙌 Your turn**
+
+Two-minute checkpoint — prove your setup before moving on:
+
+- Run <code>haw --version</code> and confirm you see <code>haw 0.1.7</code>. If it says "command not found", the install dir isn't on your <code>PATH</code> yet — fix that first.
+- Set up completions for your shell, restart it, then type <code>haw sy</code> and press <code>Tab</code>. It should complete to <code>haw sync</code>.
+- Run <code>haw dash --demo</code>, move around with <code>↑</code>/<code>↓</code>, press <code>Enter</code> to drill into a repo and <code>Esc</code> to back out, then <code>q</code> to quit. You just met the cockpit.
+
 </div>
 
 ## 👉 Next

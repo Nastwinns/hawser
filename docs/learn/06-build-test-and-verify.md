@@ -14,14 +14,15 @@ Keep the `my-first-stack` workspace open.
 *One command in, the whole fleet processed in parallel — no hand-rolled `for` loop.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Fan any command across every repo with <code>haw run</code>.</li>
-<li>Declare <code>build =</code> / <code>test =</code> per repo and drive the whole fleet with <code>haw build</code> / <code>haw test</code> — live-streamed, per-repo color.</li>
-<li>Search every repo at once with <code>haw grep</code>.</li>
-<li>Gate the fleet against the lock with <code>haw verify</code> — the CI drift gate.</li>
-<li>Control the blast radius with <code>-j</code> (parallelism) and <code>--group</code> (scope).</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Fan any command across every repo with <code>haw run</code>.
+- Declare <code>build =</code> / <code>test =</code> per repo and drive the whole fleet with <code>haw build</code> / <code>haw test</code> — live-streamed, per-repo color.
+- Search every repo at once with <code>haw grep</code>.
+- Gate the fleet against the lock with <code>haw verify</code> — the CI drift gate.
+- Control the blast radius with <code>-j</code> (parallelism) and <code>--group</code> (scope).
+
 </div>
 
 ![Running commands and verifying across the fleet](../assets/cli-run-verify.gif)
@@ -242,13 +243,15 @@ declare, `verify` to gate.** The declared ones are the ones you'll want identica
 and in CI.
 
 <div class="your-turn">
-<strong>🙌 Your turn</strong>
-<p>Put the fleet through its paces in <code>my-first-stack</code>:</p>
-<ul>
-<li>Add the trivial <code>build =</code> / <code>test =</code> lines above, then run <code>haw build</code> and <code>haw test</code> — watch the per-repo streamed output and the <code>2/2 repos</code> summary.</li>
-<li>Run <code>haw grep guide</code> across the fleet (a real hit in <code>spoon-knife</code>). Then narrow it: <code>haw run --group core 'git log -1 --oneline'</code> — only the <code>core</code> repo should answer.</li>
-<li>Run <code>haw verify; echo $?</code> and confirm exit <code>0</code> on a clean tree. Force it fully serial with <code>haw run -j 1 'git status -s'</code> and watch the repos process one at a time.</li>
-</ul>
+
+**🙌 Your turn**
+
+Put the fleet through its paces in <code>my-first-stack</code>:
+
+- Add the trivial <code>build =</code> / <code>test =</code> lines above, then run <code>haw build</code> and <code>haw test</code> — watch the per-repo streamed output and the <code>2/2 repos</code> summary.
+- Run <code>haw grep guide</code> across the fleet (a real hit in <code>spoon-knife</code>). Then narrow it: <code>haw run --group core 'git log -1 --oneline'</code> — only the <code>core</code> repo should answer.
+- Run <code>haw verify; echo $?</code> and confirm exit <code>0</code> on a clean tree. Force it fully serial with <code>haw run -j 1 'git status -s'</code> and watch the repos process one at a time.
+
 </div>
 
 ## ✅ Recap

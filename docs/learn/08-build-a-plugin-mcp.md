@@ -31,15 +31,16 @@ We'll build one real plugin — **`haw-commit-ai`** — and grow it in **two lev
   can do alone.
 
 <div class="objectives">
-<strong>In this chapter, you'll learn to…</strong>
-<ul>
-<li>Understand what a haw plugin actually is, and how haw finds and runs it.</li>
-<li>Read the <code>haw.plugin/1</code> context that haw hands every plugin, field by field.</li>
-<li>Scaffold a working plugin with <code>haw plugins new</code>.</li>
-<li>Emit the two machine shapes haw understands: a <code>haw.plugin.report/1</code> for <code>--format json</code> and a <code>haw.plugin.view/1</code> panel for the cockpit's Plugins view (<code>7</code>).</li>
-<li>Understand what MCP is, and turn the same script into an <strong>MCP server</strong> so Claude can call small, safe tools.</li>
-<li><strong>Level 2:</strong> hand Claude the <em>combined</em> cross-repo diff and let it draft a single fleet-wide PR — the cross-repo story no single-repo tool can tell.</li>
-</ul>
+
+**In this chapter, you'll learn to…**
+
+- Understand what a haw plugin actually is, and how haw finds and runs it.
+- Read the <code>haw.plugin/1</code> context that haw hands every plugin, field by field.
+- Scaffold a working plugin with <code>haw plugins new</code>.
+- Emit the two machine shapes haw understands: a <code>haw.plugin.report/1</code> for <code>--format json</code> and a <code>haw.plugin.view/1</code> panel for the cockpit's Plugins view (<code>7</code>).
+- Understand what MCP is, and turn the same script into an <strong>MCP server</strong> so Claude can call small, safe tools.
+- <strong>Level 2:</strong> hand Claude the <em>combined</em> cross-repo diff and let it draft a single fleet-wide PR — the cross-repo story no single-repo tool can tell.
+
 </div>
 
 ---
@@ -458,14 +459,14 @@ parse — something like:
 }
 ```
 
-![Running `haw commit-ai` — a plugin haw dispatches to `haw-commit-ai` on your PATH](../assets/haw-cli.gif)
+![The `haw` command line — a plugin runs exactly like these built-in commands, as `haw <name>`](../assets/haw-cli.gif)
 
 *No recompile, no core change: drop `haw-commit-ai` on your `PATH` and haw dispatches to it like any built-in.*
 
 And because it also emits a `haw.plugin.view/1`, your plugin gets a home in the cockpit —
 open `haw dash`, press `7`, and there it is in the Plugins panel:
 
-![The cockpit's Plugins panel (press `7`) rendering the plugin's `haw.plugin.view/1`](../assets/haw-tui.gif)
+![The `haw dash` cockpit, where plugins get their own Plugins view (press `7`)](../assets/haw-tui.gif)
 
 ## 9. Wire the MCP server into Claude Code
 
@@ -545,12 +546,13 @@ next level is the part it *can't* do on its own.
 *"We built a whole plugin to do what Claude already did." This is fine — Level 2 fixes it.*
 
 <div class="your-turn">
-<strong>Your turn (Level 1)</strong>
-<ul>
-<li>Scaffold your own: <code>haw plugins new commit-ai --lang python</code>, then run the zero-dependency face with <code>haw commit-ai --format json</code> and confirm you get a <code>haw.plugin.report/1</code> document.</li>
-<li>Drop the plugin on <code>PATH</code>, open <code>haw dash</code>, press <code>7</code>, and select <code>commit-ai</code> — your <code>haw.plugin.view/1</code> panel renders right in the cockpit.</li>
-<li><code>pip install mcp</code>, register it with <code>claude mcp add …</code>, and ask Claude to read one repo's diff and propose a commit — <em>without</em> committing. Then let it call <code>write_commit</code>, and watch the path-guard in action by asking it to commit a path outside the workspace (it should refuse).</li>
-</ul>
+
+**Your turn (Level 1)**
+
+- Scaffold your own: <code>haw plugins new commit-ai --lang python</code>, then run the zero-dependency face with <code>haw commit-ai --format json</code> and confirm you get a <code>haw.plugin.report/1</code> document.
+- Drop the plugin on <code>PATH</code>, open <code>haw dash</code>, press <code>7</code>, and select <code>commit-ai</code> — your <code>haw.plugin.view/1</code> panel renders right in the cockpit.
+- <code>pip install mcp</code>, register it with <code>claude mcp add …</code>, and ask Claude to read one repo's diff and propose a commit — <em>without</em> committing. Then let it call <code>write_commit</code>, and watch the path-guard in action by asking it to commit a path outside the workspace (it should refuse).
+
 </div>
 
 ---
@@ -714,12 +716,13 @@ plugin bakes the guardrails in:
   haw, and a non-zero exit propagates so CI still gates.
 
 <div class="your-turn">
-<strong>Your turn (Level 2)</strong>
-<ul>
-<li>Touch <em>three</em> repos in a changeset, then ask Claude to call <code>changeset_diff()</code> and <code>draft_changeset_pr()</code> and write <strong>one</strong> PR narrative covering all three (kernel / hal / app plus a combined summary). Compare it to what you'd get by asking Claude repo-by-repo — the cross-repo story only appears when it sees the whole changeset at once.</li>
-<li>Extend the plugin: add a <code>repo_log(repo, n)</code> tool so Claude can see recent history for better messages. Keep it read-only.</li>
-<li>Add a per-repo line count to the combined diff output, so Claude knows which repo carries the bulk of the change before it starts writing.</li>
-</ul>
+
+**Your turn (Level 2)**
+
+- Touch <em>three</em> repos in a changeset, then ask Claude to call <code>changeset_diff()</code> and <code>draft_changeset_pr()</code> and write <strong>one</strong> PR narrative covering all three (kernel / hal / app plus a combined summary). Compare it to what you'd get by asking Claude repo-by-repo — the cross-repo story only appears when it sees the whole changeset at once.
+- Extend the plugin: add a <code>repo_log(repo, n)</code> tool so Claude can see recent history for better messages. Keep it read-only.
+- Add a per-repo line count to the combined diff output, so Claude knows which repo carries the bulk of the change before it starts writing.
+
 </div>
 
 ---

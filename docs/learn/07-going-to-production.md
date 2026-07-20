@@ -11,15 +11,16 @@ releases.
 *From a neat local tool to something you trust to gate releases — let's launch.*
 
 <div class="objectives">
-<strong>🎯 In this chapter, you'll learn to…</strong>
-<ul>
-<li>Internalize the <strong>trust model</strong> — the manifest is trusted code, tokens live only in the environment.</li>
-<li>Wire the four-move CI pipeline: <strong><code>sync → verify → build → test</code></strong>.</li>
-<li>Enforce reproducibility with <code>haw sync --locked</code> and <code>haw verify</code>.</li>
-<li>Extend <code>haw</code> with <strong>plugins</strong> — any unknown <code>haw &lt;name&gt;</code> runs <code>haw-&lt;name&gt;</code>, no fork required.</li>
-<li>Distribute artifacts with <code>haw publish</code>, and produce SBOM, provenance, and signatures.</li>
-<li>Bundle an audit trail with <code>haw evidence</code> and map it to compliance standards.</li>
-</ul>
+
+**🎯 In this chapter, you'll learn to…**
+
+- Internalize the <strong>trust model</strong> — the manifest is trusted code, tokens live only in the environment.
+- Wire the four-move CI pipeline: <strong><code>sync → verify → build → test</code></strong>.
+- Enforce reproducibility with <code>haw sync --locked</code> and <code>haw verify</code>.
+- Extend <code>haw</code> with <strong>plugins</strong> — any unknown <code>haw &lt;name&gt;</code> runs <code>haw-&lt;name&gt;</code>, no fork required.
+- Distribute artifacts with <code>haw publish</code>, and produce SBOM, provenance, and signatures.
+- Bundle an audit trail with <code>haw evidence</code> and map it to compliance standards.
+
 </div>
 
 ## 🛡️ 1. First, the trust model — because it matters
