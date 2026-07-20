@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use haw_core::workspace::RepoStatus;
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
-use nucleo_matcher::{Config, Matcher, Utf32Str};
+use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str};
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -39,7 +39,7 @@ mod theme {
 
     /// A full cockpit palette. All fields are plain [`Color`]s so a palette can
     /// mix RGB (rich terminals) and named ANSI (NO_COLOR / light terms).
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Theme {
         pub accent: Color,
         pub mauve: Color,
@@ -166,9 +166,32 @@ mod theme {
             }
         }
 
+        /// Classic — a clean, conventional palette leaning on the standard 16
+        /// ANSI colors: a plain blue accent, white/light-gray text, subtle grays
+        /// for surfaces, and named green/yellow/red for status. Deliberately
+        /// unopinionated (no pastels), so it reads on both light and dark
+        /// terminals and honours the user's terminal color scheme.
+        pub const fn classic() -> Self {
+            Self {
+                accent: Color::Blue,
+                mauve: Color::Magenta,
+                green: Color::Green,
+                yellow: Color::Yellow,
+                red: Color::Red,
+                teal: Color::Cyan,
+                peach: Color::Yellow,
+                text: Color::White,
+                dim: Color::Gray,
+                surface: Color::DarkGray,
+                surface0: Color::Reset,
+                crust: Color::Reset,
+            }
+        }
+
         /// Look up a built-in theme by name (case-insensitive).
         pub fn by_name(name: &str) -> Option<Self> {
             match name.trim().to_ascii_lowercase().as_str() {
+                "classic" => Some(Self::classic()),
                 "catppuccin" => Some(Self::catppuccin()),
                 "dracula" => Some(Self::dracula()),
                 "nord" => Some(Self::nord()),
@@ -182,6 +205,7 @@ mod theme {
 
     /// Names of all built-in themes, in listing order.
     pub const THEMES: &[&str] = &[
+        "classic",
         "catppuccin",
         "dracula",
         "nord",
@@ -199,6 +223,11 @@ mod theme {
         CURRENT.with(|c| *c.borrow_mut() = t);
     }
 
+    /// The currently-active palette (a copy).
+    pub fn current() -> Theme {
+        CURRENT.with(|c| *c.borrow())
+    }
+
     macro_rules! accessor {
         ($($f:ident),* $(,)?) => {
             $(pub fn $f() -> Color { CURRENT.with(|t| t.borrow().$f) })*
@@ -211,6 +240,160 @@ mod theme {
 }
 
 pub use theme::{THEMES, Theme};
+
+mod config;
+pub use config::Config;
+
+/// A remappable cockpit action and its canonical (default) key char. Custom
+/// keybindings ([`KeyMap`]) let the user press a *different* char to trigger the
+/// same action; the key handler translates the pressed char back to this
+/// canonical char before the default match, so no handler code changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Action {
+    /// The stable action name used in the config `[keys]` table.
+    name: &'static str,
+    /// The default/canonical key char the event loop already handles.
+    canonical: char,
+}
+
+/// The SAFE, remappable actions. Their canonical chars are the ones the key
+/// handler matches on. Note `g`/`w` are canonical chars here AND frozen globals:
+/// a user may rebind the *action* to another key, but may never bind another
+/// action ONTO `g`/`w` (see [`is_frozen_target`]).
+const REMAPPABLE: &[Action] = &[
+    Action {
+        name: "sync",
+        canonical: 's',
+    },
+    Action {
+        name: "goto",
+        canonical: 'g',
+    },
+    Action {
+        name: "run",
+        canonical: 'r',
+    },
+    Action {
+        name: "shell",
+        canonical: 'x',
+    },
+    Action {
+        name: "files",
+        canonical: 'f',
+    },
+    Action {
+        name: "problems",
+        canonical: 'p',
+    },
+    Action {
+        name: "watch",
+        canonical: 'w',
+    },
+];
+
+/// Chars that may never be the *target* of a remap: the frozen globals
+/// (`j`,`k`,`:`,`/`,`?`,`q`,`b`, space, `g`, `w`) and the digit view-jumps.
+/// Binding an action onto any of these would shadow a global — rejected.
+fn is_frozen_target(c: char) -> bool {
+    matches!(c, 'j' | 'k' | ':' | '/' | '?' | 'q' | 'b' | 'g' | 'w' | ' ') || c.is_ascii_digit()
+}
+
+/// A validated set of custom keybindings: `pressed char -> canonical char`.
+/// Built from [`Config`]'s `[keys]` table, dropping any remap that targets a
+/// frozen global or collides with another remap's target or a live action key.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyMap {
+    /// pressed char -> canonical action char.
+    remaps: std::collections::HashMap<char, char>,
+    /// Human-readable notes about rejected remaps, surfaced as a startup message.
+    warnings: Vec<String>,
+}
+
+impl KeyMap {
+    /// Build a keymap from the config `[keys]` table. Invalid remaps (targeting a
+    /// frozen global, non-single-char, or colliding with a default action key or
+    /// another remap) are dropped with a recorded warning; valid ones are kept.
+    fn from_config(keys: &config::KeyConfig) -> Self {
+        // (action-name, requested char) pairs, in a stable order.
+        let requested = [
+            ("sync", keys.sync.as_deref()),
+            ("goto", keys.goto.as_deref()),
+            ("run", keys.run.as_deref()),
+            ("shell", keys.shell.as_deref()),
+            ("files", keys.files.as_deref()),
+            ("problems", keys.problems.as_deref()),
+            ("watch", keys.watch.as_deref()),
+            ("fetch", keys.fetch.as_deref()),
+        ];
+        // Default action chars (targets already "taken" by unremapped actions).
+        let default_chars: std::collections::HashSet<char> =
+            REMAPPABLE.iter().map(|a| a.canonical).collect();
+
+        let mut remaps = std::collections::HashMap::new();
+        let mut warnings = Vec::new();
+        for (name, requested) in requested {
+            let Some(raw) = requested else { continue };
+            let Some(action) = REMAPPABLE.iter().find(|a| a.name == name) else {
+                // `fetch` (and any non-key action) has no canonical key: it's a
+                // command-bar verb, so a key remap for it is meaningless.
+                warnings.push(format!("keys.{name}: not a remappable action key"));
+                continue;
+            };
+            let mut chars = raw.chars();
+            let (Some(target), None) = (chars.next(), chars.next()) else {
+                warnings.push(format!(
+                    "keys.{name}: `{raw}` must be a single character — ignored"
+                ));
+                continue;
+            };
+            // A no-op remap (action to its own default char) is harmless — skip.
+            if target == action.canonical {
+                continue;
+            }
+            if is_frozen_target(target) {
+                warnings.push(format!(
+                    "keys.{name}: `{target}` is a reserved global key — ignored"
+                ));
+                continue;
+            }
+            // Don't shadow another action's default key, unless that action is
+            // itself being remapped away (handled by processing order + set).
+            if default_chars.contains(&target) {
+                warnings.push(format!(
+                    "keys.{name}: `{target}` collides with a default action key — ignored"
+                ));
+                continue;
+            }
+            if remaps.contains_key(&target) {
+                warnings.push(format!(
+                    "keys.{name}: `{target}` already bound to another action — ignored"
+                ));
+                continue;
+            }
+            remaps.insert(target, action.canonical);
+        }
+        KeyMap { remaps, warnings }
+    }
+
+    /// Translate a pressed char through the remap: returns the canonical action
+    /// char if `pressed` is a custom binding, else `pressed` unchanged.
+    fn translate(&self, pressed: char) -> char {
+        self.remaps.get(&pressed).copied().unwrap_or(pressed)
+    }
+
+    /// The active key char for an action name (its remap target if any, else its
+    /// default). Lets `key_hints` reflect the ACTIVE binding so hints stay honest.
+    fn key_for(&self, action: &str) -> Option<char> {
+        let canonical = REMAPPABLE.iter().find(|a| a.name == action)?.canonical;
+        Some(
+            self.remaps
+                .iter()
+                .find(|&(_, &c)| c == canonical)
+                .map(|(&k, _)| k)
+                .unwrap_or(canonical),
+        )
+    }
+}
 
 /// Why the cockpit exited with a repo path in hand: the caller either prints
 /// the path (`cd "$(haw dash)"`) or drops the user into a shell there.
@@ -726,6 +909,18 @@ enum InputMode {
         sel: usize,
         input: String,
     },
+    /// The `:theme` (no arg) theme picker: a bordered list of all built-in
+    /// themes with a cursor `sel`. `enter` applies live AND persists to config;
+    /// `esc` cancels. Modelled on the actions menu / ref picker popups.
+    ThemePicker {
+        sel: usize,
+    },
+    /// The `:editor` (no arg) editor picker: the editors resolvable on PATH
+    /// (plus the current one) with a cursor `sel`. `enter` sets + persists.
+    EditorPicker {
+        editors: Vec<String>,
+        sel: usize,
+    },
 }
 
 enum Job {
@@ -932,6 +1127,21 @@ struct App {
     /// Watch mode (`w` / `:watch`): when on, the idle refresh also periodically
     /// re-fetches the open PR/CI fleet view (TTL-cached). Off by default.
     watch: bool,
+    /// Start (and stay, until the user zooms) with the header collapsed to one
+    /// compact line — the config `[ui].compact_header` default. Independent of
+    /// the automatic short-terminal collapse.
+    compact_header: bool,
+    /// Idle auto-refresh cadence in seconds (config `[ui].refresh_secs`, clamped).
+    refresh_secs: u64,
+    /// The configured editor for the `e` key (config `[ui].editor`); env still
+    /// wins at resolve time. `None` falls back to the PATH probe.
+    editor: Option<String>,
+    /// Active custom keybindings (config `[keys]`), validated at startup.
+    keymap: KeyMap,
+    /// Where the pickers persist config changes. `None` when no config dir is
+    /// available (persistence is then skipped with a message). Injectable in
+    /// tests so persistence never touches the real `~/.config/haw/config.toml`.
+    config_path: Option<PathBuf>,
 }
 
 /// Cap on the rolling session error log — the last N failures are kept.
@@ -940,7 +1150,7 @@ const ERROR_LOG_CAP: usize = 100;
 thread_local! {
     /// A reusable fuzzy matcher; kept per-thread so filtering never re-allocates
     /// its scratch buffers on each keystroke.
-    static MATCHER: RefCell<Matcher> = RefCell::new(Matcher::new(Config::DEFAULT));
+    static MATCHER: RefCell<Matcher> = RefCell::new(Matcher::new(MatcherConfig::DEFAULT));
 }
 
 /// Fuzzy match, case-insensitive; an empty needle matches everything. A
@@ -1483,27 +1693,37 @@ pub fn run(controller: Box<dyn Controller>) -> io::Result<Option<Exit>> {
     let (out_tx, out_rx) = channel::<Outcome>();
     spawn_worker(controller, job_rx, out_tx);
 
-    theme::set(startup_theme());
+    // Load the user config (tolerant of a missing/partial file), then apply the
+    // startup theme. A malformed file surfaces as a startup message rather than
+    // crashing the cockpit.
+    let (cfg, mut startup_msg) = match Config::load() {
+        Ok(cfg) => (cfg, None),
+        Err(err) => (Config::default(), Some(format!("config: {err}"))),
+    };
+    theme::set(startup_theme(&cfg));
+
+    let keymap = KeyMap::from_config(&cfg.keys);
+    if startup_msg.is_none() && !keymap.warnings.is_empty() {
+        startup_msg = Some(format!("config: {}", keymap.warnings.join("; ")));
+    }
 
     let mut terminal = ratatui::init();
-    let result = event_loop(&mut terminal, &job_tx, &out_rx);
+    let result = event_loop(&mut terminal, &job_tx, &out_rx, &cfg, keymap, startup_msg);
     ratatui::restore();
     result
 }
 
-/// Pick the startup palette from the environment.
+/// Pick the startup palette from the environment, then config.
 ///
-/// Per the NO_COLOR spec, presence of a non-empty `NO_COLOR` selects the
-/// `monochrome` skin. Otherwise `HAW_THEME` names a built-in theme; anything
-/// unset or unrecognized falls back to the default catppuccin palette.
-fn startup_theme() -> Theme {
-    if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
-        return Theme::monochrome();
-    }
-    std::env::var("HAW_THEME")
-        .ok()
-        .and_then(|name| Theme::by_name(&name))
-        .unwrap_or_else(Theme::catppuccin)
+/// Precedence (see [`config::resolve_theme`]): `NO_COLOR` (non-empty env) forces
+/// `monochrome`; else `HAW_THEME` (env) if it names a built-in; else the config
+/// `[ui].theme`; else the default catppuccin palette.
+fn startup_theme(cfg: &Config) -> Theme {
+    config::resolve_theme(
+        std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
+        std::env::var("HAW_THEME").ok().as_deref(),
+        cfg.ui.theme.as_deref(),
+    )
 }
 
 fn spawn_worker(controller: Box<dyn Controller>, jobs: Receiver<Job>, outcomes: Sender<Outcome>) {
@@ -2267,27 +2487,6 @@ pub fn open_in_browser(url: &str) -> io::Result<()> {
         .map(|_| ())
 }
 
-/// Choose an editor command from `$VISUAL`, then `$EDITOR`, then the first of
-/// `candidates` that resolves on `PATH`. Pure so it can be unit-tested without
-/// mutating process env: `visual`/`editor` are the (already-read) env values and
-/// `candidates` is the fallback list probed via [`on_path`].
-fn pick_editor(
-    visual: Option<String>,
-    editor: Option<String>,
-    candidates: &[&str],
-) -> Option<String> {
-    if let Some(v) = visual.filter(|s| !s.trim().is_empty()) {
-        return Some(v);
-    }
-    if let Some(e) = editor.filter(|s| !s.trim().is_empty()) {
-        return Some(e);
-    }
-    candidates
-        .iter()
-        .find(|c| on_path(c))
-        .map(|c| (*c).to_string())
-}
-
 /// Best-effort probe: is `program` an executable resolvable on `PATH`? Mirrors a
 /// `which`/`where` lookup without shelling out, honouring `PATHEXT` on Windows.
 fn on_path(program: &str) -> bool {
@@ -2316,15 +2515,80 @@ fn on_path(program: &str) -> bool {
     false
 }
 
-/// Resolve the interactive editor for the `e` key: `$VISUAL`/`$EDITOR`, then the
-/// first of `nvim`/`vim`/`vi` on `PATH`, else `vi` as a last resort.
-fn resolve_editor() -> Option<String> {
-    pick_editor(
+/// Resolve the interactive editor for the `e` key. Precedence:
+/// `$VISUAL`/`$EDITOR` (env always wins) > the config `[ui].editor` > the first
+/// of `nvim`/`vim`/`vi` on `PATH` > `vi` as a last resort.
+fn resolve_editor(config_editor: Option<&str>) -> Option<String> {
+    config::resolve_editor_with(
+        config_editor,
         std::env::var("VISUAL").ok(),
         std::env::var("EDITOR").ok(),
         &["nvim", "vim", "vi"],
+        on_path,
     )
     .or_else(|| Some("vi".to_string()))
+}
+
+/// Common editors to offer in the `:editor` picker. Only those resolvable on
+/// PATH (plus the app's current editor) are actually listed.
+const PICKER_EDITORS: &[&str] = &[
+    "nvim", "vim", "vi", "nano", "emacs", "helix", "hx", "code", "micro",
+];
+
+/// Open the `:theme` (no arg) picker, cursor on the currently-active theme.
+fn open_theme_picker(app: &mut App) {
+    let sel = theme::THEMES
+        .iter()
+        .position(|&name| Theme::by_name(name).is_some_and(|t| t == theme::current()))
+        .unwrap_or(0);
+    app.input = InputMode::ThemePicker { sel };
+    app.message = "pick a theme — enter applies & saves, esc cancels".to_string();
+}
+
+/// Open the `:editor` (no arg) picker, listing PATH-resolvable common editors
+/// plus the app's current editor (deduped), cursor on the current one.
+fn open_editor_picker(app: &mut App) {
+    let mut editors: Vec<String> = PICKER_EDITORS
+        .iter()
+        .filter(|e| on_path(e))
+        .map(|e| (*e).to_string())
+        .collect();
+    if let Some(cur) = app.editor.clone().filter(|s| !s.trim().is_empty())
+        && !editors.contains(&cur)
+    {
+        editors.insert(0, cur);
+    }
+    if editors.is_empty() {
+        app.message = "no known editors on PATH — set one with :editor <cmd>".to_string();
+        return;
+    }
+    let sel = app
+        .editor
+        .as_deref()
+        .and_then(|cur| editors.iter().position(|e| e == cur))
+        .unwrap_or(0);
+    app.input = InputMode::EditorPicker { editors, sel };
+    app.message = "pick an editor — enter sets & saves, esc cancels".to_string();
+}
+
+/// Persist a single config change (theme/editor) alongside the current display
+/// options + keys, reporting success/failure as a TUI message. Never crashes;
+/// on IO failure the live change is kept and the message says so.
+fn persist_config(app: &mut App, apply: impl FnOnce(&mut Config), saved_msg: &str) {
+    let Some(path) = app.config_path.clone() else {
+        app.message = format!("{saved_msg} (not saved: no config dir)");
+        return;
+    };
+    // Reload so we don't clobber unrelated keys the user may have hand-edited.
+    let mut cfg = Config::load_from(&path).unwrap_or_default();
+    // Reflect the app's live display options so a save is self-consistent.
+    cfg.ui.compact_header = app.compact_header;
+    cfg.ui.refresh_secs = Some(app.refresh_secs);
+    apply(&mut cfg);
+    match cfg.save_to(&path) {
+        Ok(()) => app.message = saved_msg.to_string(),
+        Err(err) => app.message = format!("{saved_msg} (but not saved: {err})"),
+    }
 }
 
 /// A confirmation gate for actions with real side effects (opens/merges PRs).
@@ -2445,18 +2709,44 @@ fn run_command_bar(app: &mut App, jobs: &Sender<Job>, line: &str) {
         ("governance", "") => open_fleet_view(app, jobs, View::Governance),
         ("plugins", "") => open_fleet_view(app, jobs, View::Plugins),
         ("errors" | "err", "") => app.goto_view(View::Errors),
-        ("theme", "") => {
-            app.message = format!("themes: {}", theme::THEMES.join(", "));
-        }
+        ("theme", "") => open_theme_picker(app),
         ("theme", name) => match Theme::by_name(name) {
             Some(t) => {
                 theme::set(t);
-                app.message = format!("theme → {name}");
+                let name = name.to_string();
+                persist_config(
+                    app,
+                    |c| c.ui.theme = Some(name.clone()),
+                    &format!("theme → {name}"),
+                );
             }
             None => {
                 app.message = format!("unknown theme `{name}`; try: {}", theme::THEMES.join(", "));
             }
         },
+        ("editor", "") => open_editor_picker(app),
+        ("editor", cmd) => {
+            let cmd = cmd.to_string();
+            app.editor = Some(cmd.clone());
+            persist_config(
+                app,
+                |c| c.ui.editor = Some(cmd.clone()),
+                &format!("editor → {cmd}"),
+            );
+        }
+        ("compact", "") => {
+            app.compact_header = !app.compact_header;
+            let on = app.compact_header;
+            persist_config(
+                app,
+                |c| c.ui.compact_header = on,
+                if on {
+                    "compact header on"
+                } else {
+                    "compact header off"
+                },
+            );
+        }
         ("help", "") => app.help = true,
         ("grep", pat) if !pat.is_empty() => run_grep(app, jobs, pat),
         ("grep", "") => app.message = "grep: give a pattern — :grep <pattern>".to_string(),
@@ -2550,7 +2840,11 @@ fn event_loop(
     terminal: &mut ratatui::DefaultTerminal,
     jobs: &Sender<Job>,
     outcomes: &Receiver<Outcome>,
+    cfg: &Config,
+    keymap: KeyMap,
+    startup_msg: Option<String>,
 ) -> io::Result<Option<Exit>> {
+    let refresh_secs = cfg.refresh_secs();
     let mut app = App {
         view: View::Fleet,
         back: Vec::new(),
@@ -2600,7 +2894,15 @@ fn event_loop(
         errors: Vec::new(),
         error_seq: 0,
         watch: false,
+        compact_header: cfg.ui.compact_header,
+        refresh_secs,
+        editor: cfg.ui.editor.clone().filter(|s| !s.trim().is_empty()),
+        keymap,
+        config_path: Config::path(),
     };
+    if let Some(msg) = startup_msg {
+        app.message = msg;
+    }
     app.cursor.select(Some(0));
     request_refresh(&mut app, jobs);
     let mut last_refresh = Instant::now();
@@ -2884,7 +3186,7 @@ fn event_loop(
             && !app.help
             && app.output.is_none()
             && app.pending_confirm.is_none();
-        if idle_ok && last_refresh.elapsed() >= Duration::from_secs(5) {
+        if idle_ok && last_refresh.elapsed() >= Duration::from_secs(app.refresh_secs) {
             request_refresh(&mut app, jobs);
             last_refresh = Instant::now();
         }
@@ -2893,7 +3195,7 @@ fn event_loop(
         // the idle interval. `force: false` respects the controller's TTL cache,
         // and the outcome handlers preserve cursor/filter/scroll, so this never
         // clobbers what the user is looking at.
-        if app.watch && idle_ok && last_watch.elapsed() >= Duration::from_secs(5) {
+        if app.watch && idle_ok && last_watch.elapsed() >= Duration::from_secs(app.refresh_secs) {
             match app.view {
                 View::Prs => {
                     app.busy = Some("PR/MRs");
@@ -3067,6 +3369,8 @@ fn event_loop(
                             }
                             InputMode::ActionsMenu(_)
                             | InputMode::RefPicker { .. }
+                            | InputMode::ThemePicker { .. }
+                            | InputMode::EditorPicker { .. }
                             | InputMode::None => {}
                         }
                     }
@@ -3125,11 +3429,69 @@ fn event_loop(
                 }
                 continue;
             }
+            InputMode::ThemePicker { sel } => {
+                let count = theme::THEMES.len();
+                match key.code {
+                    KeyCode::Esc => {
+                        app.input = InputMode::None;
+                        app.message = "theme pick cancelled".to_string();
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => *sel = (*sel + 1).min(count - 1),
+                    KeyCode::Up | KeyCode::Char('k') => *sel = sel.saturating_sub(1),
+                    KeyCode::Enter => {
+                        let name = theme::THEMES[(*sel).min(count - 1)].to_string();
+                        app.input = InputMode::None;
+                        if let Some(t) = Theme::by_name(&name) {
+                            theme::set(t);
+                            persist_config(
+                                &mut app,
+                                |c| c.ui.theme = Some(name.clone()),
+                                &format!("theme → {name}"),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+            InputMode::EditorPicker { editors, sel } => {
+                let count = editors.len();
+                match key.code {
+                    KeyCode::Esc => {
+                        app.input = InputMode::None;
+                        app.message = "editor pick cancelled".to_string();
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => *sel = (*sel + 1).min(count - 1),
+                    KeyCode::Up | KeyCode::Char('k') => *sel = sel.saturating_sub(1),
+                    KeyCode::Enter => {
+                        let chosen = editors.get((*sel).min(count.saturating_sub(1))).cloned();
+                        app.input = InputMode::None;
+                        if let Some(cmd) = chosen {
+                            app.editor = Some(cmd.clone());
+                            persist_config(
+                                &mut app,
+                                |c| c.ui.editor = Some(cmd.clone()),
+                                &format!("editor → {cmd}"),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
             InputMode::None => {}
         }
 
         let selected = app.cursor.selected().unwrap_or(0);
-        match key.code {
+        // Apply custom keybindings (config `[keys]`): translate a remapped char
+        // back to its canonical action char before the default match, so no
+        // handler arm needs to change. Only plain (no-modifier) chars are
+        // remappable; Ctrl-* chords are handled above and never rebound.
+        let key_code = match key.code {
+            KeyCode::Char(c) if key.modifiers.is_empty() => KeyCode::Char(app.keymap.translate(c)),
+            other => other,
+        };
+        match key_code {
             KeyCode::Char('q') => return Ok(app.exit),
             KeyCode::Char('?') => {
                 app.help = true;
@@ -3303,33 +3665,35 @@ fn event_loop(
             KeyCode::Char('e') if app.view == View::Files => {
                 match app.plan_edit(selected) {
                     Some(EditPlan::Decline(msg)) => app.message = msg,
-                    Some(EditPlan::Edit { path, name }) => match resolve_editor() {
-                        Some(editor) => {
-                            // Split so `EDITOR="code -w"` and `"nvim"` both work:
-                            // first token is the program, the rest are leading args,
-                            // then the file path last.
-                            let mut parts = editor.split_whitespace();
-                            let program = parts.next().unwrap_or("vi");
-                            let leading: Vec<&str> = parts.collect();
-                            // Suspend the TUI, hand the TTY to the editor, then resume.
-                            ratatui::restore();
-                            let status = std::process::Command::new(program)
-                                .args(&leading)
-                                .arg(&path)
-                                .status();
-                            *terminal = ratatui::init();
-                            terminal.clear()?;
-                            match status {
-                                Ok(_) => app.message = format!("edited {name}"),
-                                Err(err) => app.message = format!("editor exited: {err}"),
+                    Some(EditPlan::Edit { path, name }) => {
+                        match resolve_editor(app.editor.as_deref()) {
+                            Some(editor) => {
+                                // Split so `EDITOR="code -w"` and `"nvim"` both work:
+                                // first token is the program, the rest are leading args,
+                                // then the file path last.
+                                let mut parts = editor.split_whitespace();
+                                let program = parts.next().unwrap_or("vi");
+                                let leading: Vec<&str> = parts.collect();
+                                // Suspend the TUI, hand the TTY to the editor, then resume.
+                                ratatui::restore();
+                                let status = std::process::Command::new(program)
+                                    .args(&leading)
+                                    .arg(&path)
+                                    .status();
+                                *terminal = ratatui::init();
+                                terminal.clear()?;
+                                match status {
+                                    Ok(_) => app.message = format!("edited {name}"),
+                                    Err(err) => app.message = format!("editor exited: {err}"),
+                                }
+                                // The file (and repo dirty state) may have changed:
+                                // reload the listing and request a fleet/status refresh.
+                                reload_files(&mut app, jobs);
+                                request_refresh(&mut app, jobs);
                             }
-                            // The file (and repo dirty state) may have changed:
-                            // reload the listing and request a fleet/status refresh.
-                            reload_files(&mut app, jobs);
-                            request_refresh(&mut app, jobs);
+                            None => app.message = "no editor: set $EDITOR".to_string(),
                         }
-                        None => app.message = "no editor: set $EDITOR".to_string(),
-                    },
+                    }
                     None => {}
                 }
             }
@@ -3917,6 +4281,11 @@ pub fn render_snapshot<B: ratatui::backend::Backend>(
         errors: Vec::new(),
         error_seq: 0,
         watch: false,
+        compact_header: false,
+        refresh_secs: config::REFRESH_DEFAULT,
+        editor: None,
+        keymap: KeyMap::default(),
+        config_path: None,
     };
     terminal.draw(|frame| draw(frame, &mut app))?;
     Ok(())
@@ -3985,6 +4354,11 @@ pub fn render_file_tree<B: ratatui::backend::Backend>(
         errors: Vec::new(),
         error_seq: 0,
         watch: false,
+        compact_header: false,
+        refresh_secs: config::REFRESH_DEFAULT,
+        editor: None,
+        keymap: KeyMap::default(),
+        config_path: None,
     };
     terminal.draw(|frame| draw(frame, &mut app))?;
     Ok(())
@@ -3992,8 +4366,9 @@ pub fn render_file_tree<B: ratatui::backend::Backend>(
 
 fn draw(frame: &mut Frame, app: &mut App) {
     // On short terminals the full ~6-row header eats every row; collapse it to a
-    // single compact line so the body (data rows / detail) always has space.
-    let header_h = if frame.area().height < COMPACT_HEADER_HEIGHT {
+    // single compact line so the body (data rows / detail) always has space. The
+    // config `[ui].compact_header` opts into the same collapse at any height.
+    let header_h = if app.compact_header || frame.area().height < COMPACT_HEADER_HEIGHT {
         1
     } else {
         6
@@ -4045,6 +4420,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
     }
     if let InputMode::RefPicker { refs, sel, input } = &app.input {
         draw_ref_picker(frame, refs, *sel, input, app.busy.is_some());
+    }
+    if let InputMode::ThemePicker { sel } = &app.input {
+        draw_theme_picker(frame, *sel);
+    }
+    if let InputMode::EditorPicker { editors, sel } = &app.input {
+        draw_editor_picker(frame, editors, *sel);
     }
     if app.help {
         draw_help(frame, app.help_scroll);
@@ -4331,6 +4712,91 @@ fn draw_ref_picker(frame: &mut Frame, refs: &[RefEntry], sel: usize, input: &str
     );
 }
 
+/// The `:theme` picker popup: a bordered list of built-in themes with the
+/// active row highlighted. Modelled on the ref picker / actions menu popups.
+fn draw_theme_picker(frame: &mut Frame, sel: usize) {
+    let rows: Vec<(String, bool)> = theme::THEMES
+        .iter()
+        .enumerate()
+        .map(|(i, name)| ((*name).to_string(), i == sel))
+        .collect();
+    draw_list_picker(
+        frame,
+        " pick theme ",
+        &rows,
+        "j/k move · enter apply & save · esc cancel",
+    );
+}
+
+/// The `:editor` picker popup: PATH-resolvable editors with the active row
+/// highlighted.
+fn draw_editor_picker(frame: &mut Frame, editors: &[String], sel: usize) {
+    let rows: Vec<(String, bool)> = editors
+        .iter()
+        .enumerate()
+        .map(|(i, e)| (e.clone(), i == sel))
+        .collect();
+    draw_list_picker(
+        frame,
+        " pick editor ",
+        &rows,
+        "j/k move · enter set & save · esc cancel",
+    );
+}
+
+/// Shared bordered single-column list picker: one row per `(label, selected)`,
+/// the selected row highlighted, plus a dim hint footer.
+fn draw_list_picker(frame: &mut Frame, title: &str, rows: &[(String, bool)], hint: &str) {
+    let mut text: Vec<Line> = Vec::with_capacity(rows.len() + 2);
+    for (label, selected) in rows {
+        let marker = if *selected { "▍ " } else { "  " };
+        let style = if *selected {
+            Style::default()
+                .fg(theme::green())
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme::text())
+        };
+        text.push(Line::from(vec![
+            Span::styled(marker, Style::default().fg(theme::accent())),
+            Span::styled(label.clone(), style),
+        ]));
+    }
+    text.push(Line::raw(""));
+    text.push(Line::from(Span::styled(
+        format!(" {hint} "),
+        Style::default().fg(theme::dim()),
+    )));
+
+    let area = frame.area();
+    let width = area.width.min(40);
+    let height = u16::try_from(text.len() + 2)
+        .unwrap_or(u16::MAX)
+        .min(area.height);
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(Text::from(text)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme::teal()))
+                .title(Span::styled(
+                    title.to_string(),
+                    Style::default()
+                        .fg(theme::mauve())
+                        .add_modifier(Modifier::BOLD),
+                )),
+        ),
+        popup,
+    );
+}
+
 fn kv(key: &str, value: Span<'static>) -> Line<'static> {
     Line::from(vec![
         Span::styled(format!(" {key:<12}"), Style::default().fg(theme::dim())),
@@ -4359,8 +4825,34 @@ fn hint_cell_widths(hints: &[(&str, &str)]) -> (usize, usize) {
 /// even and sized to the widest cell; on narrow terminals the grid degrades to
 /// fewer columns (down to one). A blank in each cell keeps `<key> label`
 /// pairs from touching their neighbor.
-fn hint_grid(hints: &[(&'static str, &'static str)], width: u16) -> Vec<Line<'static>> {
-    let (key_w, label_w) = hint_cell_widths(hints);
+/// The view's key hints with any active custom keybindings applied, so the
+/// header advertises the ACTIVE binding rather than the default. A single-char
+/// hint token whose char is the default of a remapped action is rewritten to the
+/// user's char; compound tokens (`j/k`, `<>`) and multi-char tokens are left
+/// alone (those actions aren't remappable). `key_hints` itself stays static and
+/// authoritative for the invariant tests.
+fn active_hints(view: View, keymap: &KeyMap) -> Vec<(String, &'static str)> {
+    key_hints(view)
+        .iter()
+        .map(|(key, label)| {
+            let mut chars = key.chars();
+            let rebound = match (chars.next(), chars.next()) {
+                (Some(c), None) => REMAPPABLE
+                    .iter()
+                    .find(|a| a.canonical == c)
+                    .and_then(|a| keymap.key_for(a.name))
+                    .filter(|&nc| nc != c)
+                    .map(|nc| nc.to_string()),
+                _ => None,
+            };
+            (rebound.unwrap_or_else(|| (*key).to_string()), *label)
+        })
+        .collect()
+}
+
+fn hint_grid<K: AsRef<str>>(hints: &[(K, &'static str)], width: u16) -> Vec<Line<'static>> {
+    let widths: Vec<(&str, &str)> = hints.iter().map(|(k, l)| (k.as_ref(), *l)).collect();
+    let (key_w, label_w) = hint_cell_widths(&widths);
     // One extra leading space + one trailing gutter space keeps cells apart.
     let cell_w = key_w + 1 + label_w + 1;
     let cols = (usize::from(width).saturating_sub(1) / cell_w.max(1)).max(1);
@@ -4369,6 +4861,7 @@ fn hint_grid(hints: &[(&'static str, &'static str)], width: u16) -> Vec<Line<'st
     for row in hints.chunks(cols) {
         let mut spans = Vec::new();
         for (key, label) in row {
+            let key = key.as_ref();
             let padded_key = format!("{:<key_w$}", format!("<{key}>"));
             spans.push(Span::styled(
                 format!(" {padded_key}"),
@@ -4538,7 +5031,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     // fill the rows above with as many hint-grid lines as fit. This guarantees
     // the pointer is visible even when the grid alone would overflow the header
     // (narrow widths produce many rows that would otherwise push it out).
-    let mut key_lines = hint_grid(key_hints(app.view), columns[1].width);
+    let mut key_lines = hint_grid(&active_hints(app.view, &app.keymap), columns[1].width);
     let reserved = 1usize;
     let room = usize::from(columns[1].height).saturating_sub(reserved);
     key_lines.truncate(room);
@@ -5907,6 +6400,14 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
             " pick ref — j/k move, type a ref/SHA, enter picks, esc cancels",
             Style::default().fg(theme::dim()),
         ),
+        (InputMode::ThemePicker { .. }, _) => Line::styled(
+            " pick theme — j/k move, enter applies & saves, esc cancels",
+            Style::default().fg(theme::dim()),
+        ),
+        (InputMode::EditorPicker { .. }, _) => Line::styled(
+            " pick editor — j/k move, enter sets & saves, esc cancels",
+            Style::default().fg(theme::dim()),
+        ),
         (InputMode::None, Some(label)) => Line::from(vec![
             Span::styled(
                 format!(" {} ", SPINNER[app.spinner]),
@@ -6232,6 +6733,11 @@ mod tests {
             errors: Vec::new(),
             error_seq: 0,
             watch: false,
+            compact_header: false,
+            refresh_secs: config::REFRESH_DEFAULT,
+            editor: None,
+            keymap: KeyMap::default(),
+            config_path: None,
         }
     }
 
@@ -7006,7 +7512,8 @@ mod tests {
 
     #[test]
     fn theme_list_covers_all_builtins() {
-        assert_eq!(THEMES.len(), 6);
+        assert_eq!(THEMES.len(), 7);
+        assert!(THEMES.contains(&"classic"));
         for name in THEMES {
             assert!(Theme::by_name(name).is_some(), "missing theme {name}");
         }
@@ -7015,6 +7522,7 @@ mod tests {
     #[test]
     fn theme_command_switches() {
         let mut app = fleet_app();
+        app.config_path = Some(temp_config_path("theme-switch"));
         let (tx, _rx) = channel();
         run_command_bar(&mut app, &tx, "theme dracula");
         assert!(app.message.contains("dracula"));
@@ -7030,11 +7538,11 @@ mod tests {
     }
 
     #[test]
-    fn theme_command_bare_lists() {
+    fn theme_command_bare_opens_picker() {
         let mut app = fleet_app();
         let (tx, _rx) = channel();
         run_command_bar(&mut app, &tx, "theme");
-        assert!(app.message.contains("catppuccin"));
+        assert!(matches!(app.input, InputMode::ThemePicker { .. }));
     }
 
     fn gov() -> Governance {
@@ -7616,31 +8124,52 @@ mod tests {
     }
 
     #[test]
-    fn pick_editor_prefers_visual_then_editor_then_candidates() {
-        // $VISUAL wins over $EDITOR.
+    fn resolve_editor_precedence_env_then_config_then_candidates() {
+        use config::resolve_editor_with;
+        let never = |_: &str| false;
+        let always = |_: &str| true;
+
+        // $VISUAL wins over everything.
         assert_eq!(
-            pick_editor(Some("emacs".into()), Some("nano".into()), &["vi"]),
+            resolve_editor_with(
+                Some("code"),
+                Some("emacs".into()),
+                Some("nano".into()),
+                &["vi"],
+                never
+            ),
             Some("emacs".to_string())
         );
-        // Empty/whitespace $VISUAL is skipped; $EDITOR is used.
+        // Empty/whitespace $VISUAL is skipped; $EDITOR is used (still over config).
         assert_eq!(
-            pick_editor(Some("   ".into()), Some("nano".into()), &["vi"]),
+            resolve_editor_with(
+                Some("code"),
+                Some("   ".into()),
+                Some("nano".into()),
+                &["vi"],
+                never
+            ),
             Some("nano".to_string())
         );
-        // Neither set: fall back to the first candidate that resolves on PATH.
-        // "definitely-not-a-real-binary" never resolves; "sh" does on any unix.
-        let picked = pick_editor(None, None, &["definitely-not-a-real-binary", "sh"]);
-        #[cfg(unix)]
-        assert_eq!(picked, Some("sh".to_string()));
-        #[cfg(not(unix))]
-        let _ = picked;
-        // No candidate resolvable → None (the caller adds the `vi` last resort).
+        // No env: the config editor wins over the PATH probe.
         assert_eq!(
-            pick_editor(None, None, &["definitely-not-a-real-binary"]),
+            resolve_editor_with(Some("code"), None, None, &["vi"], always),
+            Some("code".to_string())
+        );
+        // No env, no config: fall back to the first candidate that resolves.
+        assert_eq!(
+            resolve_editor_with(None, None, None, &["definitely-not-real", "vi"], |c| c
+                == "vi"),
+            Some("vi".to_string())
+        );
+        // Nothing resolvable → None (the caller adds the `vi` last resort).
+        assert_eq!(
+            resolve_editor_with(None, None, None, &["definitely-not-real"], never),
             None
         );
         // resolve_editor never returns None thanks to the `vi` fallback.
-        assert!(resolve_editor().is_some());
+        assert!(resolve_editor(None).is_some());
+        assert!(resolve_editor(Some("nano")).is_some());
     }
 
     #[test]
@@ -8334,5 +8863,322 @@ mod tests {
         assert!(!key_hinted_elsewhere(View::Fleet, 'z'));
         // `f` is hinted in Prs → not flagged there.
         assert!(!key_hinted_elsewhere(View::Prs, 'f'));
+    }
+
+    // ---- config, classic theme, keymap, pickers ---------------------------
+
+    /// A unique temp config path for a persistence test, so the pickers never
+    /// touch the developer's real `~/.config/haw/config.toml`. Injected into
+    /// `App::config_path`. The file is removed first so `load` sees defaults.
+    fn temp_config_path(tag: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!(
+            "haw-cfg-{}-{tag}-{:?}.toml",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_file(&p);
+        p
+    }
+
+    #[test]
+    fn classic_theme_is_registered_and_listed() {
+        assert!(Theme::by_name("classic").is_some());
+        assert!(Theme::by_name("CLASSIC").is_some());
+        assert!(THEMES.contains(&"classic"));
+        // Distinct from catppuccin (the previous default).
+        assert_ne!(Theme::classic(), Theme::catppuccin());
+    }
+
+    #[test]
+    fn classic_theme_renders_fleet_without_panic() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        theme::set(Theme::classic());
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        let app = fleet_app();
+        // Reuse the real draw path via a local App draw.
+        let mut app = app;
+        term.draw(|f| draw(f, &mut app)).unwrap();
+        // A non-empty buffer with the fleet's repo names proves it rendered.
+        let content = buffer_text(term.backend().buffer());
+        assert!(content.contains("kernel"), "classic render missing repos");
+        theme::set(Theme::catppuccin());
+    }
+
+    fn buffer_text(buf: &ratatui::buffer::Buffer) -> String {
+        let mut s = String::new();
+        for cell in buf.content() {
+            s.push_str(cell.symbol());
+        }
+        s
+    }
+
+    #[test]
+    fn config_parses_all_fields() {
+        let toml = r#"
+            [ui]
+            theme = "classic"
+            editor = "nvim"
+            compact_header = true
+            refresh_secs = 12
+            [keys]
+            sync = "S"
+            goto = "G"
+        "#;
+        let cfg = Config::parse(toml).unwrap();
+        assert_eq!(cfg.ui.theme.as_deref(), Some("classic"));
+        assert_eq!(cfg.ui.editor.as_deref(), Some("nvim"));
+        assert!(cfg.ui.compact_header);
+        assert_eq!(cfg.refresh_secs(), 12);
+        assert_eq!(cfg.keys.sync.as_deref(), Some("S"));
+        assert_eq!(cfg.keys.goto.as_deref(), Some("G"));
+    }
+
+    #[test]
+    fn config_missing_file_is_defaults() {
+        let missing = std::env::temp_dir().join("haw-cfg-does-not-exist-xyz.toml");
+        let _ = std::fs::remove_file(&missing);
+        let cfg = Config::load_from(&missing).unwrap();
+        assert_eq!(cfg, Config::default());
+        assert_eq!(cfg.refresh_secs(), config::REFRESH_DEFAULT);
+    }
+
+    #[test]
+    fn config_partial_and_unknown_keys_tolerated() {
+        // Only one field set, plus an unknown key and an unknown table.
+        let toml = r#"
+            [ui]
+            theme = "nord"
+            bogus_key = 42
+            [unknown_table]
+            whatever = true
+        "#;
+        let cfg = Config::parse(toml).unwrap();
+        assert_eq!(cfg.ui.theme.as_deref(), Some("nord"));
+        assert!(cfg.ui.editor.is_none());
+        assert!(!cfg.ui.compact_header);
+    }
+
+    #[test]
+    fn config_refresh_clamped_to_range() {
+        let lo = Config::parse("[ui]\nrefresh_secs = 0\n").unwrap();
+        assert_eq!(lo.refresh_secs(), config::REFRESH_MIN);
+        let hi = Config::parse("[ui]\nrefresh_secs = 9999\n").unwrap();
+        assert_eq!(hi.refresh_secs(), config::REFRESH_MAX);
+    }
+
+    #[test]
+    fn config_roundtrips_through_save_and_load() {
+        let path = std::env::temp_dir().join(format!("haw-cfg-rt-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let mut cfg = Config::default();
+        cfg.ui.theme = Some("gruvbox".to_string());
+        cfg.ui.editor = Some("hx".to_string());
+        cfg.ui.compact_header = true;
+        cfg.ui.refresh_secs = Some(20);
+        cfg.save_to(&path).unwrap();
+        let back = Config::load_from(&path).unwrap();
+        assert_eq!(back.ui.theme.as_deref(), Some("gruvbox"));
+        assert_eq!(back.ui.editor.as_deref(), Some("hx"));
+        assert!(back.ui.compact_header);
+        assert_eq!(back.refresh_secs(), 20);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn resolve_theme_precedence_env_over_config_over_default() {
+        use config::resolve_theme;
+        // NO_COLOR forces monochrome regardless of everything else.
+        assert_eq!(
+            resolve_theme(true, Some("nord"), Some("dracula")),
+            Theme::monochrome()
+        );
+        // Env HAW_THEME wins over config.
+        assert_eq!(
+            resolve_theme(false, Some("nord"), Some("dracula")),
+            Theme::nord()
+        );
+        // Config used when env unset.
+        assert_eq!(
+            resolve_theme(false, None, Some("dracula")),
+            Theme::dracula()
+        );
+        // Config classic honored.
+        assert_eq!(
+            resolve_theme(false, None, Some("classic")),
+            Theme::classic()
+        );
+        // Unknown names fall through to the default.
+        assert_eq!(
+            resolve_theme(false, Some("zzz"), Some("qqq")),
+            Theme::catppuccin()
+        );
+        assert_eq!(resolve_theme(false, None, None), Theme::catppuccin());
+    }
+
+    #[test]
+    fn keymap_valid_remap_applies() {
+        let keys = config::KeyConfig {
+            sync: Some("S".to_string()),
+            goto: Some("G".to_string()),
+            ..Default::default()
+        };
+        let km = KeyMap::from_config(&keys);
+        assert!(
+            km.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            km.warnings
+        );
+        // Pressing the remapped char resolves to the canonical action char.
+        assert_eq!(km.translate('S'), 's');
+        assert_eq!(km.translate('G'), 'g');
+        // Un-remapped chars pass through unchanged.
+        assert_eq!(km.translate('x'), 'x');
+        // Hints reflect the ACTIVE binding.
+        assert_eq!(km.key_for("sync"), Some('S'));
+        assert_eq!(km.key_for("goto"), Some('G'));
+        assert_eq!(km.key_for("run"), Some('r'));
+    }
+
+    #[test]
+    fn keymap_rejects_frozen_global_target() {
+        // Try to bind sync onto `j` (a frozen global) and onto `:`.
+        let keys = config::KeyConfig {
+            sync: Some("j".to_string()),
+            goto: Some(":".to_string()),
+            run: Some("1".to_string()),
+            ..Default::default()
+        };
+        let km = KeyMap::from_config(&keys);
+        assert_eq!(km.translate('j'), 'j', "must not shadow frozen global j");
+        assert_eq!(km.translate(':'), ':');
+        assert_eq!(km.translate('1'), '1');
+        assert_eq!(km.warnings.len(), 3, "each reserved-target remap warns");
+    }
+
+    #[test]
+    fn keymap_rejects_duplicate_and_default_collision() {
+        // `sync` onto `z`, `goto` also onto `z` → second is a duplicate.
+        let dup = config::KeyConfig {
+            sync: Some("z".to_string()),
+            goto: Some("z".to_string()),
+            ..Default::default()
+        };
+        let km = KeyMap::from_config(&dup);
+        assert_eq!(km.translate('z'), 's', "first z wins (sync)");
+        assert_eq!(km.warnings.len(), 1, "the duplicate goto->z warns");
+
+        // `sync` onto `f` collides with the default `files` key.
+        let collide = config::KeyConfig {
+            sync: Some("f".to_string()),
+            ..Default::default()
+        };
+        let km = KeyMap::from_config(&collide);
+        assert_eq!(km.translate('f'), 'f', "must not steal the files default");
+        assert_eq!(km.warnings.len(), 1);
+    }
+
+    #[test]
+    fn keymap_multichar_and_fetch_rejected() {
+        let keys = config::KeyConfig {
+            sync: Some("sync".to_string()), // multi-char
+            fetch: Some("z".to_string()),   // not a key action
+            ..Default::default()
+        };
+        let km = KeyMap::from_config(&keys);
+        assert_eq!(km.translate('z'), 'z');
+        assert_eq!(km.warnings.len(), 2);
+    }
+
+    #[test]
+    fn active_hints_reflect_remap_in_header() {
+        let keys = config::KeyConfig {
+            sync: Some("S".to_string()),
+            ..Default::default()
+        };
+        let km = KeyMap::from_config(&keys);
+        let hints = active_hints(View::Fleet, &km);
+        // The Fleet `s sync` hint now advertises `S`.
+        assert!(
+            hints.iter().any(|(k, l)| k == "S" && *l == "sync"),
+            "active hints should show the remapped S: {hints:?}"
+        );
+        assert!(
+            !hints.iter().any(|(k, _)| k == "s"),
+            "the default s hint should be rewritten"
+        );
+    }
+
+    #[test]
+    fn remapped_key_triggers_action_in_handler() {
+        // A remap that targets `S` translates to `s` (sync) via the same path the
+        // event loop uses just before its default match.
+        let km = KeyMap::from_config(&config::KeyConfig {
+            sync: Some("S".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(km.translate('S'), 's');
+        // Frozen globals are never translated even if a bogus remap tried to.
+        let km2 = KeyMap::from_config(&config::KeyConfig {
+            watch: Some("q".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(km2.translate('q'), 'q');
+    }
+
+    #[test]
+    fn editor_command_sets_and_persists_selection() {
+        let path = temp_config_path("editor-set");
+        let mut app = fleet_app();
+        app.config_path = Some(path.clone());
+        let (tx, _rx) = channel();
+        // `:editor nvim` sets + persists directly.
+        run_command_bar(&mut app, &tx, "editor nvim");
+        assert_eq!(app.editor.as_deref(), Some("nvim"));
+        assert!(app.message.contains("nvim"));
+        // The persisted config reflects it.
+        let cfg = Config::load_from(&path).unwrap();
+        assert_eq!(cfg.ui.editor.as_deref(), Some("nvim"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn editor_bare_command_opens_picker_or_reports() {
+        let mut app = fleet_app();
+        let (tx, _rx) = channel();
+        run_command_bar(&mut app, &tx, "editor");
+        // Either a picker opened (editors on PATH) or a helpful message when none.
+        assert!(
+            matches!(app.input, InputMode::EditorPicker { .. })
+                || app.message.contains("no known editors")
+        );
+    }
+
+    #[test]
+    fn theme_picker_selection_applies_and_serializes() {
+        // Pure apply+serialize step: choosing a theme persists `[ui].theme`.
+        let path = std::env::temp_dir().join(format!("haw-cfg-th-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let mut cfg = Config::default();
+        cfg.ui.theme = Some("dracula".to_string());
+        cfg.save_to(&path).unwrap();
+        let back = Config::load_from(&path).unwrap();
+        assert_eq!(back.ui.theme.as_deref(), Some("dracula"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn compact_command_toggles_and_persists() {
+        let path = temp_config_path("compact");
+        let mut app = fleet_app();
+        app.config_path = Some(path.clone());
+        assert!(!app.compact_header);
+        let (tx, _rx) = channel();
+        run_command_bar(&mut app, &tx, "compact");
+        assert!(app.compact_header);
+        assert!(app.message.contains("compact"));
+        let cfg = Config::load_from(&path).unwrap();
+        assert!(cfg.ui.compact_header);
+        let _ = std::fs::remove_file(&path);
     }
 }

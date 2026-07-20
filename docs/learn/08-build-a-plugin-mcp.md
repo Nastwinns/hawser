@@ -769,6 +769,11 @@ plugin bakes the guardrails in:
 
 You can now extend haw in any language and give an LLM safe, context-rich tools. From here:
 
+- Copy a [starter plugin](../PLUGINS.md#starter-example-plugins) as a template —
+  `haw-fleet-status`, `haw-docker`, `haw-web`, and `haw-k8s` under
+  [`examples/plugins/`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins)
+  cover common dev/devops/web chores in POSIX sh or Python stdlib. Prefer your
+  editor? Try the [Neovim integration](../PLUGINS.md#editor-integration--neovim).
 - Browse the [Plugins reference](../PLUGINS.md) — lifecycle phases, the community index, and
   the language bindings.
 - Study more real manifests in the [Examples index](../EXAMPLES.md).

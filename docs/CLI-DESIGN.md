@@ -254,14 +254,55 @@ the TUI doubles as a way to discover the CLI.
 | `:problems` | toggle the problems-only filter (⚠ dirty/drift/behind/missing) |
 | `:watch` | toggle watch auto-refresh (same as `w`) |
 | `:<repo>` | jump the fleet cursor to a repo whose name matches |
-| `:theme [NAME]` | switch skin live (no arg lists the built-ins) |
+| `:theme [NAME]` | switch skin live (no arg opens the theme picker; a chosen theme persists) |
+| `:editor [CMD]` | set the `e`-key editor (no arg opens a picker of editors on `PATH`; persists) |
+| `:compact` | toggle the collapsed one-line header (persists) |
 | `:help` | help overlay |
 
 **Themes / skins**
 
-Six built-in skins: `catppuccin` (default), `dracula`, `nord`, `gruvbox`,
-`solarized`, `monochrome`. `NO_COLOR` forces `monochrome`; `HAW_THEME=<name>` selects
-one at startup; `:theme <name>` switches live.
+Seven built-in skins: `classic`, `catppuccin` (default), `dracula`, `nord`,
+`gruvbox`, `solarized`, `monochrome`. `classic` is a neutral 16-color-ANSI look
+that reads on both light and dark terminals. `:theme` with no argument opens an
+interactive picker (highlighting the active skin); pressing `enter` applies the
+skin live **and** persists it to `[ui].theme` in the config. `:theme <name>`
+still switches (and persists) directly.
+
+**User config — `~/.config/haw/config.toml`**
+
+Optional. A missing file, a partial table, or an unknown key all fall back to
+sane defaults (the cockpit never errors on absence). `HAW_CONFIG` overrides the
+path.
+
+```toml
+[ui]
+theme = "classic"        # startup theme (a built-in name)
+editor = "nvim"          # editor for the `e` key
+compact_header = false   # start with the header collapsed
+refresh_secs = 5         # idle auto-refresh cadence (clamped 2–60)
+
+[keys]                   # remap a SAFE subset of action keys (single chars)
+sync = "s"               # remappable: sync, goto, run, shell, files, problems, watch
+goto = "g"
+```
+
+Precedence:
+
+- **Theme**: `NO_COLOR` (non-empty) → `monochrome`; else `HAW_THEME` (env) if it
+  names a built-in; else `[ui].theme`; else the default `catppuccin`.
+- **Editor**: `$VISUAL` → `$EDITOR` (env always wins) → `[ui].editor` → the first
+  of `nvim`/`vim`/`vi` on `PATH` → `vi`.
+
+**Custom keybindings (`[keys]`)**
+
+Each entry maps an action name to a single key char. Only a safe subset is
+remappable — `sync`, `goto`, `run`, `shell`, `files`, `problems`, `watch`. The
+frozen globals (`j`, `k`, `:`, `/`, `?`, `q`, `b`, `space`, `g`, `w`, and the
+digit view-jumps `1`–`7`) can never be the **target** of a remap; a remap that
+targets a global, duplicates another remap, collides with a default action key,
+or isn't a single char is dropped with a startup warning. When a remap is
+active, the header hints show the **active** key so they stay honest. The
+original default key keeps working too (a remap adds, never removes).
 
 ## Shipped since this design was written
 
@@ -280,8 +321,12 @@ one at startup; `:theme <name>` switches live.
   (`<`/`>`/`.`), marks + bulk `s`/`r`, drill-ins for repos/PRs/CI runs, the `a`
   actions menu (merge / approve / checkout in PR/MR; request-PR / land in Changeset),
   fleet-wide governance (`6`) view, the file browser (`f`) with a navigable tree (`T`),
-  ref picker (`r`), and local edit (`e`), and six themes (`HAW_THEME`, `NO_COLOR`,
-  live `:theme`).
+  ref picker (`r`), and local edit (`e`), and seven themes including `classic`
+  (`HAW_THEME`, `NO_COLOR`, live `:theme` with an interactive picker).
+- TUI config file `~/.config/haw/config.toml`: `[ui]` startup theme / editor /
+  `compact_header` / `refresh_secs`, plus `[keys]` custom keybindings for a safe
+  subset of action keys. Interactive `:theme` / `:editor` pickers persist a
+  choice; `:compact` toggles the collapsed header.
 
 ## Planned (not yet implemented)
 

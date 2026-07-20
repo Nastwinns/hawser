@@ -36,6 +36,30 @@
       "crate": "haw-git-gate",
       "git": "https://github.com/Nastwinns/hawser",
       "description": "secret / hygiene pre-commit & lifecycle gate"
+    },
+    {
+      "name": "fleet-status",
+      "crate": "haw-fleet-status",
+      "git": "https://github.com/Nastwinns/hawser",
+      "description": "compact per-repo health panel (branch, dirty?, ahead/behind) — examples/plugins/haw-fleet-status"
+    },
+    {
+      "name": "docker",
+      "crate": "haw-docker",
+      "git": "https://github.com/Nastwinns/hawser",
+      "description": "report Dockerfile/compose assets per repo (hadolint/docker if present) — examples/plugins/haw-docker"
+    },
+    {
+      "name": "web",
+      "crate": "haw-web",
+      "git": "https://github.com/Nastwinns/hawser",
+      "description": "count/validate HTML & flag CSS assets per repo (stdlib only) — examples/plugins/haw-web"
+    },
+    {
+      "name": "k8s",
+      "crate": "haw-k8s",
+      "git": "https://github.com/Nastwinns/hawser",
+      "description": "find & client-side-validate Kubernetes manifests per repo — examples/plugins/haw-k8s"
     }
   ]
 }

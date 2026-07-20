@@ -1,0 +1,201 @@
+#!/bin/sh
+# haw-docker — a DevOps starter plugin for a haw workspace.
+#
+# For every repo in the haw.plugin/1 context it looks for a Dockerfile or a
+# compose file (compose.yaml / compose.yml / docker-compose.yml) and reports:
+#   - whether the repo is "containerized" at all
+#   - if `hadolint` is installed: lint the Dockerfile (warnings surfaced)
+#   - if `docker` is installed: whether a matching image already exists locally
+#
+# Degrades gracefully: with no docker/hadolint it still reports which repos have
+# container assets. Read-only — it NEVER builds, pulls, or runs anything.
+#
+# Faces (all read the haw.plugin/1 context from $HAW_JSON, else stdin):
+#   haw docker                 human summary
+#   haw docker --format json   haw.plugin.report/1 document
+#   render intent (HAW_RENDER=1) haw.plugin.view/1 panel
+set -eu
+
+PLUGIN="docker"
+
+usage() {
+	cat <<'EOF'
+haw-docker — report container assets (Dockerfile / compose) per repo, read-only
+
+USAGE:
+    haw docker [--format json]
+
+OPTIONS:
+    -h, --help        Print this help
+        --format json Emit a haw.plugin.report/1 document
+
+Optional tools used when present (never required):
+    docker    — check whether a local image matching the repo name exists
+    hadolint  — lint each Dockerfile
+
+Read-only: this plugin never builds, pulls, tags, or runs a container.
+EOF
+}
+
+read_ctx() {
+	if [ -n "${HAW_JSON:-}" ]; then
+		printf '%s' "$HAW_JSON"
+	elif [ ! -t 0 ]; then
+		cat
+	else
+		printf ''
+	fi
+}
+
+repo_pairs() {
+	tr '{' '\n' | awk '
+		/"name"[[:space:]]*:/ {
+			n = $0; sub(/.*"name"[[:space:]]*:[[:space:]]*"/, "", n); sub(/".*/, "", n)
+			p = $0; sub(/.*"path"[[:space:]]*:[[:space:]]*"/, "", p); sub(/".*/, "", p)
+			if (n != "" && p != "" && n != $0 && p != $0) print n "\t" p
+		}'
+}
+
+json_escape() {
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g'
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Echoes: "<assets>\t<detail>" describing container status of repo at $1.
+repo_docker() {
+	path="$1"
+	name="$2"
+	assets=""
+	[ -f "$path/Dockerfile" ] && assets="Dockerfile"
+	for c in compose.yaml compose.yml docker-compose.yml docker-compose.yaml; do
+		if [ -f "$path/$c" ]; then
+			if [ -z "$assets" ]; then assets="$c"; else assets="$assets,$c"; fi
+		fi
+	done
+	if [ -z "$assets" ]; then
+		printf '%s\t%s' "none" "no container assets"
+		return 0
+	fi
+	detail=""
+	# hadolint on the Dockerfile, if available.
+	if [ -f "$path/Dockerfile" ] && have hadolint; then
+		if hadolint "$path/Dockerfile" >/dev/null 2>&1; then
+			detail="hadolint:ok"
+		else
+			issues=$(hadolint "$path/Dockerfile" 2>&1 | grep -c . || true)
+			detail="hadolint:${issues}-issues"
+		fi
+	fi
+	# Does a local image tagged with the repo name exist? (read-only lookup)
+	if have docker; then
+		if docker images --format '{{.Repository}}' 2>/dev/null | grep -qx "$name"; then
+			img="image:present"
+		else
+			img="image:absent"
+		fi
+		if [ -z "$detail" ]; then detail="$img"; else detail="$detail $img"; fi
+	fi
+	[ -z "$detail" ] && detail="assets-only (install docker/hadolint for checks)"
+	printf '%s\t%s' "$assets" "$detail"
+}
+
+emit_report() {
+	pairs="$1"
+	findings=""
+	count=0
+	containerized=0
+	if [ -n "$pairs" ]; then
+		while IFS='	' read -r name path; do
+			[ -z "$name" ] && continue
+			count=$((count + 1))
+			res=$(repo_docker "$path" "$name")
+			assets=$(printf '%s' "$res" | cut -f1)
+			detail=$(printf '%s' "$res" | cut -f2)
+			if [ "$assets" = "none" ]; then
+				level="info"
+			else
+				containerized=$((containerized + 1))
+				case "$detail" in
+				*issues*) level="warn" ;;
+				*) level="info" ;;
+				esac
+			fi
+			msg=$(printf '%s: %s [%s]' "$name" "$assets" "$detail" | json_escape)
+			entry=$(printf '{"level":"%s","message":"%s"}' "$level" "$msg")
+			if [ -z "$findings" ]; then findings="$entry"; else findings="$findings,$entry"; fi
+		done <<EOF
+$pairs
+EOF
+	fi
+	summary=$(printf '%d containerized of %d repo(s)' "$containerized" "$count" | json_escape)
+	printf '{"schema":"haw.plugin.report/1","plugin":"%s","ok":true,"summary":"%s","findings":[%s]}\n' \
+		"$PLUGIN" "$summary" "$findings"
+}
+
+emit_view() {
+	pairs="$1"
+	lines=""
+	if [ -z "$pairs" ]; then
+		lines='"no repos in this workspace"'
+	else
+		while IFS='	' read -r name path; do
+			[ -z "$name" ] && continue
+			res=$(repo_docker "$path" "$name")
+			assets=$(printf '%s' "$res" | cut -f1)
+			detail=$(printf '%s' "$res" | cut -f2)
+			line=$(printf '%-16s %-24s %s' "$name" "$assets" "$detail" | json_escape)
+			entry=$(printf '"%s"' "$line")
+			if [ -z "$lines" ]; then lines="$entry"; else lines="$lines,$entry"; fi
+		done <<EOF
+$pairs
+EOF
+	fi
+	printf '{"schema":"haw.plugin.view/1","title":"docker — container assets","lines":[%s]}\n' "$lines"
+}
+
+emit_human() {
+	pairs="$1"
+	if [ -z "$pairs" ]; then
+		echo "haw-docker: run me inside a haw workspace with repos."
+		return 0
+	fi
+	have docker || echo "note: docker not installed — reporting assets only."
+	printf '%-16s %-24s %s\n' "REPO" "ASSETS" "DETAIL"
+	while IFS='	' read -r name path; do
+		[ -z "$name" ] && continue
+		res=$(repo_docker "$path" "$name")
+		assets=$(printf '%s' "$res" | cut -f1)
+		detail=$(printf '%s' "$res" | cut -f2)
+		printf '%-16s %-24s %s\n' "$name" "$assets" "$detail"
+	done <<EOF
+$pairs
+EOF
+}
+
+FORMAT=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--format)
+		FORMAT="${2:-}"
+		shift
+		;;
+	*) ;;
+	esac
+	shift
+done
+
+CTX=$(read_ctx)
+PAIRS=$(printf '%s' "$CTX" | repo_pairs || true)
+
+if [ "$FORMAT" = "json" ]; then
+	emit_report "$PAIRS"
+elif [ "${HAW_RENDER:-}" = "1" ]; then
+	emit_view "$PAIRS"
+else
+	emit_human "$PAIRS"
+fi

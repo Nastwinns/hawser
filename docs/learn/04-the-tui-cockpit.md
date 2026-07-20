@@ -186,9 +186,33 @@ Learn one, know both. `:name` also jumps the cursor to a repo by name.
 - **`:errors`** (`:err`) — the **Errors** view: a rolling log of this session's failures, so
   a transient error never scrolls away before you can read it.
 
-**Themes.** Six built-in skins — `catppuccin` (default), `dracula`, `nord`, `gruvbox`,
-`solarized`, `monochrome`. Switch live with `:theme nord`, set one at startup with
-`HAW_THEME=nord haw`, and `NO_COLOR` forces `monochrome`.
+**Themes.** Seven built-in skins — `classic`, `catppuccin` (default), `dracula`, `nord`,
+`gruvbox`, `solarized`, `monochrome`. `classic` is a neutral, standard-ANSI look that
+reads on light and dark terminals alike. Type `:theme` with **no argument** to open an
+interactive picker (`j`/`k` to move, `Enter` to apply); the chosen skin is applied live
+**and** saved to your config. `:theme nord` still switches directly. Set one at startup
+with `HAW_THEME=nord haw`, and `NO_COLOR` forces `monochrome`.
+
+**Make it yours — `~/.config/haw/config.toml`.** Optional and forgiving (a missing or
+partial file just uses defaults). Set a startup theme, the `e`-key editor, a collapsed
+header, and the idle-refresh cadence — plus remap a safe subset of action keys:
+
+```toml
+[ui]
+theme = "classic"        # startup skin
+editor = "nvim"          # the `e` key's editor ($VISUAL/$EDITOR still win)
+compact_header = false   # start with the one-line header
+refresh_secs = 5         # idle auto-refresh cadence (2–60)
+
+[keys]                   # remap: sync, goto, run, shell, files, problems, watch
+sync = "s"
+```
+
+The pickers write this file for you: `:editor` (no arg) lists the editors on your `PATH`,
+and `:compact` toggles the collapsed header — each persists your choice. The frozen
+globals (`j`, `k`, `:`, `/`, `?`, `q`, `b`, `space`, `g`, `w`, digits) can't be rebound;
+an invalid remap is dropped with a startup note, and the header hints always show the
+key that's actually live.
 
 Press **`?`** any time for the help overlay, and `q` (or `Ctrl-C`) to quit.
 
@@ -224,7 +248,9 @@ No workspace or network needed — the demo controller has everything to poke at
 - File browser (`f`): `T` toggles tree, `r` picks a branch/tag/SHA (read any ref, local or
   forge, no checkout), `e` edits locally, `R` toggles local ⇄ forge.
 - `:` is a command bar (palette) mirroring the CLI; `:plugins` and `:errors` reach those
-  views; six themes via `:theme` / `HAW_THEME`.
+  views; seven themes (incl. `classic`) via `:theme` / `HAW_THEME`, an interactive
+  `:theme`/`:editor` picker, and a `~/.config/haw/config.toml` for themes, editor,
+  display options, and custom keybindings.
 
 ## 👉 Next
 

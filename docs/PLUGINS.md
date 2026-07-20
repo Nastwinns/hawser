@@ -428,6 +428,38 @@ Thin reference bindings mirror those schemas so you don't hand-roll the JSON:
 For a curated list of existing plugins to install or learn from, see
 [AWESOME-HAW-PLUGINS.md](https://github.com/Nastwinns/hawser/blob/main/AWESOME-HAW-PLUGINS.md).
 
+## Starter example plugins
+
+The [`examples/plugins/`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins)
+directory ships small, **runnable** starters — zero to light dependencies, POSIX
+`sh` or Python 3 stdlib, all **read-only / dry-run** by default. Each is a real
+`haw-<name>` executable with `--help`, `--format json` (a `haw.plugin.report/1`),
+and the cockpit render intent (a `haw.plugin.view/1`). Copy one onto your `PATH`
+and read it as a template.
+
+| Plugin | Lang | What it does / how to try it |
+| --- | --- | --- |
+| [`haw-fleet-status`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-fleet-status) | POSIX sh | Compact per-repo health panel — branch, dirty?, ahead/behind. Pure git, zero deps. `haw fleet-status` |
+| [`haw-docker`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-docker) | POSIX sh | Reports `Dockerfile`/compose assets per repo; lints with `hadolint` and checks local images with `docker` when present (degrades gracefully). `haw docker` |
+| [`haw-web`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-web) | Python 3 | Counts/validates `*.html` (doctype, title, tag balance), flags `*.css`, reports sizes. Stdlib only. `haw web` |
+| [`haw-k8s`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-k8s) | POSIX sh | Finds `*.yaml` under `k8s/`/`deploy/`/`manifests/` and validates each with `kubectl apply --dry-run=client` (offline; never touches a cluster). `haw k8s` |
+| [`haw-commit-ai`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai) | Python 3 | Drafts commit/PR text from your changeset — and doubles as an MCP server so Claude reads the diffs. `haw commit-ai` |
+
+### Editor integration — Neovim
+
+[`examples/nvim`](https://github.com/Nastwinns/hawser/tree/main/examples/nvim)
+(`haw.nvim`) is a small, dependency-free Lua plugin that runs haw from inside
+Neovim by **shelling the `haw` binary** — no server:
+
+- `:HawSync` — run `haw sync`, echo the result.
+- `:HawStatus` — `haw status` in a scratch buffer.
+- `:HawDash` — open `haw dash` (the TUI cockpit) in a terminal split.
+- `:HawFleet` — list the fleet (repo / branch / state) in a scratch buffer,
+  parsed from `haw status --format json`.
+
+Install with lazy.nvim / packer / native `:packadd` — see the
+[README](https://github.com/Nastwinns/hawser/tree/main/examples/nvim#readme).
+
 ## Conventions
 
 - **Name it `haw-<verb>`.** The verb is what users type: `haw-jira` → `haw jira`.

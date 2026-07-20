@@ -920,10 +920,13 @@ dependencies = [
 name = "haw-tui"
 version = "0.1.15"
 dependencies = [
+ "directories",
  "haw-core",
  "haw-tui",
  "nucleo-matcher",
  "ratatui",
+ "serde",
+ "toml",
 ]
 
 [[package]]

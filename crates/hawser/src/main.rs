@@ -2071,6 +2071,28 @@ const PLUGIN_CATALOG: &[CatalogPlugin] = &[
         krate: "haw-git-gate",
         description: "secret / hygiene pre-commit & lifecycle gate",
     },
+    // Starter example plugins (scripts under examples/plugins/, not crates).
+    // `krate` doubles as the example binary name for display/discovery.
+    CatalogPlugin {
+        name: "fleet-status",
+        krate: "haw-fleet-status",
+        description: "compact per-repo health panel (branch, dirty?, ahead/behind)",
+    },
+    CatalogPlugin {
+        name: "docker",
+        krate: "haw-docker",
+        description: "report Dockerfile/compose assets per repo (hadolint/docker if present)",
+    },
+    CatalogPlugin {
+        name: "web",
+        krate: "haw-web",
+        description: "count/validate HTML & flag CSS assets per repo (stdlib only)",
+    },
+    CatalogPlugin {
+        name: "k8s",
+        krate: "haw-k8s",
+        description: "find & client-side-validate Kubernetes manifests per repo",
+    },
 ];
 
 /// The first-party plugin source used by `haw plugins install` when no
@@ -3571,17 +3593,23 @@ mod plugin_panel_tests {
     }
 
     #[test]
-    fn catalog_has_the_six_first_party_plugins() {
+    fn catalog_has_the_first_party_and_starter_plugins() {
         let names: Vec<&str> = PLUGIN_CATALOG.iter().map(|e| e.name).collect();
         assert_eq!(
             names,
             vec![
+                // First-party crates.
                 "aspice",
                 "jira",
                 "misra",
                 "compliance",
                 "artifact",
-                "git-gate"
+                "git-gate",
+                // Starter example plugins (examples/plugins/).
+                "fleet-status",
+                "docker",
+                "web",
+                "k8s",
             ]
         );
     }
@@ -3875,7 +3903,7 @@ mod plugin_panel_tests {
     }
 
     #[test]
-    fn seed_index_parses_as_the_six_first_party_plugins() {
+    fn seed_index_parses_as_the_first_party_and_starter_plugins() {
         let json = include_str!("../../../plugins-index.json");
         let entries = parse_index(json).unwrap();
         let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
@@ -3887,7 +3915,11 @@ mod plugin_panel_tests {
                 "misra",
                 "compliance",
                 "artifact",
-                "git-gate"
+                "git-gate",
+                "fleet-status",
+                "docker",
+                "web",
+                "k8s",
             ]
         );
         // Every entry carries the first-party git source.

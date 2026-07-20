@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: hawser — the beam that binds the repos\n"
-"POT-Creation-Date: 2026-07-20T12:53:47+02:00\n"
+"POT-Creation-Date: 2026-07-20T14:06:35+02:00\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -1125,7 +1125,7 @@ msgstr ""
 
 #: ./learn/00-what-is-hawser.md:139 ./learn/01-install-and-first-run.md:158
 #: ./learn/02-the-manifest.md:188 ./learn/03-sync-and-the-lockfile.md:221
-#: ./learn/04-the-tui-cockpit.md:204 ./learn/05-changesets-across-repos.md:227
+#: ./learn/04-the-tui-cockpit.md:228 ./learn/05-changesets-across-repos.md:227
 #: ./learn/06-build-test-and-verify.md:247
 msgid "**🙌 Your turn**"
 msgstr ""
@@ -1155,7 +1155,7 @@ msgstr ""
 
 #: ./learn/00-what-is-hawser.md:150 ./learn/01-install-and-first-run.md:145
 #: ./learn/02-the-manifest.md:198 ./learn/03-sync-and-the-lockfile.md:231
-#: ./learn/04-the-tui-cockpit.md:215 ./learn/05-changesets-across-repos.md:237
+#: ./learn/04-the-tui-cockpit.md:239 ./learn/05-changesets-across-repos.md:237
 #: ./learn/06-build-test-and-verify.md:257
 #: ./learn/07-going-to-production.md:250
 msgid "✅ Recap"
@@ -1189,7 +1189,7 @@ msgstr ""
 
 #: ./learn/00-what-is-hawser.md:161 ./learn/01-install-and-first-run.md:168
 #: ./learn/02-the-manifest.md:210 ./learn/03-sync-and-the-lockfile.md:242
-#: ./learn/04-the-tui-cockpit.md:229 ./learn/05-changesets-across-repos.md:248
+#: ./learn/04-the-tui-cockpit.md:255 ./learn/05-changesets-across-repos.md:248
 #: ./learn/06-build-test-and-verify.md:268
 msgid "👉 Next"
 msgstr ""
@@ -2599,29 +2599,66 @@ msgstr ""
 
 #: ./learn/04-the-tui-cockpit.md:189
 msgid ""
-"**Themes.** Six built-in skins — `catppuccin` (default), `dracula`, `nord`, "
-"`gruvbox`, `solarized`, `monochrome`. Switch live with `:theme nord`, set "
-"one at startup with `HAW_THEME=nord haw`, and `NO_COLOR` forces `monochrome`."
+"**Themes.** Seven built-in skins — `classic`, `catppuccin` (default), "
+"`dracula`, `nord`, `gruvbox`, `solarized`, `monochrome`. `classic` is a "
+"neutral, standard-ANSI look that reads on light and dark terminals alike. "
+"Type `:theme` with **no argument** to open an interactive picker (`j`/`k` to "
+"move, `Enter` to apply); the chosen skin is applied live **and** saved to "
+"your config. `:theme nord` still switches directly. Set one at startup with "
+"`HAW_THEME=nord haw`, and `NO_COLOR` forces `monochrome`."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:193
+#: ./learn/04-the-tui-cockpit.md:196
+msgid ""
+"**Make it yours — `~/.config/haw/config.toml`.** Optional and forgiving (a "
+"missing or partial file just uses defaults). Set a startup theme, the "
+"`e`\\-key editor, a collapsed header, and the idle-refresh cadence — plus "
+"remap a safe subset of action keys:"
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:200
+msgid ""
+"```toml\n"
+"[ui]\n"
+"theme = \"classic\"        # startup skin\n"
+"editor = \"nvim\"          # the `e` key's editor ($VISUAL/$EDITOR still "
+"win)\n"
+"compact_header = false   # start with the one-line header\n"
+"refresh_secs = 5         # idle auto-refresh cadence (2–60)\n"
+"\n"
+"[keys]                   # remap: sync, goto, run, shell, files, problems, "
+"watch\n"
+"sync = \"s\"\n"
+"```"
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:211
+msgid ""
+"The pickers write this file for you: `:editor` (no arg) lists the editors on "
+"your `PATH`, and `:compact` toggles the collapsed header — each persists "
+"your choice. The frozen globals (`j`, `k`, `:`, `/`, `?`, `q`, `b`, `space`, "
+"`g`, `w`, digits) can't be rebound; an invalid remap is dropped with a "
+"startup note, and the header hints always show the key that's actually live."
+msgstr ""
+
+#: ./learn/04-the-tui-cockpit.md:217
 msgid ""
 "Press **`?`** any time for the help overlay, and `q` (or `Ctrl-C`) to quit."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:197
+#: ./learn/04-the-tui-cockpit.md:221
 msgid ""
 "**Tip:** Every heavy action runs on a background worker, so the UI never "
 "freezes while a sync, a fetch, or a forge call is in flight. Keep navigating."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:206
+#: ./learn/04-the-tui-cockpit.md:230
 msgid ""
 "No workspace or network needed — the demo controller has everything to poke "
 "at:"
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:208
+#: ./learn/04-the-tui-cockpit.md:232
 msgid ""
 "Launch <code>haw dash --demo</code>. Move with "
 "<code>↑</code>/<code>↓</code>, then press <code>Enter</code> to drill into a "
@@ -2629,7 +2666,7 @@ msgid ""
 "rhythm."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:209
+#: ./learn/04-the-tui-cockpit.md:233
 msgid ""
 "Press <code>Space</code> to mark a couple of repos (watch the "
 "<code>◉</code>), then <code>/</code> to fuzzy-filter the grid. Press "
@@ -2637,57 +2674,60 @@ msgid ""
 "the actions menu. Press <code>?</code> for the help overlay."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:210
+#: ./learn/04-the-tui-cockpit.md:234
 msgid ""
 "Press <code>f</code> on a repo to browse its files, then <code>T</code> for "
 "the tree and <code>r</code> to read a file as of another branch or tag. "
 "Press <code>b</code> to come back."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:211
+#: ./learn/04-the-tui-cockpit.md:235
 msgid ""
 "Press <code>:</code> and type <code>:theme nord</code>. The skin changes "
 "live — and the status line echoes the exact command, so the cockpit is "
 "teaching you the CLI as you go."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:217
+#: ./learn/04-the-tui-cockpit.md:241
 msgid ""
 "Bare `haw` (or `haw dash --demo`) opens the cockpit — a live `haw status` "
 "you can act on."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:218
+#: ./learn/04-the-tui-cockpit.md:242
 msgid "The loop is **read → drill (`Enter`) → act → back (`Esc`)**."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:219
+#: ./learn/04-the-tui-cockpit.md:243
 msgid ""
 "Fleet keys: `s` sync, `f` files, `x` shell, `!` exec, `/` filter, `p` "
 "problems, `Space` mark, `r` run, `g` goto, `a` actions."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:221
+#: ./learn/04-the-tui-cockpit.md:245
 msgid ""
 "View jumps are the digits **`1`–`7`**: `1` fleet, `2` changesets, `3` PRs, "
 "`4` CI, `5` tree, `6` governance, `7` plugins. In PRs/CI, `a` (actions) does "
 "merge/approve/checkout (confirm-gated), `d` diff, `l` logs, `f` PR files."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:224
+#: ./learn/04-the-tui-cockpit.md:248
 msgid ""
 "File browser (`f`): `T` toggles tree, `r` picks a branch/tag/SHA (read any "
 "ref, local or forge, no checkout), `e` edits locally, `R` toggles local ⇄ "
 "forge."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:226
+#: ./learn/04-the-tui-cockpit.md:250
 msgid ""
 "`:` is a command bar (palette) mirroring the CLI; `:plugins` and `:errors` "
-"reach those views; six themes via `:theme` / `HAW_THEME`."
+"reach those views; seven themes (incl. `classic`) via `:theme` / "
+"`HAW_THEME`, an interactive `:theme`/`:editor` picker, and a "
+"`~/.config/haw/config.toml` for themes, editor, display options, and custom "
+"keybindings."
 msgstr ""
 
-#: ./learn/04-the-tui-cockpit.md:231
+#: ./learn/04-the-tui-cockpit.md:257
 msgid ""
 "You've seen the whole cockpit read the fleet. Now the signature move it "
 "drives — shipping _one feature across many repos_ as a single coordinated "
@@ -5726,19 +5766,29 @@ msgstr ""
 
 #: ./learn/08-build-a-plugin-mcp.md:772
 msgid ""
+"Copy a [starter plugin](../PLUGINS.md#starter-example-plugins) as a template "
+"— `haw-fleet-status`, `haw-docker`, `haw-web`, and `haw-k8s` under "
+"[`examples/plugins/`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins) "
+"cover common dev/devops/web chores in POSIX sh or Python stdlib. Prefer your "
+"editor? Try the [Neovim "
+"integration](../PLUGINS.md#editor-integration--neovim)."
+msgstr ""
+
+#: ./learn/08-build-a-plugin-mcp.md:777
+msgid ""
 "Browse the [Plugins reference](../PLUGINS.md) — lifecycle phases, the "
 "community index, and the language bindings."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:774
+#: ./learn/08-build-a-plugin-mcp.md:779
 msgid "Study more real manifests in the [Examples index](../EXAMPLES.md)."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:775
+#: ./learn/08-build-a-plugin-mcp.md:780
 msgid "Keep the [CLI design and keymap](../CLI-DESIGN.md) handy."
 msgstr ""
 
-#: ./learn/08-build-a-plugin-mcp.md:777
+#: ./learn/08-build-a-plugin-mcp.md:782
 msgid "That's the whole tool — now go build your own beam. Welcome aboard."
 msgstr ""
 
@@ -8460,7 +8510,7 @@ msgstr ""
 msgid "`?`"
 msgstr ""
 
-#: ./CLI-DESIGN.md:108 ./CLI-DESIGN.md:258
+#: ./CLI-DESIGN.md:108 ./CLI-DESIGN.md:260
 msgid "help overlay"
 msgstr ""
 
@@ -8968,98 +9018,189 @@ msgid "`:theme [NAME]`"
 msgstr ""
 
 #: ./CLI-DESIGN.md:257
-msgid "switch skin live (no arg lists the built-ins)"
+msgid "switch skin live (no arg opens the theme picker; a chosen theme persists)"
 msgstr ""
 
 #: ./CLI-DESIGN.md:258
-msgid "`:help`"
+msgid "`:editor [CMD]`"
+msgstr ""
+
+#: ./CLI-DESIGN.md:258
+msgid ""
+"set the `e`\\-key editor (no arg opens a picker of editors on `PATH`; "
+"persists)"
+msgstr ""
+
+#: ./CLI-DESIGN.md:259
+msgid "`:compact`"
+msgstr ""
+
+#: ./CLI-DESIGN.md:259
+msgid "toggle the collapsed one-line header (persists)"
 msgstr ""
 
 #: ./CLI-DESIGN.md:260
-msgid "**Themes / skins**"
+msgid "`:help`"
 msgstr ""
 
 #: ./CLI-DESIGN.md:262
-msgid ""
-"Six built-in skins: `catppuccin` (default), `dracula`, `nord`, `gruvbox`, "
-"`solarized`, `monochrome`. `NO_COLOR` forces `monochrome`; "
-"`HAW_THEME=<name>` selects one at startup; `:theme <name>` switches live."
+msgid "**Themes / skins**"
 msgstr ""
 
-#: ./CLI-DESIGN.md:266
+#: ./CLI-DESIGN.md:264
+msgid ""
+"Seven built-in skins: `classic`, `catppuccin` (default), `dracula`, `nord`, "
+"`gruvbox`, `solarized`, `monochrome`. `classic` is a neutral 16-color-ANSI "
+"look that reads on both light and dark terminals. `:theme` with no argument "
+"opens an interactive picker (highlighting the active skin); pressing `enter` "
+"applies the skin live **and** persists it to `[ui].theme` in the config. "
+"`:theme <name>` still switches (and persists) directly."
+msgstr ""
+
+#: ./CLI-DESIGN.md:271
+msgid "**User config — `~/.config/haw/config.toml`**"
+msgstr ""
+
+#: ./CLI-DESIGN.md:273
+msgid ""
+"Optional. A missing file, a partial table, or an unknown key all fall back "
+"to sane defaults (the cockpit never errors on absence). `HAW_CONFIG` "
+"overrides the path."
+msgstr ""
+
+#: ./CLI-DESIGN.md:277
+msgid ""
+"```toml\n"
+"[ui]\n"
+"theme = \"classic\"        # startup theme (a built-in name)\n"
+"editor = \"nvim\"          # editor for the `e` key\n"
+"compact_header = false   # start with the header collapsed\n"
+"refresh_secs = 5         # idle auto-refresh cadence (clamped 2–60)\n"
+"\n"
+"[keys]                   # remap a SAFE subset of action keys (single "
+"chars)\n"
+"sync = \"s\"               # remappable: sync, goto, run, shell, files, "
+"problems, watch\n"
+"goto = \"g\"\n"
+"```"
+msgstr ""
+
+#: ./CLI-DESIGN.md:289
+msgid "Precedence:"
+msgstr ""
+
+#: ./CLI-DESIGN.md:291
+msgid ""
+"**Theme**: `NO_COLOR` (non-empty) → `monochrome`; else `HAW_THEME` (env) if "
+"it names a built-in; else `[ui].theme`; else the default `catppuccin`."
+msgstr ""
+
+#: ./CLI-DESIGN.md:293
+msgid ""
+"**Editor**: `$VISUAL` → `$EDITOR` (env always wins) → `[ui].editor` → the "
+"first of `nvim`/`vim`/`vi` on `PATH` → `vi`."
+msgstr ""
+
+#: ./CLI-DESIGN.md:296
+msgid "**Custom keybindings (`[keys]`)**"
+msgstr ""
+
+#: ./CLI-DESIGN.md:298
+msgid ""
+"Each entry maps an action name to a single key char. Only a safe subset is "
+"remappable — `sync`, `goto`, `run`, `shell`, `files`, `problems`, `watch`. "
+"The frozen globals (`j`, `k`, `:`, `/`, `?`, `q`, `b`, `space`, `g`, `w`, "
+"and the digit view-jumps `1`–`7`) can never be the **target** of a remap; a "
+"remap that targets a global, duplicates another remap, collides with a "
+"default action key, or isn't a single char is dropped with a startup "
+"warning. When a remap is active, the header hints show the **active** key so "
+"they stay honest. The original default key keeps working too (a remap adds, "
+"never removes)."
+msgstr ""
+
+#: ./CLI-DESIGN.md:307
 msgid "Shipped since this design was written"
 msgstr ""
 
-#: ./CLI-DESIGN.md:268
+#: ./CLI-DESIGN.md:309
 msgid "`haw pin` / `haw unpin` (aliases `freeze`/`unfreeze`)."
 msgstr ""
 
-#: ./CLI-DESIGN.md:269
+#: ./CLI-DESIGN.md:310
 msgid "`--label <L>` on `change start`, forwarded to PR/MRs at `change request`."
 msgstr ""
 
-#: ./CLI-DESIGN.md:270
+#: ./CLI-DESIGN.md:311
 msgid ""
 "`forge = \"github\" | \"gitlab\"` key on `[remote.X]` for hosts the URL "
 "heuristic misses."
 msgstr ""
 
-#: ./CLI-DESIGN.md:271
+#: ./CLI-DESIGN.md:312
 msgid ""
 "`deps = [...]` on a repo — `change land` merges in stable topological order."
 msgstr ""
 
-#: ./CLI-DESIGN.md:272
+#: ./CLI-DESIGN.md:313
 msgid ""
 "`haw verify`, `haw sync --locked`, `--format json` on status/tree, exit 3 on "
 "drift."
 msgstr ""
 
-#: ./CLI-DESIGN.md:273
+#: ./CLI-DESIGN.md:314
 msgid ""
 "`haw build` / `haw test` (per-repo commands in the manifest), lifecycle "
 "hooks in `.haw/hooks/`, `haw hooks install`, `haw evidence`, `haw-<name>` "
 "plugins."
 msgstr ""
 
-#: ./CLI-DESIGN.md:275
+#: ./CLI-DESIGN.md:316
 msgid ""
 "Lexicon nuance: `--slug` on `repo add` accepts `--repo` as alias; `haw run` "
 "takes the command positionally (`forall -c` still works)."
 msgstr ""
 
-#: ./CLI-DESIGN.md:277
+#: ./CLI-DESIGN.md:318
 msgid ""
 "TUI `g` (goto) quits and prints the repo path — `cd \"$(haw dash)\"` — "
 "instead of spawning a nested shell."
 msgstr ""
 
-#: ./CLI-DESIGN.md:279
+#: ./CLI-DESIGN.md:320
 msgid ""
 "TUI: live idle auto-refresh (~5s), fuzzy `/` filter (nucleo), column sorting "
 "(`<`/`>`/`.`), marks + bulk `s`/`r`, drill-ins for repos/PRs/CI runs, the "
 "`a` actions menu (merge / approve / checkout in PR/MR; request-PR / land in "
 "Changeset), fleet-wide governance (`6`) view, the file browser (`f`) with a "
-"navigable tree (`T`), ref picker (`r`), and local edit (`e`), and six themes "
-"(`HAW_THEME`, `NO_COLOR`, live `:theme`)."
+"navigable tree (`T`), ref picker (`r`), and local edit (`e`), and seven "
+"themes including `classic` (`HAW_THEME`, `NO_COLOR`, live `:theme` with an "
+"interactive picker)."
 msgstr ""
 
-#: ./CLI-DESIGN.md:286
+#: ./CLI-DESIGN.md:326
+msgid ""
+"TUI config file `~/.config/haw/config.toml`: `[ui]` startup theme / editor / "
+"`compact_header` / `refresh_secs`, plus `[keys]` custom keybindings for a "
+"safe subset of action keys. Interactive `:theme` / `:editor` pickers persist "
+"a choice; `:compact` toggles the collapsed header."
+msgstr ""
+
+#: ./CLI-DESIGN.md:331
 msgid "Planned (not yet implemented)"
 msgstr ""
 
-#: ./CLI-DESIGN.md:288
+#: ./CLI-DESIGN.md:333
 msgid ""
 "Tag conveniences: `haw lock --as-of <tag>`; `haw status` marking `rev` kind "
 "(branch/tag/sha)."
 msgstr ""
 
-#: ./CLI-DESIGN.md:289
+#: ./CLI-DESIGN.md:334
 msgid ""
 "`haw auth login` — OAuth device flow + OS keychain (see ARCHITECTURE DR-14)."
 msgstr ""
 
-#: ./CLI-DESIGN.md:290
+#: ./CLI-DESIGN.md:335
 msgid "TUI: mouse support."
 msgstr ""
 
@@ -10463,78 +10604,205 @@ msgid ""
 msgstr ""
 
 #: ./PLUGINS.md:431
-msgid "Conventions"
+msgid "Starter example plugins"
 msgstr ""
 
 #: ./PLUGINS.md:433
+msgid ""
+"The "
+"[`examples/plugins/`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins) "
+"directory ships small, **runnable** starters — zero to light dependencies, "
+"POSIX `sh` or Python 3 stdlib, all **read-only / dry-run** by default. Each "
+"is a real `haw-<name>` executable with `--help`, `--format json` (a "
+"`haw.plugin.report/1`), and the cockpit render intent (a "
+"`haw.plugin.view/1`). Copy one onto your `PATH` and read it as a template."
+msgstr ""
+
+#: ./PLUGINS.md:440
+msgid "Plugin"
+msgstr ""
+
+#: ./PLUGINS.md:440
+msgid "Lang"
+msgstr ""
+
+#: ./PLUGINS.md:440
+msgid "What it does / how to try it"
+msgstr ""
+
+#: ./PLUGINS.md:442
+msgid ""
+"[`haw-fleet-status`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-fleet-status)"
+msgstr ""
+
+#: ./PLUGINS.md:442 ./PLUGINS.md:443 ./PLUGINS.md:445
+msgid "POSIX sh"
+msgstr ""
+
+#: ./PLUGINS.md:442
+msgid ""
+"Compact per-repo health panel — branch, dirty?, ahead/behind. Pure git, zero "
+"deps. `haw fleet-status`"
+msgstr ""
+
+#: ./PLUGINS.md:443
+msgid ""
+"[`haw-docker`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-docker)"
+msgstr ""
+
+#: ./PLUGINS.md:443
+msgid ""
+"Reports `Dockerfile`/compose assets per repo; lints with `hadolint` and "
+"checks local images with `docker` when present (degrades gracefully). `haw "
+"docker`"
+msgstr ""
+
+#: ./PLUGINS.md:444
+msgid ""
+"[`haw-web`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-web)"
+msgstr ""
+
+#: ./PLUGINS.md:444 ./PLUGINS.md:446
+msgid "Python 3"
+msgstr ""
+
+#: ./PLUGINS.md:444
+msgid ""
+"Counts/validates `*.html` (doctype, title, tag balance), flags `*.css`, "
+"reports sizes. Stdlib only. `haw web`"
+msgstr ""
+
+#: ./PLUGINS.md:445
+msgid ""
+"[`haw-k8s`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-k8s)"
+msgstr ""
+
+#: ./PLUGINS.md:445
+msgid ""
+"Finds `*.yaml` under `k8s/`/`deploy/`/`manifests/` and validates each with "
+"`kubectl apply --dry-run=client` (offline; never touches a cluster). `haw "
+"k8s`"
+msgstr ""
+
+#: ./PLUGINS.md:446
+msgid ""
+"[`haw-commit-ai`](https://github.com/Nastwinns/hawser/tree/main/examples/plugins/haw-commit-ai)"
+msgstr ""
+
+#: ./PLUGINS.md:446
+msgid ""
+"Drafts commit/PR text from your changeset — and doubles as an MCP server so "
+"Claude reads the diffs. `haw commit-ai`"
+msgstr ""
+
+#: ./PLUGINS.md:448
+msgid "Editor integration — Neovim"
+msgstr ""
+
+#: ./PLUGINS.md:450
+msgid ""
+"[`examples/nvim`](https://github.com/Nastwinns/hawser/tree/main/examples/nvim) "
+"(`haw.nvim`) is a small, dependency-free Lua plugin that runs haw from "
+"inside Neovim by **shelling the `haw` binary** — no server:"
+msgstr ""
+
+#: ./PLUGINS.md:454
+msgid "`:HawSync` — run `haw sync`, echo the result."
+msgstr ""
+
+#: ./PLUGINS.md:455
+msgid "`:HawStatus` — `haw status` in a scratch buffer."
+msgstr ""
+
+#: ./PLUGINS.md:456
+msgid "`:HawDash` — open `haw dash` (the TUI cockpit) in a terminal split."
+msgstr ""
+
+#: ./PLUGINS.md:457
+msgid ""
+"`:HawFleet` — list the fleet (repo / branch / state) in a scratch buffer, "
+"parsed from `haw status --format json`."
+msgstr ""
+
+#: ./PLUGINS.md:460
+msgid ""
+"Install with lazy.nvim / packer / native `:packadd` — see the "
+"[README](https://github.com/Nastwinns/hawser/tree/main/examples/nvim#readme)."
+msgstr ""
+
+#: ./PLUGINS.md:463
+msgid "Conventions"
+msgstr ""
+
+#: ./PLUGINS.md:465
 msgid ""
 "**Name it `haw-<verb>`.** The verb is what users type: `haw-jira` → `haw "
 "jira`. Keep it short and unclaimed by built-ins (`haw --help` lists those)."
 msgstr ""
 
-#: ./PLUGINS.md:435
+#: ./PLUGINS.md:467
 msgid ""
 "**Self-describing `--help`.** Users discover your plugin's flags through it; "
 "haw does not document plugins for you."
 msgstr ""
 
-#: ./PLUGINS.md:437
+#: ./PLUGINS.md:469
 msgid ""
 "**Human on stdout, JSON on `--format json`.** Print a readable line by "
 "default; emit a `haw.plugin/1` document (or your own versioned schema) under "
 "`--format json` so other tools can pipe you."
 msgstr ""
 
-#: ./PLUGINS.md:440
+#: ./PLUGINS.md:472
 msgid ""
 "**Exit codes carry meaning.** `0` = success. Non-zero = failure, and haw "
 "propagates it — CI gates and `&&` chains rely on it. Don't exit `0` on error."
 msgstr ""
 
-#: ./PLUGINS.md:442
+#: ./PLUGINS.md:474
 msgid ""
 "**Fail open.** Handle the workspace-less context (schema-only JSON) "
 "gracefully. Don't assume `root`/`repos` exist. Never hang: your process "
 "blocks haw until it exits."
 msgstr ""
 
-#: ./PLUGINS.md:444
+#: ./PLUGINS.md:476
 msgid ""
 "**Stay a separate process.** You get isolation for free — don't try to reach "
 "into haw's internals; consume `--format json` and the `haw.plugin/1` context "
 "instead."
 msgstr ""
 
-#: ./PLUGINS.md:447
+#: ./PLUGINS.md:479
 msgid "Distributing your plugin"
 msgstr ""
 
-#: ./PLUGINS.md:449
+#: ./PLUGINS.md:481
 msgid "Any executable named `haw-<name>` on `PATH` works. Two common paths:"
 msgstr ""
 
-#: ./PLUGINS.md:451
+#: ./PLUGINS.md:483
 msgid ""
 "**Publish a crate.** Name the binary `haw-<name>`; users get it with `cargo "
 "install haw-<name>`, which drops it into `~/.cargo/bin` (usually on `PATH`)."
 msgstr ""
 
-#: ./PLUGINS.md:453
+#: ./PLUGINS.md:485
 msgid ""
 "**Ship a binary or script.** Drop `haw-<name>` into any `PATH` directory "
 "(`/usr/local/bin`, `~/.local/bin`, `~/bin`). Shell scripts count — mark them "
 "executable."
 msgstr ""
 
-#: ./PLUGINS.md:457
+#: ./PLUGINS.md:489
 msgid "Verify with:"
 msgstr ""
 
-#: ./PLUGINS.md:464
+#: ./PLUGINS.md:496
 msgid "Submitting your plugin"
 msgstr ""
 
-#: ./PLUGINS.md:466
+#: ./PLUGINS.md:498
 msgid ""
 "Built something useful? Share it. See "
 "[CONTRIBUTING.md](https://github.com/Nastwinns/hawser/blob/main/CONTRIBUTING.md) "
@@ -10543,11 +10811,11 @@ msgid ""
 "a link. We keep core small on purpose; the ecosystem lives in plugins."
 msgstr ""
 
-#: ./PLUGINS.md:471
+#: ./PLUGINS.md:503
 msgid "Lifecycle phases"
 msgstr ""
 
-#: ./PLUGINS.md:473
+#: ./PLUGINS.md:505
 msgid ""
 "Plugins can subscribe to lifecycle phases in the manifest's `[plugins]` "
 "table and are invoked out-of-process with `--haw-phase <name>` (e.g. an SBOM "

@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""haw-web — the "html/css basics" starter plugin for a haw workspace.
+
+For every repo in the haw.plugin/1 context it walks the tree (skipping the usual
+vendored/build dirs) and:
+
+  * counts *.html files and runs a light tag-balance sanity check on each
+    (are the open/close counts of common block tags balanced? is there a
+    <!doctype>? a <title>?),
+  * lists *.css files and reports their sizes,
+  * reports total asset size per repo.
+
+Pure Python 3 stdlib — zero external dependencies. Read-only: it only reads
+files, never writes or fetches anything.
+
+Faces (all read the haw.plugin/1 context from $HAW_JSON, else stdin):
+    haw web                  human summary
+    haw web --format json    a haw.plugin.report/1 document
+    render intent (HAW_RENDER=1)  a haw.plugin.view/1 panel
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from html.parser import HTMLParser
+from typing import Any
+
+PLUGIN = "web"
+
+SKIP_DIRS = {
+    ".git", "node_modules", "dist", "build", "target", ".venv", "venv",
+    "__pycache__", ".next", "vendor", "coverage",
+}
+
+# Void elements never need a closing tag — exclude them from balance checks.
+VOID = {
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+    "meta", "param", "source", "track", "wbr",
+}
+
+
+# --------------------------------------------------------------------------- #
+# haw.plugin/1 context
+# --------------------------------------------------------------------------- #
+def read_context() -> dict[str, Any]:
+    raw = os.environ.get("HAW_JSON", "")
+    if not raw and not sys.stdin.isatty():
+        try:
+            raw = sys.stdin.read()
+        except Exception:
+            raw = ""
+    if not raw:
+        return {"schema": "haw.plugin/1"}
+    try:
+        ctx = json.loads(raw)
+    except (ValueError, TypeError):
+        return {"schema": "haw.plugin/1"}
+    return ctx if isinstance(ctx, dict) else {"schema": "haw.plugin/1"}
+
+
+def context_repos(ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    repos = ctx.get("repos")
+    return [r for r in repos if isinstance(r, dict)] if isinstance(repos, list) else []
+
+
+# --------------------------------------------------------------------------- #
+# Asset discovery + checks
+# --------------------------------------------------------------------------- #
+def walk_assets(root: str) -> tuple[list[str], list[str]]:
+    """Return (html_files, css_files) under root, skipping vendored/build dirs."""
+    html: list[str] = []
+    css: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        for fn in filenames:
+            low = fn.lower()
+            if low.endswith((".html", ".htm")):
+                html.append(os.path.join(dirpath, fn))
+            elif low.endswith(".css"):
+                css.append(os.path.join(dirpath, fn))
+    return sorted(html), sorted(css)
+
+
+class _TagCounter(HTMLParser):
+    """Counts open vs. close tags per element to spot obvious imbalance."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.opened: dict[str, int] = {}
+        self.closed: dict[str, int] = {}
+
+    def handle_starttag(self, tag: str, attrs: Any) -> None:
+        if tag not in VOID:
+            self.opened[tag] = self.opened.get(tag, 0) + 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag not in VOID:
+            self.closed[tag] = self.closed.get(tag, 0) + 1
+
+
+def check_html(path: str) -> list[str]:
+    """Return a list of light warnings for one HTML file (empty == looks fine)."""
+    warns: list[str] = []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError as exc:
+        return [f"unreadable: {exc}"]
+
+    if not re.search(r"<!doctype", text, re.IGNORECASE):
+        warns.append("missing <!doctype>")
+    if not re.search(r"<title[\s>]", text, re.IGNORECASE):
+        warns.append("missing <title>")
+
+    counter = _TagCounter()
+    try:
+        counter.feed(text)
+        counter.close()
+    except Exception:
+        warns.append("parse error")
+        return warns
+
+    for tag in ("html", "head", "body", "div", "ul", "ol", "table", "section"):
+        o = counter.opened.get(tag, 0)
+        c = counter.closed.get(tag, 0)
+        if o != c:
+            warns.append(f"<{tag}> unbalanced ({o} open / {c} close)")
+    return warns
+
+
+def human_size(n: int) -> str:
+    if n < 1024:
+        return f"{n}B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f}K"
+    return f"{n / (1024 * 1024):.1f}M"
+
+
+def repo_summary(repo: dict[str, Any]) -> dict[str, Any]:
+    """Analyze one repo; returns a small dict used by every output face."""
+    path = repo.get("path") or ""
+    name = repo.get("name") or "?"
+    if not path or not os.path.isdir(path):
+        return {"name": name, "html": 0, "css": 0, "warns": 0, "bytes": 0, "detail": "no path"}
+    html_files, css_files = walk_assets(path)
+    total = 0
+    warn_count = 0
+    for h in html_files:
+        try:
+            total += os.path.getsize(h)
+        except OSError:
+            pass
+        warn_count += len(check_html(h))
+    for c in css_files:
+        try:
+            total += os.path.getsize(c)
+        except OSError:
+            pass
+    if not html_files and not css_files:
+        detail = "no web assets"
+    else:
+        detail = (
+            f"{len(html_files)} html, {len(css_files)} css, "
+            f"{warn_count} warn(s), {human_size(total)}"
+        )
+    return {
+        "name": name,
+        "html": len(html_files),
+        "css": len(css_files),
+        "warns": warn_count,
+        "bytes": total,
+        "detail": detail,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Output faces
+# --------------------------------------------------------------------------- #
+def emit_report(ctx: dict[str, Any]) -> int:
+    summaries = [repo_summary(r) for r in context_repos(ctx)]
+    findings = []
+    total_warns = 0
+    for s in summaries:
+        total_warns += s["warns"]
+        level = "warn" if s["warns"] else "info"
+        findings.append({"level": level, "message": f"{s['name']}: {s['detail']}"})
+    report = {
+        "schema": "haw.plugin.report/1",
+        "plugin": PLUGIN,
+        "ok": total_warns == 0,
+        "summary": f"{len(summaries)} repo(s), {total_warns} web-asset warning(s)",
+        "findings": findings,
+    }
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+def emit_view(ctx: dict[str, Any]) -> int:
+    summaries = [repo_summary(r) for r in context_repos(ctx)]
+    lines = []
+    if not summaries:
+        lines.append("no repos in this workspace")
+    for s in summaries:
+        lines.append(f"{s['name']:<16} {s['detail']}")
+    view = {
+        "schema": "haw.plugin.view/1",
+        "title": "web — html/css assets",
+        "lines": lines,
+    }
+    print(json.dumps(view))
+    return 0
+
+
+def emit_human(ctx: dict[str, Any]) -> int:
+    summaries = [repo_summary(r) for r in context_repos(ctx)]
+    if not summaries:
+        print("haw-web: run me inside a haw workspace with repos.")
+        return 0
+    print(f"{'REPO':<16} {'HTML':>5} {'CSS':>5} {'WARN':>5}  SIZE")
+    for s in summaries:
+        print(
+            f"{s['name']:<16} {s['html']:>5} {s['css']:>5} {s['warns']:>5}  "
+            f"{human_size(s['bytes'])}"
+        )
+    return 0
+
+
+HELP = """haw-web — count/validate HTML & flag CSS assets per repo (stdlib only)
+
+USAGE:
+    haw web [--format json]
+
+OPTIONS:
+    -h, --help        Print this help
+        --format json Emit a haw.plugin.report/1 document
+
+Checks per *.html file: <!doctype> present, <title> present, and open/close
+balance of common block tags. Lists *.css and reports total asset size.
+Read-only: reads files only; never writes, builds, or fetches anything.
+"""
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
+        print(HELP)
+        return 0
+    ctx = read_context()
+    if "--format" in args:
+        i = args.index("--format")
+        if i + 1 < len(args) and args[i + 1] == "json":
+            return emit_report(ctx)
+    if os.environ.get("HAW_RENDER") == "1" or ctx.get("intent") == "render":
+        return emit_view(ctx)
+    return emit_human(ctx)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,211 @@
+#!/bin/sh
+# haw-k8s — a DevOps starter plugin that validates Kubernetes manifests.
+#
+# For every repo in the haw.plugin/1 context it finds *.yaml / *.yml under any
+# of k8s/, deploy/, deployment/, or manifests/ and, when `kubectl` is present,
+# validates each with:
+#
+#     kubectl apply --dry-run=client -f <file>
+#
+# --dry-run=client is offline: it does NOT contact a cluster and NEVER applies
+# anything. With no kubectl it simply reports which manifests it found.
+#
+# Faces (all read the haw.plugin/1 context from $HAW_JSON, else stdin):
+#   haw k8s                 human summary
+#   haw k8s --format json   haw.plugin.report/1 document
+#   render intent (HAW_RENDER=1) haw.plugin.view/1 panel
+set -eu
+
+PLUGIN="k8s"
+
+usage() {
+	cat <<'EOF'
+haw-k8s — find & client-side-validate Kubernetes manifests per repo, read-only
+
+USAGE:
+    haw k8s [--format json]
+
+OPTIONS:
+    -h, --help        Print this help
+        --format json Emit a haw.plugin.report/1 document
+
+Searches k8s/ deploy/ deployment/ manifests/ for *.yaml / *.yml.
+When kubectl is installed, validates each with:
+    kubectl apply --dry-run=client -f <file>   (offline; never touches a cluster)
+Read-only: this plugin never applies, deletes, or connects to any cluster.
+EOF
+}
+
+read_ctx() {
+	if [ -n "${HAW_JSON:-}" ]; then
+		printf '%s' "$HAW_JSON"
+	elif [ ! -t 0 ]; then
+		cat
+	else
+		printf ''
+	fi
+}
+
+repo_pairs() {
+	tr '{' '\n' | awk '
+		/"name"[[:space:]]*:/ {
+			n = $0; sub(/.*"name"[[:space:]]*:[[:space:]]*"/, "", n); sub(/".*/, "", n)
+			p = $0; sub(/.*"path"[[:space:]]*:[[:space:]]*"/, "", p); sub(/".*/, "", p)
+			if (n != "" && p != "" && n != $0 && p != $0) print n "\t" p
+		}'
+}
+
+json_escape() {
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g'
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# List manifest files (newline-separated) for the repo at $1.
+repo_manifests() {
+	path="$1"
+	for d in k8s deploy deployment manifests; do
+		if [ -d "$path/$d" ]; then
+			find "$path/$d" -type f \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null
+		fi
+	done
+}
+
+# Echoes: "<found>\t<valid>\t<invalid>" for the repo at $1.
+repo_k8s() {
+	path="$1"
+	found=0
+	valid=0
+	invalid=0
+	files=$(repo_manifests "$path")
+	[ -z "$files" ] && {
+		printf '0\t0\t0'
+		return 0
+	}
+	while IFS= read -r f; do
+		[ -z "$f" ] && continue
+		found=$((found + 1))
+		if have kubectl; then
+			if kubectl apply --dry-run=client -f "$f" >/dev/null 2>&1; then
+				valid=$((valid + 1))
+			else
+				invalid=$((invalid + 1))
+			fi
+		fi
+	done <<EOF
+$files
+EOF
+	printf '%d\t%d\t%d' "$found" "$valid" "$invalid"
+}
+
+fmt_detail() {
+	found="$1"
+	valid="$2"
+	invalid="$3"
+	if [ "$found" -eq 0 ]; then
+		printf 'no manifests'
+	elif have kubectl; then
+		printf '%d file(s): %d valid, %d invalid' "$found" "$valid" "$invalid"
+	else
+		printf '%d file(s) (install kubectl to validate)' "$found"
+	fi
+}
+
+emit_report() {
+	pairs="$1"
+	findings=""
+	repos=0
+	total_invalid=0
+	if [ -n "$pairs" ]; then
+		while IFS='	' read -r name path; do
+			[ -z "$name" ] && continue
+			repos=$((repos + 1))
+			res=$(repo_k8s "$path")
+			found=$(printf '%s' "$res" | cut -f1)
+			valid=$(printf '%s' "$res" | cut -f2)
+			invalid=$(printf '%s' "$res" | cut -f3)
+			total_invalid=$((total_invalid + invalid))
+			[ "$invalid" -gt 0 ] && level="error" || level="info"
+			detail=$(fmt_detail "$found" "$valid" "$invalid")
+			msg=$(printf '%s: %s' "$name" "$detail" | json_escape)
+			entry=$(printf '{"level":"%s","message":"%s"}' "$level" "$msg")
+			if [ -z "$findings" ]; then findings="$entry"; else findings="$findings,$entry"; fi
+		done <<EOF
+$pairs
+EOF
+	fi
+	[ "$total_invalid" -eq 0 ] && ok="true" || ok="false"
+	summary=$(printf '%d repo(s), %d invalid manifest(s)' "$repos" "$total_invalid" | json_escape)
+	printf '{"schema":"haw.plugin.report/1","plugin":"%s","ok":%s,"summary":"%s","findings":[%s]}\n' \
+		"$PLUGIN" "$ok" "$summary" "$findings"
+}
+
+emit_view() {
+	pairs="$1"
+	lines=""
+	if [ -z "$pairs" ]; then
+		lines='"no repos in this workspace"'
+	else
+		while IFS='	' read -r name path; do
+			[ -z "$name" ] && continue
+			res=$(repo_k8s "$path")
+			found=$(printf '%s' "$res" | cut -f1)
+			valid=$(printf '%s' "$res" | cut -f2)
+			invalid=$(printf '%s' "$res" | cut -f3)
+			detail=$(fmt_detail "$found" "$valid" "$invalid")
+			line=$(printf '%-16s %s' "$name" "$detail" | json_escape)
+			entry=$(printf '"%s"' "$line")
+			if [ -z "$lines" ]; then lines="$entry"; else lines="$lines,$entry"; fi
+		done <<EOF
+$pairs
+EOF
+	fi
+	printf '{"schema":"haw.plugin.view/1","title":"k8s — manifest validation","lines":[%s]}\n' "$lines"
+}
+
+emit_human() {
+	pairs="$1"
+	if [ -z "$pairs" ]; then
+		echo "haw-k8s: run me inside a haw workspace with repos."
+		return 0
+	fi
+	have kubectl || echo "note: kubectl not installed — reporting manifests only."
+	printf '%-16s %s\n' "REPO" "MANIFESTS"
+	while IFS='	' read -r name path; do
+		[ -z "$name" ] && continue
+		res=$(repo_k8s "$path")
+		found=$(printf '%s' "$res" | cut -f1)
+		valid=$(printf '%s' "$res" | cut -f2)
+		invalid=$(printf '%s' "$res" | cut -f3)
+		printf '%-16s %s\n' "$name" "$(fmt_detail "$found" "$valid" "$invalid")"
+	done <<EOF
+$pairs
+EOF
+}
+
+FORMAT=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--format)
+		FORMAT="${2:-}"
+		shift
+		;;
+	*) ;;
+	esac
+	shift
+done
+
+CTX=$(read_ctx)
+PAIRS=$(printf '%s' "$CTX" | repo_pairs || true)
+
+if [ "$FORMAT" = "json" ]; then
+	emit_report "$PAIRS"
+elif [ "${HAW_RENDER:-}" = "1" ]; then
+	emit_view "$PAIRS"
+else
+	emit_human "$PAIRS"
+fi

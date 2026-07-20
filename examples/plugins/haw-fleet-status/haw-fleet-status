@@ -1,0 +1,188 @@
+#!/bin/sh
+# haw-fleet-status — a compact per-repo health panel for a haw workspace.
+#
+# For every repo in the haw.plugin/1 context it prints one line:
+#
+#     <name>  <branch>  <clean|dirty(N)>  <ahead/behind>
+#
+# Pure git, zero dependencies. A friendly "hello world that's actually useful".
+#
+# Faces (all read the haw.plugin/1 context from $HAW_JSON, else stdin):
+#   haw fleet-status                 human one-liner panel
+#   haw fleet-status --format json   haw.plugin.report/1 document
+#   render intent (HAW_RENDER=1)     haw.plugin.view/1 panel
+#
+# Read-only. Never mutates a repo. No network. No secrets.
+set -eu
+
+PLUGIN="fleet-status"
+
+usage() {
+	cat <<'EOF'
+haw-fleet-status — compact per-repo health panel (branch, dirty?, ahead/behind)
+
+USAGE:
+    haw fleet-status [--format json]
+
+OPTIONS:
+    -h, --help        Print this help
+        --format json Emit a haw.plugin.report/1 document
+
+haw passes the workspace context as haw.plugin/1 JSON in $HAW_JSON and on stdin.
+This plugin is read-only: it runs `git status`/`git rev-list` and nothing else.
+EOF
+}
+
+# ---- read the haw.plugin/1 context ---------------------------------------- #
+# Prefer $HAW_JSON (always present in a workspace); fall back to stdin.
+read_ctx() {
+	if [ -n "${HAW_JSON:-}" ]; then
+		printf '%s' "$HAW_JSON"
+	elif [ ! -t 0 ]; then
+		cat
+	else
+		printf ''
+	fi
+}
+
+# Extract "name\tpath" pairs from the context JSON without a JSON parser.
+# The haw.plugin/1 repos[] entries look like {"name":"x","path":"/y",...}.
+# We pair each "name":"..." with the "path":"..." that follows it. POSIX awk.
+repo_pairs() {
+	tr '{' '\n' | awk '
+		/"name"[[:space:]]*:/ {
+			n = $0; sub(/.*"name"[[:space:]]*:[[:space:]]*"/, "", n); sub(/".*/, "", n)
+			p = $0; sub(/.*"path"[[:space:]]*:[[:space:]]*"/, "", p); sub(/".*/, "", p)
+			if (n != "" && p != "" && n != $0 && p != $0) print n "\t" p
+		}'
+}
+
+# JSON-escape a string for safe embedding in our own output.
+json_escape() {
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g'
+}
+
+# ---- per-repo status ------------------------------------------------------ #
+# Echoes: "<branch>\t<state>\t<sync>" for the repo at $1.
+repo_status() {
+	path="$1"
+	if [ ! -d "$path/.git" ] && ! git -C "$path" rev-parse --git-dir >/dev/null 2>&1; then
+		printf '%s\t%s\t%s' "-" "no-git" "-"
+		return 0
+	fi
+	branch=$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-")
+	if [ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]; then
+		n=$(git -C "$path" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+		state="dirty($n)"
+	else
+		state="clean"
+	fi
+	sync="-"
+	up=$(git -C "$path" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
+	if [ -n "$up" ]; then
+		counts=$(git -C "$path" rev-list --left-right --count "HEAD...$up" 2>/dev/null || echo "0	0")
+		ahead=$(printf '%s' "$counts" | awk '{print $1+0}')
+		behind=$(printf '%s' "$counts" | awk '{print $2+0}')
+		sync="+${ahead}/-${behind}"
+	fi
+	printf '%s\t%s\t%s' "$branch" "$state" "$sync"
+}
+
+# ---- output faces --------------------------------------------------------- #
+emit_report() {
+	pairs="$1"
+	findings=""
+	count=0
+	dirty=0
+	if [ -n "$pairs" ]; then
+		while IFS='	' read -r name path; do
+			[ -z "$name" ] && continue
+			count=$((count + 1))
+			st=$(repo_status "$path")
+			branch=$(printf '%s' "$st" | cut -f1)
+			state=$(printf '%s' "$st" | cut -f2)
+			sync=$(printf '%s' "$st" | cut -f3)
+			case "$state" in
+			dirty*) dirty=$((dirty + 1)); level="warn" ;;
+			*) level="info" ;;
+			esac
+			msg=$(printf '%s: %s %s %s' "$name" "$branch" "$state" "$sync" | json_escape)
+			entry=$(printf '{"level":"%s","message":"%s"}' "$level" "$msg")
+			if [ -z "$findings" ]; then findings="$entry"; else findings="$findings,$entry"; fi
+		done <<EOF
+$pairs
+EOF
+	fi
+	summary=$(printf '%d repo(s), %d dirty' "$count" "$dirty" | json_escape)
+	printf '{"schema":"haw.plugin.report/1","plugin":"%s","ok":true,"summary":"%s","findings":[%s]}\n' \
+		"$PLUGIN" "$summary" "$findings"
+}
+
+emit_view() {
+	pairs="$1"
+	lines=""
+	if [ -z "$pairs" ]; then
+		lines='"no repos in this workspace"'
+	else
+		while IFS='	' read -r name path; do
+			[ -z "$name" ] && continue
+			st=$(repo_status "$path")
+			branch=$(printf '%s' "$st" | cut -f1)
+			state=$(printf '%s' "$st" | cut -f2)
+			sync=$(printf '%s' "$st" | cut -f3)
+			line=$(printf '%-16s %-20s %-10s %s' "$name" "$branch" "$state" "$sync" | json_escape)
+			entry=$(printf '"%s"' "$line")
+			if [ -z "$lines" ]; then lines="$entry"; else lines="$lines,$entry"; fi
+		done <<EOF
+$pairs
+EOF
+	fi
+	printf '{"schema":"haw.plugin.view/1","title":"fleet-status — repo health","lines":[%s]}\n' "$lines"
+}
+
+emit_human() {
+	pairs="$1"
+	if [ -z "$pairs" ]; then
+		echo "haw-fleet-status: run me inside a haw workspace with repos."
+		return 0
+	fi
+	printf '%-16s %-20s %-10s %s\n' "REPO" "BRANCH" "STATE" "SYNC"
+	while IFS='	' read -r name path; do
+		[ -z "$name" ] && continue
+		st=$(repo_status "$path")
+		branch=$(printf '%s' "$st" | cut -f1)
+		state=$(printf '%s' "$st" | cut -f2)
+		sync=$(printf '%s' "$st" | cut -f3)
+		printf '%-16s %-20s %-10s %s\n' "$name" "$branch" "$state" "$sync"
+	done <<EOF
+$pairs
+EOF
+}
+
+# ---- entry ---------------------------------------------------------------- #
+FORMAT=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--format)
+		FORMAT="${2:-}"
+		shift
+		;;
+	*) ;;
+	esac
+	shift
+done
+
+CTX=$(read_ctx)
+PAIRS=$(printf '%s' "$CTX" | repo_pairs || true)
+
+if [ "$FORMAT" = "json" ]; then
+	emit_report "$PAIRS"
+elif [ "${HAW_RENDER:-}" = "1" ]; then
+	emit_view "$PAIRS"
+else
+	emit_human "$PAIRS"
+fi

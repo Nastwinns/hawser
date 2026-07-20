@@ -8,9 +8,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+directories.workspace = true
 haw-core.workspace = true
 nucleo-matcher.workspace = true
 ratatui.workspace = true
+serde.workspace = true
+toml.workspace = true
 
 [features]
 # Exposes the `render_snapshot` test seam for out-of-crate render tests.
