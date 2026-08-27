@@ -36,7 +36,7 @@ thiserror = "2"
 toml = "0.8"
 toml_edit = "0.25"
 nucleo-matcher = "0.3"
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 serde_yaml = "0.9"
 
 [workspace.lints.rust]
